@@ -29,6 +29,13 @@ def print_env(args):
     try:
         for var in ['ACCUKNOX_ENDPOINT', 'ACCUKNOX_TENANT', 'ACCUKNOX_LABEL']:
             Logger.get_logger().info(f"{var}={os.getenv(var)}")
+        
+        accuknox_token = os.getenv('ACCUKNOX_TOKEN')
+        if accuknox_token:
+            Logger.get_logger().info(f"ACCUKNOX_TOKEN={accuknox_token[:5]}...{accuknox_token[-5:]}")  # First 5 and last 5 characters
+        else:
+            Logger.get_logger().info("ACCUKNOX_TOKEN not set")
+
     except Exception as e:
         Logger.get_logger().error(f"Error printing environment variables: {e}")
 
