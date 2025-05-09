@@ -1,0 +1,33 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install build tool
+        run: pip install build
+
+      - name: Build the package
+        run: python -m build
+
+      - name: Create Release and Upload Artifacts
+        uses: softprops/action-gh-release@39ba0b9d81217c984acfad95ddcc7db226387497
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: dist/*
