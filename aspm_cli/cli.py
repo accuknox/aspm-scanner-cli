@@ -3,6 +3,7 @@ import os
 from colorama import Fore, init
 
 from aspm_cli.scan.sast import SASTScanner
+from aspm_cli.scan.sq_sast import SQSASTScanner
 from aspm_cli.utils.git import GitInfo
 from .utils import ConfigValidator, ALLOWED_SCAN_TYPES, upload_results, handle_failure
 from .scan import IaCScanner
@@ -63,6 +64,11 @@ def run_scan(args):
             validator.validate_sast_scan(args.repo_url, args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url)
             scanner = SASTScanner(args.repo_url, args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url)
             data_type = "SG"
+        elif args.scantype.lower() == "sq-sast":
+            print(args.skip_sonar_scan)
+            validator.validate_sq_sast_scan(args.sonar_project_key, args.sonar_token, args.sonar_host_url, args.sonar_org_id, args.repo_url, args.branch, args.commit_sha, args.pipeline_url)
+            scanner = SQSASTScanner(args.skip_sonar_scan, args.sonar_project_key, args.sonar_token, args.sonar_host_url, args.sonar_org_id, args.repo_url, args.branch, args.commit_sha, args.pipeline_url)
+            data_type = "SQ"
         else:
             Logger.get_logger().error("Invalid scan type.")
             return
@@ -99,6 +105,21 @@ def add_sast_scan_args(parser):
     parser.add_argument("--pipeline-id", help="Pipeline ID for scanning")
     parser.add_argument("--job-url", help="Job URL for scanning")
 
+def add_sq_sast_scan_args(parser):
+    """Add arguments specific to SQ SAST scan."""
+    # TODO: update description
+    parser.add_argument('--skip-sonar-scan', action='store_true', help="Skip the SonarQube scan")
+    parser.add_argument("--sonar-project-key", help="")
+    parser.add_argument("--sonar-token", help="")
+    parser.add_argument("--sonar-host-url", help="")
+    parser.add_argument("--sonar-org-id", help="")
+
+    parser.add_argument("--repo-url", default=GitInfo.get_repo_url(), help="Git repository URL")
+    parser.add_argument("--branch", default=GitInfo.get_branch_name(), help="Git repository branch")
+    parser.add_argument("--commit-sha", default=GitInfo.get_commit_sha(), help="Commit SHA for scanning")
+    parser.add_argument("--pipeline-url", help="Pipeline URL for scanning")
+
+
 def main():
     clean_env_vars()
     print_banner()
@@ -124,6 +145,11 @@ def main():
     sast_parser = scan_subparsers.add_parser("sast", help="Run SAST scan")
     add_sast_scan_args(sast_parser) 
     sast_parser.set_defaults(func=run_scan)
+
+    # SQ SAST Scan
+    sq_sast_parser = scan_subparsers.add_parser("sq-sast", help="Run SQ SAST scan")
+    add_sq_sast_scan_args(sq_sast_parser) 
+    sq_sast_parser.set_defaults(func=run_scan)
 
     # Parse arguments and execute respective function
     args = parser.parse_args()
