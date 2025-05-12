@@ -65,7 +65,6 @@ def run_scan(args):
             scanner = SASTScanner(args.repo_url, args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url)
             data_type = "SG"
         elif args.scantype.lower() == "sq-sast":
-            print(args.skip_sonar_scan)
             validator.validate_sq_sast_scan(args.sonar_project_key, args.sonar_token, args.sonar_host_url, args.sonar_org_id, args.repo_url, args.branch, args.commit_sha, args.pipeline_url)
             scanner = SQSASTScanner(args.skip_sonar_scan, args.sonar_project_key, args.sonar_token, args.sonar_host_url, args.sonar_org_id, args.repo_url, args.branch, args.commit_sha, args.pipeline_url)
             data_type = "SQ"
