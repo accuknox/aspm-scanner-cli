@@ -2,6 +2,7 @@ import argparse
 import os
 from colorama import Fore, init
 
+from aspm_cli.scan.sast import SASTScanner
 from aspm_cli.utils.git import GitInfo
 from .utils import ConfigValidator, ALLOWED_SCAN_TYPES, upload_results, handle_failure
 from .scan import IaCScanner
@@ -58,6 +59,10 @@ def run_scan(args):
             validator.validate_iac_scan(args.repo_url, args.repo_branch, args.file, args.directory, args.compact, args.quiet, args.framework)
             scanner = IaCScanner(args.repo_url, args.repo_branch, args.file, args.directory, args.compact, args.quiet, args.framework)
             data_type = "IAC"
+        elif args.scantype.lower() == "sast":
+            validator.validate_sast_scan(args.repo_url, args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url)
+            scanner = SASTScanner(args.repo_url, args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url)
+            data_type = "SG"
         else:
             Logger.get_logger().error("Invalid scan type.")
             return
@@ -86,6 +91,14 @@ def add_iac_scan_args(parser):
     parser.add_argument("--repo-url", default=GitInfo.get_repo_url(), help="Git repository URL")
     parser.add_argument("--repo-branch", default=GitInfo.get_branch_name(), help="Git repository branch")
 
+def add_sast_scan_args(parser):
+    """Add arguments specific to SAST scan."""
+    parser.add_argument("--repo-url", default=GitInfo.get_repo_url(), help="Git repository URL")
+    parser.add_argument("--commit-ref", default=GitInfo.get_commit_ref(), help="Commit reference for scanning")
+    parser.add_argument("--commit-sha", default=GitInfo.get_commit_sha(), help="Commit SHA for scanning")
+    parser.add_argument("--pipeline-id", help="Pipeline ID for scanning")
+    parser.add_argument("--job-url", help="Job URL for scanning")
+
 def main():
     clean_env_vars()
     print_banner()
@@ -106,6 +119,11 @@ def main():
     iac_parser = scan_subparsers.add_parser("iac", help="Run IAC scan")
     add_iac_scan_args(iac_parser)
     iac_parser.set_defaults(func=run_scan)
+
+    # SAST Scan
+    sast_parser = scan_subparsers.add_parser("sast", help="Run SAST scan")
+    add_sast_scan_args(sast_parser) 
+    sast_parser.set_defaults(func=run_scan)
 
     # Parse arguments and execute respective function
     args = parser.parse_args()
