@@ -1,8 +1,8 @@
-import sys
-import threading
-import itertools
-import time
 import os
+import sys
+import itertools
+import asyncio
+import threading
 from aspm_cli.utils.logger import Logger
 from colorama import Fore, init
 
@@ -10,51 +10,57 @@ init(autoreset=True)
 
 
 class Spinner:
-    def __init__(self, message="Processing...", color=Fore.CYAN):
-        self.spinner = itertools.cycle(["|", "/", "-", "\\"])
-        self.stop_running = False
+    def __init__(self, message="Processing...", color=Fore.GREEN):
         self.message = message
         self.color = color
-        self.thread = threading.Thread(target=self._spin)
-
-    def _spin(self):
-        # Use logging for CI environments like GitHub Actions and Azure DevOps
-        if os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("TF_BUILD") == "True":
-            self._log_status()
-        else:
-            self._use_spinner()
-
-    def _use_spinner(self):
-        while not self.stop_running:
-            sys.stdout.write(f"\r{self.color}{self.message} {next(self.spinner)}")
-            sys.stdout.flush()
-            time.sleep(0.1)  
-
-        sys.stdout.write("\r" + " " * (len(self.message) + 2) + "\r")
-
-    def _log_status(self):
-        Logger.get_logger().info(f"{self.message}")
-        sys.stdout.flush()
-
-        # Log status update every 10 seconds in GitHub Actions
-        last_update = time.time()
-        while not self.stop_running:
-            if time.time() - last_update >= 10:
-                Logger.get_logger().info(f"{self.message} - still processing...")
-                sys.stdout.flush()  
-                last_update = time.time()
-
-            if self.stop_running:
-                Logger.get_logger().info(f"{self.message} - finished processing.")
-                sys.stdout.flush()
-                break
-
-            time.sleep(1)  # Check for completion every second
+        self.is_ci = os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("TF_BUILD") == "True"
+        self._running = False
+        self._spinner = itertools.cycle(["|", "/", "-", "\\"])
+        self._loop = None
+        self._thread = None
+        self._task = None
 
     def start(self):
-        self.stop_running = False
-        self.thread.start()
+        if self.is_ci:
+            Logger.get_logger().info(self.message)
+        else:
+            self._running = True
+            self._loop = asyncio.new_event_loop()
+            self._thread = threading.Thread(target=self._start_async_loop, daemon=True)
+            self._thread.start()
 
     def stop(self):
-        self.stop_running = True
-        self.thread.join()
+        if self.is_ci:
+            Logger.get_logger().info(f"{self.color}{self.message} - finished processing.")
+        else:
+            self._running = False
+
+            if self._loop and self._loop.is_running():
+                fut = asyncio.run_coroutine_threadsafe(self._cleanup(), self._loop)
+                fut.result()
+
+                self._loop.call_soon_threadsafe(self._loop.stop)
+                self._thread.join()
+
+            sys.stdout.write("\r" + " " * (len(self.message) + 4) + "\r\n")
+            sys.stdout.flush()
+
+    async def _cleanup(self):
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+
+    def _start_async_loop(self):
+        asyncio.set_event_loop(self._loop)
+        self._task = self._loop.create_task(self._spinner_loop())
+        self._loop.run_forever()
+
+    async def _spinner_loop(self):
+        while self._running:
+            char = next(self._spinner)
+            sys.stdout.write(f"\r{self.color}{self.message} {char}")
+            sys.stdout.flush()
+            await asyncio.sleep(0.1)
