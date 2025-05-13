@@ -19,12 +19,13 @@ def clean_env_vars():
             os.environ[key] = value[1:-1]
 
 def print_banner():
-    banner = r"""
-    ╔═╗┌─┐┌─┐┬ ┬╦╔═┌┐┌┌─┐─┐ ┬  ╔═╗╔═╗╔═╗╔╦╗  ╔═╗┌─┐┌─┐┌┐┌┌┐┌┌─┐┬─┐
-    ╠═╣│  │  │ │╠╩╗││││ │┌┴┬┘  ╠═╣╚═╗╠═╝║║║  ╚═╗│  ├─┤││││││├┤ ├┬┘
-    ╩ ╩└─┘└─┘└─┘╩ ╩┘└┘└─┘┴ └─  ╩ ╩╚═╝╩  ╩ ╩  ╚═╝└─┘┴ ┴┘└┘┘└┘└─┘┴└─
-    """
-    print(Fore.BLUE + banner)
+    print("ACCUKNOX ASPM SCANNER")
+    # banner = r"""
+    # ╔═╗┌─┐┌─┐┬ ┬╦╔═┌┐┌┌─┐─┐ ┬  ╔═╗╔═╗╔═╗╔╦╗  ╔═╗┌─┐┌─┐┌┐┌┌┐┌┌─┐┬─┐
+    # ╠═╣│  │  │ │╠╩╗││││ │┌┴┬┘  ╠═╣╚═╗╠═╝║║║  ╚═╗│  ├─┤││││││├┤ ├┬┘
+    # ╩ ╩└─┘└─┘└─┘╩ ╩┘└┘└─┘┴ └─  ╩ ╩╚═╝╩  ╩ ╩  ╚═╝└─┘┴ ┴┘└┘┘└┘└─┘┴└─
+    # """
+    # print((Fore.BLUE + banner).encode('ascii', errors='ignore').decode())
 
 def print_env(args):
     """Print environment configurations."""
@@ -73,7 +74,7 @@ def run_scan(args):
             return
 
         # Run scan with spinner
-        spinner = Spinner(message=f"Running {args.scantype.lower()} scan...", color=Fore.GREEN)
+        spinner = Spinner(message=f"Running {args.scantype.lower()} scan...")
         spinner.start()
         exit_code, result_file = scanner.run()
         spinner.stop()
@@ -122,7 +123,7 @@ def add_sq_sast_scan_args(parser):
 def main():
     clean_env_vars()
     print_banner()
-    parser = argparse.ArgumentParser(prog="aspm-cli", description="ASPM CLI Tool")
+    parser = argparse.ArgumentParser(prog="accuknox-aspm-scanner", description="ASPM CLI Tool")
     subparsers = parser.add_subparsers(dest="command")
 
     parser.add_argument('--softfail', action='store_true', help='Enable soft fail mode for scanning')
