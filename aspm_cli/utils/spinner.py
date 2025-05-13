@@ -18,8 +18,8 @@ class Spinner:
         self.thread = threading.Thread(target=self._spin)
 
     def _spin(self):
-        # If it's GitHub Actions, use logging instead of spinner
-        if os.getenv("GITHUB_ACTIONS") == "true":
+        # Use logging for CI environments like GitHub Actions and Azure DevOps
+        if os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("TF_BUILD") == "True":
             self._log_status()
         else:
             self._use_spinner()

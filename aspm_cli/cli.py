@@ -19,13 +19,16 @@ def clean_env_vars():
             os.environ[key] = value[1:-1]
 
 def print_banner():
-    print("ACCUKNOX ASPM SCANNER")
-    # banner = r"""
-    # ╔═╗┌─┐┌─┐┬ ┬╦╔═┌┐┌┌─┐─┐ ┬  ╔═╗╔═╗╔═╗╔╦╗  ╔═╗┌─┐┌─┐┌┐┌┌┐┌┌─┐┬─┐
-    # ╠═╣│  │  │ │╠╩╗││││ │┌┴┬┘  ╠═╣╚═╗╠═╝║║║  ╚═╗│  ├─┤││││││├┤ ├┬┘
-    # ╩ ╩└─┘└─┘└─┘╩ ╩┘└┘└─┘┴ └─  ╩ ╩╚═╝╩  ╩ ╩  ╚═╝└─┘┴ ┴┘└┘┘└┘└─┘┴└─
-    # """
-    # print((Fore.BLUE + banner).encode('ascii', errors='ignore').decode())
+    try:
+        banner = r"""
+        ╔═╗┌─┐┌─┐┬ ┬╦╔═┌┐┌┌─┐─┐ ┬  ╔═╗╔═╗╔═╗╔╦╗  ╔═╗┌─┐┌─┐┌┐┌┌┐┌┌─┐┬─┐
+        ╠═╣│  │  │ │╠╩╗││││ │┌┴┬┘  ╠═╣╚═╗╠═╝║║║  ╚═╗│  ├─┤││││││├┤ ├┬┘
+        ╩ ╩└─┘└─┘└─┘╩ ╩┘└┘└─┘┴ └─  ╩ ╩╚═╝╩  ╩ ╩  ╚═╝└─┘┴ ┴┘└┘┘└┘└─┘┴└─
+        """
+        print(Fore.BLUE + banner)
+    except:
+        # Skipping if there are any issues with Unicode chars
+        print(Fore.BLUE + "ACCUKNOX ASPM SCANNER")
 
 def print_env(args):
     """Print environment configurations."""
@@ -66,6 +69,7 @@ def run_scan(args):
             scanner = SASTScanner(args.repo_url, args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url)
             data_type = "SG"
         elif args.scantype.lower() == "sq-sast":
+            args.sonar_project_key = f'^{args.sonar_project_key}$'
             validator.validate_sq_sast_scan(args.sonar_project_key, args.sonar_token, args.sonar_host_url, args.sonar_org_id, args.repo_url, args.branch, args.commit_sha, args.pipeline_url)
             scanner = SQSASTScanner(args.skip_sonar_scan, args.sonar_project_key, args.sonar_token, args.sonar_host_url, args.sonar_org_id, args.repo_url, args.branch, args.commit_sha, args.pipeline_url)
             data_type = "SQ"
