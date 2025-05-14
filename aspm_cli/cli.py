@@ -76,7 +76,7 @@ def run_scan(args):
             data_type = "SQ"
         elif args.scantype.lower() == "secret":
             validator.validate_secret_scan(args.results, args.branch, args.exclude_paths, args.additional_arguments)
-            scanner = SecretScanner(args.results, args.branch, args.exclude_paths, args.additional_arguments)
+            scanner = SecretScanner(args.results, args.branch, args.exclude_paths, args.additional_arguments, args.base_command)
             data_type = "TruffleHog"
         else:
             Logger.get_logger().error("Invalid scan type.")
@@ -135,6 +135,15 @@ def add_secret_scan_args(parser):
     parser.add_argument("--branch", default=GitInfo.get_commit_sha(), help="The branch to scan. Use all-branches to scan all branches. (default: latest commit sha)")
     parser.add_argument("--exclude-paths", help="Paths to exclude from the scan")
     parser.add_argument("--additional-arguments", help="Additional CLI arguments to pass to Secret Scan")
+    parser.add_argument(
+        "--base-command",
+        help=(
+            "Optional override for the base command used to run Secret Scan"
+            "Use this to switch from the default Docker-based execution to a custom command. "
+            "For example, to run TruffleHog locally: 'trufflehog'. "
+            "Or to run it with a custom Docker version: 'docker run --rm -v $PWD:/app trufflesecurity/trufflehog:3.88.29', (ensure /app is mounted to the scan directory)"
+        )
+    )
 
 def main():
     clean_env_vars()
