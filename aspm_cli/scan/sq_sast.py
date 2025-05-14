@@ -55,8 +55,10 @@ class SQSASTScanner:
 
             Logger.get_logger().debug(f"Running scan: {' '.join(cmd)}")
             result = subprocess.run(cmd, capture_output=True, text=True)
-            Logger.get_logger().debug(result.stdout)
-            Logger.get_logger().error(result.stderr)
+            if(result.stdout):
+                Logger.get_logger().debug(result.stdout)
+            if(result.stderr):
+                Logger.get_logger().error(result.stderr)
             return result.returncode
         except Exception as e:
             Logger.get_logger().error(f"Error during SonarQube-based AccuKnox SAST scan...: {e}")

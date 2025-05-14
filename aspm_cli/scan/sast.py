@@ -34,8 +34,10 @@ class SASTScanner:
 
             Logger.get_logger().debug(f"Running OpenGrep scan: {' '.join(cmd)}")
             result = subprocess.run(cmd, capture_output=True, text=True)
-            Logger.get_logger().debug(result.stdout)
-            Logger.get_logger().error(result.stderr)
+            if(result.stdout):
+                Logger.get_logger().debug(result.stdout)
+            if(result.stderr):
+                Logger.get_logger().error(result.stderr)
 
             exit_code = result.returncode
             return exit_code, self.result_file

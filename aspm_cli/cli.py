@@ -3,6 +3,7 @@ import os
 from colorama import Fore, init
 
 from aspm_cli.scan.sast import SASTScanner
+from aspm_cli.scan.secret import SecretScanner
 from aspm_cli.scan.sq_sast import SQSASTScanner
 from aspm_cli.utils.git import GitInfo
 from .utils import ConfigValidator, ALLOWED_SCAN_TYPES, upload_results, handle_failure
@@ -73,6 +74,10 @@ def run_scan(args):
             validator.validate_sq_sast_scan(args.sonar_project_key, args.sonar_token, args.sonar_host_url, args.sonar_org_id, args.repo_url, args.branch, args.commit_sha, args.pipeline_url)
             scanner = SQSASTScanner(args.skip_sonar_scan, args.sonar_project_key, args.sonar_token, args.sonar_host_url, args.sonar_org_id, args.repo_url, args.branch, args.commit_sha, args.pipeline_url)
             data_type = "SQ"
+        elif args.scantype.lower() == "secret":
+            validator.validate_secret_scan(args.results, args.branch, args.exclude_paths, args.additional_arguments)
+            scanner = SecretScanner(args.results, args.branch, args.exclude_paths, args.additional_arguments)
+            data_type = "TruffleHog"
         else:
             Logger.get_logger().error("Invalid scan type.")
             return
@@ -91,6 +96,7 @@ def run_scan(args):
         Logger.get_logger().error("Scan failed.")
         Logger.get_logger().error(e)
 
+# TODO: update all description, and mention optional fields
 def add_iac_scan_args(parser):
     """Add arguments specific to IAC scan."""
     parser.add_argument("--file", default="", help="Specify a file for scanning; cannot be used with directory input")
@@ -123,6 +129,12 @@ def add_sq_sast_scan_args(parser):
     parser.add_argument("--commit-sha", default=GitInfo.get_commit_sha(), help="Commit SHA for scanning")
     parser.add_argument("--pipeline-url", help="Pipeline URL for scanning")
 
+def add_secret_scan_args(parser):
+    """Add arguments specific to Secret Scan."""
+    parser.add_argument("--results", help="Specifies which type(s) of results to output: verified, unknown, unverified, filtered_unverified. Defaults to all types.")
+    parser.add_argument("--branch", default=GitInfo.get_commit_sha(), help="The branch to scan. Use all-branches to scan all branches. (default: latest commit sha)")
+    parser.add_argument("--exclude-paths", help="Paths to exclude from the scan")
+    parser.add_argument("--additional-arguments", help="Additional CLI arguments to pass to Secret Scan")
 
 def main():
     clean_env_vars()
@@ -154,6 +166,11 @@ def main():
     sq_sast_parser = scan_subparsers.add_parser("sq-sast", help="Run SQ SAST scan")
     add_sq_sast_scan_args(sq_sast_parser) 
     sq_sast_parser.set_defaults(func=run_scan)
+
+    # Secret Scan
+    secret_parser = scan_subparsers.add_parser("secret", help="Run Secret scan")
+    add_secret_scan_args(secret_parser) 
+    secret_parser.set_defaults(func=run_scan)
 
     # Parse arguments and execute respective function
     args = parser.parse_args()
