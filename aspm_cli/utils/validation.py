@@ -4,7 +4,7 @@ from typing import Optional
 from aspm_cli.utils.logger import Logger
 
 
-ALLOWED_SCAN_TYPES = {"iac", "sast", "sq-sast"}
+ALLOWED_SCAN_TYPES = {"iac", "sast", "sq-sast", "secret"}
 
 class Config(BaseModel):
     SCAN_TYPE: str
@@ -109,6 +109,12 @@ class SQSASTScannerConfig(BaseModel):
             raise ValueError("Unable to retrieve COMMIT_SHA from Git metadata. Please pass the --commit-sha variable")
         return v
 
+class SecretScannerConfig(BaseModel):
+    RESULTS: Optional[str]
+    BRANCH: Optional[str]
+    EXCLUDE_PATHS: Optional[str]
+    ADDITIONAL_ARGUMENTS: Optional[str]
+
 class ConfigValidator:
     def __init__(self, scan_type, accuknox_endpoint, accuknox_tenant, accuknox_label, accuknox_token, softfail):
         try:
@@ -167,6 +173,19 @@ class ConfigValidator:
                 BRANCH=branch,
                 COMMIT_SHA=commit_sha,
                 PIPELINE_URL=pipeline_url,
+            )
+        except ValidationError as e:
+            for error in e.errors():
+                Logger.get_logger().error(f"{error['loc'][0]}: {error['msg']}")
+            exit(1)
+
+    def validate_secret_scan(self, results, branch, exclude_paths, additional_arguments):
+        try:
+            self.config = SecretScannerConfig(
+                RESULTS=results,
+                BRANCH=branch,
+                EXCLUDE_PATHS=exclude_paths,
+                ADDITIONAL_ARGUMENTS=additional_arguments,
             )
         except ValidationError as e:
             for error in e.errors():
