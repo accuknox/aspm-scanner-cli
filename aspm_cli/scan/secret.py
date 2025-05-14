@@ -2,6 +2,7 @@ import subprocess
 import os
 from aspm_cli.utils import docker_pull
 from aspm_cli.utils.logger import Logger
+import platform
 
 class SecretScanner:
     result_file = 'results.json'
@@ -33,6 +34,7 @@ class SecretScanner:
             with open(self.result_file, 'w') as f:
                 f.write(result.stdout)
 
+            Logger.get_logger().debug(f"Scan returncode: {result.returncode}")
             if os.path.exists(self.result_file) and os.stat(self.result_file).st_size > 0:
                 return result.returncode, self.result_file
             else:
@@ -81,7 +83,18 @@ class SecretScanner:
             ]
             is_docker = True
 
-        target_path = "file:///app" if is_docker else f"file://{os.getcwd()}"
+
+        if is_docker:
+                target_path = "file:///app"
+        else:
+            print("test")
+            scan_path = os.getcwd().replace("\\", "/")
+            target_path = f"file://{scan_path}"
+
+            if platform.system().lower() == "windows" and not scan_path.startswith("/"):
+                scan_path = "/" + scan_path
+            target_path = f"file://{scan_path}"
+
         cmd.extend(["git", target_path])
         cmd.extend(self._build_common_flags())
         return cmd
