@@ -70,9 +70,8 @@ def run_scan(args):
             scanner = SASTScanner(args.repo_url, args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url)
             data_type = "SG"
         elif args.scantype.lower() == "sq-sast":
-            args.sonar_project_key = f'^{args.sonar_project_key}$'
             validator.validate_sq_sast_scan(args.sonar_project_key, args.sonar_token, args.sonar_host_url, args.sonar_org_id, args.repo_url, args.branch, args.commit_sha, args.pipeline_url)
-            scanner = SQSASTScanner(args.skip_sonar_scan, args.sonar_project_key, args.sonar_token, args.sonar_host_url, args.sonar_org_id, args.repo_url, args.branch, args.commit_sha, args.pipeline_url)
+            scanner = SQSASTScanner(args.skip_sonar_scan, args.sonar_project_key, args.sonar_token, args.sonar_host_url, args.sonar_org_id, args.repo_url, args.branch, args.commit_sha, args.pipeline_url, args.base_command)
             data_type = "SQ"
         elif args.scantype.lower() == "secret":
             validator.validate_secret_scan(args.results, args.branch, args.exclude_paths, args.additional_arguments)
@@ -137,6 +136,15 @@ def add_sq_sast_scan_args(parser):
     parser.add_argument("--branch", default=GitInfo.get_branch_name(), help="Git repository branch")
     parser.add_argument("--commit-sha", default=GitInfo.get_commit_sha(), help="Commit SHA for scanning")
     parser.add_argument("--pipeline-url", help="Pipeline URL for scanning")
+    parser.add_argument(
+        "--base-command",
+        help=(
+            "Optional override for the base command used to run SQ SAST Scan"
+            "Use this to switch from the default Docker-based execution to a custom command. "
+            "For example, to run SQ Scan locally: 'sonar-scanner'. "
+            "Or to run it with a custom Docker version: ' docker run --rm -v $PWD:/usr/src/ sonarsource/sonar-scanner-cli:11.3', (ensure /usr/src is mounted to the scan directory)"
+        )
+    )
 
 def add_secret_scan_args(parser):
     """Add arguments specific to Secret Scan."""

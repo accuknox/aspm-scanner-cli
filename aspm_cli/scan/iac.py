@@ -61,7 +61,6 @@ class IaCScanner:
                 "--workdir", "/workdir",
                 self.checkov_image
             ]
-            print(cmd)
             is_docker = True
 
         if self.file:
