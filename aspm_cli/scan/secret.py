@@ -38,7 +38,7 @@ class SecretScanner:
             if os.path.exists(self.result_file) and os.stat(self.result_file).st_size > 0:
                 return result.returncode, self.result_file
             else:
-                Logger.get_logger().info("No secrets found. Skipping result file usage.")
+                Logger.get_logger().info("No secrets found. Skipping upload")
                 return result.returncode, None
 
         except subprocess.CalledProcessError as e:

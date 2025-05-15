@@ -4,7 +4,7 @@ from typing import Optional
 from aspm_cli.utils.logger import Logger
 
 
-ALLOWED_SCAN_TYPES = {"iac", "sast", "sq-sast", "secret"}
+ALLOWED_SCAN_TYPES = {"iac", "sast", "sq-sast", "secret", "container"}
 
 class Config(BaseModel):
     SCAN_TYPE: str
@@ -20,6 +20,23 @@ class Config(BaseModel):
         if v not in ALLOWED_SCAN_TYPES:
             raise ValueError(f"Invalid SCAN_TYPE. Allowed values: {', '.join(ALLOWED_SCAN_TYPES)}.")
         return v
+
+class ContainerScannerConfig(BaseModel):
+    IMAGE_NAME: str
+    TAG: str
+    SEVERITY: Optional[str]
+
+    @field_validator("SEVERITY", mode="before")
+    @classmethod
+    def validate_severity(cls, v):
+        allowed_severities = {"UNKNOWN", "LOW", "MEDIUM", "HIGH", "CRITICAL"}
+        if v:
+            severities = [s.strip().upper() for s in v.split(",")]
+            for s in severities:
+                if s not in allowed_severities:
+                    raise ValueError(f"Invalid SEVERITY '{s}'. Allowed values: {', '.join(allowed_severities)}.")
+        return v
+
 
 class IaCScannerConfig(BaseModel):
     REPOSITORY_URL: str
@@ -186,6 +203,18 @@ class ConfigValidator:
                 BRANCH=branch,
                 EXCLUDE_PATHS=exclude_paths,
                 ADDITIONAL_ARGUMENTS=additional_arguments,
+            )
+        except ValidationError as e:
+            for error in e.errors():
+                Logger.get_logger().error(f"{error['loc'][0]}: {error['msg']}")
+            exit(1)
+
+    def validate_container_scan(self, image_name, tag, severity):
+        try:
+            self.config = ContainerScannerConfig(
+                IMAGE_NAME=image_name,
+                TAG=tag,
+                SEVERITY=severity,
             )
         except ValidationError as e:
             for error in e.errors():

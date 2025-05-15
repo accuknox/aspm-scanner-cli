@@ -2,6 +2,7 @@ import argparse
 import os
 from colorama import Fore, init
 
+from aspm_cli.scan.container import ContainerScanner
 from aspm_cli.scan.sast import SASTScanner
 from aspm_cli.scan.secret import SecretScanner
 from aspm_cli.scan.sq_sast import SQSASTScanner
@@ -77,6 +78,10 @@ def run_scan(args):
             validator.validate_secret_scan(args.results, args.branch, args.exclude_paths, args.additional_arguments)
             scanner = SecretScanner(args.results, args.branch, args.exclude_paths, args.additional_arguments, args.base_command)
             data_type = "TruffleHog"
+        elif args.scantype.lower() == "container":
+            validator.validate_container_scan(args.image_name, args.tag, args.severity)
+            scanner = ContainerScanner(args.image_name, args.tag, args.severity, args.base_command)
+            data_type = "TR"
         else:
             Logger.get_logger().error("Invalid scan type.")
             return
@@ -122,6 +127,33 @@ def add_sast_scan_args(parser):
     parser.add_argument("--commit-sha", default=GitInfo.get_commit_sha(), help="Commit SHA for scanning")
     parser.add_argument("--pipeline-id", help="Pipeline ID for scanning")
     parser.add_argument("--job-url", help="Job URL for scanning")
+
+def add_container_scan_args(parser):
+    """Add arguments specific to Container Scan."""
+    parser.add_argument(
+        "--image-name",
+        required=True,
+        help="Name of the Docker image to scan (without tag)."
+    )
+    parser.add_argument(
+        "--tag",
+        required=True,
+        help="Tag of the Docker image to scan"
+    )
+    parser.add_argument(
+        "--severity",
+        default="UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL",
+        help="Comma-separated list of severities to check. If any match, the scan will fail. Defaults to all severities."
+    )
+    parser.add_argument(
+        "--base-command",
+        help=(
+            "Optional override for the base command used to run Container Scan"
+            "Use this to switch from the default Docker-based execution to a custom command. "
+            "For example, to run trivy locally: 'trivy'. "
+            "Or to run it with a custom Docker version: 'docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v /home/redshadow/accuknox/aspm-scanner-cli:/workdir --workdir /workdir aquasec/trivy:0.62.1', (ensure /workdir is mounted to the scan directory)"
+        )
+    )
 
 def add_sq_sast_scan_args(parser):
     """Add arguments specific to SQ SAST scan."""
@@ -197,6 +229,11 @@ def main():
     secret_parser = scan_subparsers.add_parser("secret", help="Run Secret scan")
     add_secret_scan_args(secret_parser) 
     secret_parser.set_defaults(func=run_scan)
+
+    # Container Scan
+    container_parser = scan_subparsers.add_parser("container", help="Run a container image scan")
+    add_container_scan_args(container_parser)
+    container_parser.set_defaults(func=run_scan)
 
     # Parse arguments and execute respective function
     args = parser.parse_args()
