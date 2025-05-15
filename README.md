@@ -45,13 +45,14 @@ Here’s a breakdown of the arguments:
 
 | **Input**                | **Description**                                                                 | **Default Value**         |
 |--------------------------|---------------------------------------------------------------------------------|---------------------------|
-| **--file**               | Specify a file for scanning (e.g., ".tf" for Terraform). Cannot be used with directory input. | `""` (empty, optional)    |
-| **--directory**          | Directory with infrastructure code and/or package manager files to scan         | `"."` (current directory)  |
-| **--compact**            | Do not display code blocks in the output                                        | `False` (boolean)          |
-| **--quiet**              | Display only failed checks                                                      | `False` (boolean)          |
-| **--framework**      | Filter scans by specific frameworks, e.g., --framework terraform,kubernetes. For all frameworks, use all           | `"all"`  |
-| **--repo-url**         | Git repository URL. If not provided, it is fetched automatically using Git CLI.                                                               | Fetched via Git CLI if not provided	                   |
-| **--repo-branch**      | Git repository branch. If not provided, it is fetched automatically using Git CLI.	                                                             | Fetched via Git CLI if not provided	                    |
+| `--file`               | Specify a file for scanning (e.g., ".tf" for Terraform). Cannot be used with directory input. | `""` (empty, optional)    |
+| `--directory`          | Directory with infrastructure code and/or package manager files to scan         | `"."` (current directory)  |
+| `--compact`            | Do not display code blocks in the output                                        | `False` (boolean)          |
+| `--quiet`              | Display only failed checks                                                      | `False` (boolean)          |
+| `--framework`      | Filter scans by specific frameworks, e.g., --framework terraform,kubernetes. For all frameworks, use all           | `"all"`  |
+| `--repo-url`         | Git repository URL. If not provided, it is fetched automatically using Git CLI.                                                               | Fetched via Git CLI if not provided	                   |
+| `--repo-branch`      | Git repository branch. If not provided, it is fetched automatically using Git CLI.	                                                             | Fetched via Git CLI if not provided	                    |
+| `--base-command`         | Override the base command used to run the scan. Useful for switching from Docker to local CLI execution. See --help for full details. | Docker-based (default) ||
 
 ### SAST Scanning
 
@@ -101,7 +102,8 @@ Here’s a breakdown of the arguments:
 | `--repo-url`          | Git repository URL                                                             | Auto-detected if not provided |
 | `--branch`            | Git branch to scan                                                             | Auto-detected if not provided |
 | `--commit-sha`        | Commit SHA for the scan                                                        | Auto-detected if not provided |
-| `--pipeline-url`      | Optional URL to the pipeline where the scan is triggered                                | `""`                          |
+| `--pipeline-url`      | Optional URL to the pipeline where the scan is triggered                                | `""`                       
+| `--base-command`         | Override the base command used to run the scan. Useful for switching from Docker to local CLI execution. See --help for full details. | Docker-based (default) ||
 
 > 📝 **Note:** The `repo-url`, `branch`, and `commit-sha` are optional if scanning against a Git-cloned directory. They will be automatically detected using the local Git configuration.
 
@@ -109,4 +111,31 @@ Here’s a breakdown of the arguments:
 
 ```bash
 accuknox-aspm-scanner scan sq-sast --sonar-project-key PROJ_KEY --sonar-host-url URL --sonar-token TOKEN --skip-sonar-scan
+```
+
+### Secret Scanning
+
+The **Secret Scanning** capability of the AccuKnox ASPM Scanner detects hardcoded secrets, credentials, and other sensitive data within the Git repositories. 
+
+#### How It Works
+
+1. Docker pulls the image to execute the Secret scan.
+2. Based on the provided arguments, the Secret Scan command is constructed.
+3. Secret tool performs the scan and generates a result file in JSON format.
+5. Results are uploaded to the AccuKnox endpoint.
+
+#### Input Arguments
+
+| **Input**                | **Description**                                                                                                 | **Default Value**                 |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| `--results`              | Specifies which result types to include: `verified`, `unknown`, `unverified`, `filtered_unverified`             | `""` (all types included)         |
+| `--branch`               | Git branch to scan. Use `all-branches` to scan all branches.                                                    | Latest commit SHA                 |
+| `--exclude-paths`        | Comma-separated list of paths to exclude from scanning                                                          | `""`                              |
+| `--additional-arguments` | Extra arguments to pass to the secret scanning tool                                                             | `""`                              |
+| `--base-command`         | Override the base command used to run the scan. Useful for switching from Docker to local CLI execution. See --help for full details. | Docker-based (default) |
+
+#### Example Command
+
+```bash
+accuknox-aspm-scanner --softfail scan secret 
 ```
