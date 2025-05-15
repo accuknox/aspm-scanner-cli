@@ -11,7 +11,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def upload_results(result_file, endpoint, tenant_id, label, token, data_type):
 
-    spinner = Spinner(message=f"Uploading the result to AccuKnox...",  color=Fore.GREEN)
+    spinner = Spinner(message=f"Uploading the result to AccuKnox control plane...",  color=Fore.GREEN)
     spinner.start()
 
     """Upload the result JSON to the specified endpoint."""
