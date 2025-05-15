@@ -63,7 +63,7 @@ def run_scan(args):
         # Select scan type and run respective scanner
         if args.scantype.lower() == "iac":
             validator.validate_iac_scan(args.repo_url, args.repo_branch, args.file, args.directory, args.compact, args.quiet, args.framework)
-            scanner = IaCScanner(args.repo_url, args.repo_branch, args.file, args.directory, args.compact, args.quiet, args.framework)
+            scanner = IaCScanner(args.repo_url, args.repo_branch, args.file, args.directory, args.compact, args.quiet, args.framework, args.base_command)
             data_type = "IAC"
         elif args.scantype.lower() == "sast":
             validator.validate_sast_scan(args.repo_url, args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url)
@@ -106,6 +106,15 @@ def add_iac_scan_args(parser):
     parser.add_argument("--framework", default="all", help="Filter scans by specific frameworks, e.g., --framework terraform,sca_package. For all frameworks, use --framework all")
     parser.add_argument("--repo-url", default=GitInfo.get_repo_url(), help="Git repository URL")
     parser.add_argument("--repo-branch", default=GitInfo.get_branch_name(), help="Git repository branch")
+    parser.add_argument(
+        "--base-command",
+        help=(
+            "Optional override for the base command used to run IAC Scan"
+            "Use this to switch from the default Docker-based execution to a custom command. "
+            "For example, to run checkov locally: 'checkov'. "
+            "Or to run it with a custom Docker version: 'docker run --rm -v $PWD:/workdir --workdir /workdir ghcr.io/bridgecrewio/checkov:3.2.21', (ensure /workdir is mounted to the scan directory)"
+        )
+    )
 
 def add_sast_scan_args(parser):
     """Add arguments specific to SAST scan."""

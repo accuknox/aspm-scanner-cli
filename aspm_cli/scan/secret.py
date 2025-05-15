@@ -2,6 +2,7 @@ import subprocess
 import os
 from aspm_cli.utils import docker_pull
 from aspm_cli.utils.logger import Logger
+import shlex
 
 class SecretScanner:
     result_file = 'results.json'
@@ -65,7 +66,7 @@ class SecretScanner:
                 flags.append(branch_flag)
 
         if self.additional_arguments:
-            flags.extend(self.additional_arguments.split())
+            flags.extend(shlex.split(self.additional_arguments))
 
         return flags
 
