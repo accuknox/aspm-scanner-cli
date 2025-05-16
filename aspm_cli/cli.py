@@ -6,6 +6,7 @@ from aspm_cli.scan.container import ContainerScanner
 from aspm_cli.scan.sast import SASTScanner
 from aspm_cli.scan.secret import SecretScanner
 from aspm_cli.scan.sq_sast import SQSASTScanner
+from aspm_cli.scan.dast import DASTScanner
 from aspm_cli.utils.git import GitInfo
 from .utils import ConfigValidator, ALLOWED_SCAN_TYPES, upload_results, handle_failure
 from .scan import IaCScanner
@@ -82,6 +83,10 @@ def run_scan(args):
             validator.validate_container_scan(args.image_name, args.tag, args.severity)
             scanner = ContainerScanner(args.image_name, args.tag, args.severity, args.base_command)
             data_type = "TR"
+        elif args.scantype.lower() == "dast":
+            validator.validate_dast_scan(args.target_url, args.severity_threshold, args.dast_scan_type)
+            scanner = DASTScanner(args.target_url, args.severity_threshold, args.dast_scan_type)
+            data_type = "ZAP"
         else:
             Logger.get_logger().error("Invalid scan type.")
             return
@@ -194,6 +199,24 @@ def add_secret_scan_args(parser):
         )
     )
 
+def add_dast_scan_args(parser):
+    """Add arguments specific to DAST scan."""
+    parser.add_argument(
+        "--target-url",
+        required=True,
+        help="The target web application URL to scan (must start with http or https)"
+    )
+    parser.add_argument(
+        "--severity-threshold",
+        default="High",
+        help="Severity level to fail the scan. Allowed values: LOW, MEDIUM, HIGH. Default is HIGH"
+    )
+    parser.add_argument(
+        "--dast-scan-type",
+        default="baseline",
+        help="DAST scan type to run. Allowed values: baseline, full-scan. Default is baseline"
+    )
+
 def main():
     clean_env_vars()
     print_banner()
@@ -234,6 +257,11 @@ def main():
     container_parser = scan_subparsers.add_parser("container", help="Run a container image scan")
     add_container_scan_args(container_parser)
     container_parser.set_defaults(func=run_scan)
+
+    # DAST Scan
+    dast_parser = scan_subparsers.add_parser("dast", help="Run a DAST scan")
+    add_dast_scan_args(dast_parser)
+    dast_parser.set_defaults(func=run_scan)
 
     # Parse arguments and execute respective function
     args = parser.parse_args()
