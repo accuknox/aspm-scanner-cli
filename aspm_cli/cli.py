@@ -109,7 +109,7 @@ def run_scan(args):
 def add_iac_scan_args(parser):
     """Add arguments specific to IAC scan."""
     parser.add_argument("--file", default="", help="Specify a file for scanning; cannot be used with directory input")
-    parser.add_argument("--directory", default="./", help="Directory with infrastructure code and/or package manager files to scan")
+    parser.add_argument("--directory", default=".", help="Directory with infrastructure code and/or package manager files to scan")
     parser.add_argument("--compact", action="store_true", help="Do not display code blocks in output")
     parser.add_argument("--quiet", action="store_true", help="Display only failed checks")
     parser.add_argument("--framework", default="all", help="Filter scans by specific frameworks, e.g., --framework terraform,sca_package. For all frameworks, use --framework all")

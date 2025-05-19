@@ -9,7 +9,7 @@ class IaCScanner:
     checkov_image = "ghcr.io/bridgecrewio/checkov:3.2.21"
     output_format = 'json'
     output_file_path = '.'
-    result_file = f'{output_file_path}/results_json.json'
+    result_file = os.path.join(output_file_path, 'results_json.json')
 
     def __init__(self, repo_url=None, repo_branch=None, file=None, directory=None,
                  compact=False, quiet=False, framework=None, base_command=None):
