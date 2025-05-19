@@ -4,7 +4,7 @@ from typing import Optional
 from aspm_cli.utils.logger import Logger
 
 
-ALLOWED_SCAN_TYPES = {"iac", "sast", "sq-sast", "secret", "container"}
+ALLOWED_SCAN_TYPES = {"iac", "sast", "sq-sast", "secret", "container", "dast"}
 
 class Config(BaseModel):
     SCAN_TYPE: str
@@ -61,6 +61,34 @@ class IaCScannerConfig(BaseModel):
     def validate_repository_branch(cls, v):
         if not isinstance(v, str) or not v.strip():
             raise ValueError("Unable to retrieve REPOSITORY_BRANCH from Git metadata. Please pass the --repo-branch variable")
+        return v
+
+class DASTScannerConfig(BaseModel):
+    TARGET_URL: str
+    SEVERITY_THRESHOLD: str
+    DAST_SCAN_TYPE: str
+
+    @field_validator("TARGET_URL", mode="before")
+    @classmethod
+    def validate_target_url(cls, v):
+        if not isinstance(v, str) or not v.startswith("http"):
+            raise ValueError("Invalid TARGET_URL. It must be a valid URL starting with 'http'.")
+        return v
+
+    @field_validator("SEVERITY_THRESHOLD", mode="before")
+    @classmethod
+    def validate_severity_threshold(cls, v):
+        allowed = {"HIGH", "MEDIUM", "LOW"}
+        if v and v.upper() not in allowed:
+            raise ValueError(f"Invalid SEVERITY_THRESHOLD '{v}'. Allowed values: {', '.join(allowed)}.")
+        return v
+
+    @field_validator("DAST_SCAN_TYPE", mode="before")
+    @classmethod
+    def validate_scan_type(cls, v):
+        allowed = {"baseline", "full-scan"}
+        if v and v.lower() not in allowed:
+            raise ValueError(f"Invalid DAST_SCAN_TYPE '{v}'. Allowed values: {', '.join(allowed)}.")
         return v
 
 class SASTScannerConfig(BaseModel):
@@ -215,6 +243,18 @@ class ConfigValidator:
                 IMAGE_NAME=image_name,
                 TAG=tag,
                 SEVERITY=severity,
+            )
+        except ValidationError as e:
+            for error in e.errors():
+                Logger.get_logger().error(f"{error['loc'][0]}: {error['msg']}")
+            exit(1)
+
+    def validate_dast_scan(self, target_url, severity_threshold, dast_scan_type):
+        try:
+            self.config = DASTScannerConfig(
+                TARGET_URL=target_url,
+                SEVERITY_THRESHOLD=severity_threshold,
+                DAST_SCAN_TYPE=dast_scan_type,
             )
         except ValidationError as e:
             for error in e.errors():
