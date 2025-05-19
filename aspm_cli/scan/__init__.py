@@ -1,1 +1,1 @@
-from .iac import IaCScanner
+from aspm_cli.scan.iac import IaCScanner

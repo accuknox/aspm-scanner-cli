@@ -8,10 +8,10 @@ from aspm_cli.scan.secret import SecretScanner
 from aspm_cli.scan.sq_sast import SQSASTScanner
 from aspm_cli.scan.dast import DASTScanner
 from aspm_cli.utils.git import GitInfo
-from .utils import ConfigValidator, ALLOWED_SCAN_TYPES, upload_results, handle_failure
-from .scan import IaCScanner
-from .utils.spinner import Spinner
-from .utils.logger import Logger
+from aspm_cli.utils import ConfigValidator, ALLOWED_SCAN_TYPES, upload_results, handle_failure
+from aspm_cli.scan import IaCScanner
+from aspm_cli.utils.spinner import Spinner
+from aspm_cli.utils.logger import Logger
 
 init(autoreset=True)
 
@@ -269,3 +269,7 @@ def main():
         args.func(args)
     else:
         parser.print_help()
+
+
+if __name__ == "__main__":
+    main()

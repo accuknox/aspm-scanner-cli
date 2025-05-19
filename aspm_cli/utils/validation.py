@@ -2,7 +2,7 @@ from pydantic import BaseModel, ValidationError, Field, field_validator, root_va
 import os
 from typing import Optional
 from aspm_cli.utils.logger import Logger
-
+import sys
 
 ALLOWED_SCAN_TYPES = {"iac", "sast", "sq-sast", "secret", "container", "dast"}
 
@@ -174,7 +174,7 @@ class ConfigValidator:
         except ValidationError as e:
             for error in e.errors():
                 Logger.get_logger().error(f"{error['loc'][0]}: {error['msg']}")
-            exit(1)
+            sys.exit(1)
 
     def validate_iac_scan(self, repo_url, repo_branch, input_file, input_directory, input_compact, input_quiet, input_framework):
         try:
@@ -190,7 +190,7 @@ class ConfigValidator:
         except ValidationError as e:
             for error in e.errors():
                 Logger.get_logger().error(f"{error['loc'][0]}: {error['msg']}")
-            exit(1)
+            sys.exit(1)
 
     def validate_sast_scan(self, repo_url, commit_ref, commit_sha, pipeline_id, job_url):
         try:
@@ -204,7 +204,7 @@ class ConfigValidator:
         except ValidationError as e:
             for error in e.errors():
                 Logger.get_logger().error(f"{error['loc'][0]}: {error['msg']}")
-            exit(1)
+            sys.exit(1)
 
 
     def validate_sq_sast_scan(self, sonar_project_key,  sonar_token, sonar_host_url, sonar_org_id, repo_url, branch, commit_sha, pipeline_url):
@@ -222,7 +222,7 @@ class ConfigValidator:
         except ValidationError as e:
             for error in e.errors():
                 Logger.get_logger().error(f"{error['loc'][0]}: {error['msg']}")
-            exit(1)
+            sys.exit(1)
 
     def validate_secret_scan(self, results, branch, exclude_paths, additional_arguments):
         try:
@@ -235,7 +235,7 @@ class ConfigValidator:
         except ValidationError as e:
             for error in e.errors():
                 Logger.get_logger().error(f"{error['loc'][0]}: {error['msg']}")
-            exit(1)
+            sys.exit(1)
 
     def validate_container_scan(self, image_name, tag, severity):
         try:
@@ -247,7 +247,7 @@ class ConfigValidator:
         except ValidationError as e:
             for error in e.errors():
                 Logger.get_logger().error(f"{error['loc'][0]}: {error['msg']}")
-            exit(1)
+            sys.exit(1)
 
     def validate_dast_scan(self, target_url, severity_threshold, dast_scan_type):
         try:
@@ -259,4 +259,4 @@ class ConfigValidator:
         except ValidationError as e:
             for error in e.errors():
                 Logger.get_logger().error(f"{error['loc'][0]}: {error['msg']}")
-            exit(1)
+            sys.exit(1)
