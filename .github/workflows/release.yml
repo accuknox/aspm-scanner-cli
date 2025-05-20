@@ -11,6 +11,9 @@ jobs:
     permissions:
       contents: write
 
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -23,11 +26,64 @@ jobs:
       - name: Install build tool
         run: pip install build
 
-      - name: Build the package
+      - name: Build source + wheel
         run: python -m build
 
-      - name: Create Release and Upload Artifacts
-        uses: softprops/action-gh-release@39ba0b9d81217c984acfad95ddcc7db226387497
+      - name: Create GitHub Release and Upload Python Artifacts
+        id: create_release
+        uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref_name }}
-          files: dist/*
+          files: |
+            dist/*.whl
+          draft: false
+          prerelease: false
+
+  build-pyinstaller:
+    needs: release
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-20.04
+            name: linux
+            suffix: ''
+            ext: ''
+          - os: windows-latest
+            name: windows
+            suffix: '.exe'
+            ext: '.exe'
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+
+    env:
+      PYTHON_VERSION: "3.10"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build Executable with PyInstaller
+        run: |
+          pyinstaller accuknox-aspm-scanner.spec
+
+      - name: Test Binary
+        shell: bash
+        run: |
+          ./dist/accuknox-aspm-scanner${{ matrix.ext }} --help
+
+      - name: Upload Native Binary to GitHub Release
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ needs.release.outputs.upload_url }}
+          asset_path: dist/accuknox-aspm-scanner${{ matrix.ext }}
+          asset_name: accuknox-aspm-scanner_${{ matrix.name }}_x86_64${{ matrix.ext }}
+          asset_content_type: application/octet-stream
