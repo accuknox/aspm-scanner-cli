@@ -1,0 +1,16 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+accuknox-sq-sast = {file = "https://github.com/accuknox/aspm-sastjob/releases/download/2.0.0/accuknox_sq_sast-0.1.0-py3-none-any.whl"}
+pydantic = "==2.11.4"
+colorama = "==0.4.6"
+requests = "==2.32.3"
+asyncio = "==3.4.3"
+
+[dev-packages]
+
+[requires]
+python_version = "3.12"

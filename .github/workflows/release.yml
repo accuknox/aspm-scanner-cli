@@ -68,12 +68,17 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install PyInstaller
-        run: pip install pyinstaller
-
-      - name: Build Executable with PyInstaller
+      - name: Install pipenv
         run: |
-          pyinstaller accuknox-aspm-scanner.spec
+          python -m pip install --no-cache-dir --upgrade pipenv
+
+      - name: Install deps and run pyinstaller
+        run: |
+          pipenv sync
+          pipenv run pip install pyinstaller
+
+      - name: Build executable
+        run: pipenv run pyinstaller accuknox-aspm-scanner.spec
 
       - name: Test Binary
         shell: bash
