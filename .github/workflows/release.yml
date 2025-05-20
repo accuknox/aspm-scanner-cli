@@ -74,7 +74,7 @@ jobs:
 
       - name: Install deps and run pyinstaller
         run: |
-          pipenv sync
+          pipenv install
           pipenv run pip install pyinstaller
 
       - name: Build executable
