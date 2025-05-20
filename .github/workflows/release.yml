@@ -44,14 +44,14 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
-            name: linux
-            suffix: ''
-            ext: ''
-          # - os: windows-latest
-          #   name: windows
-          #   suffix: '.exe'
-          #   ext: '.exe'
+          # - os: ubuntu-latest
+            # name: linux
+            # suffix: ''
+            # ext: ''
+          - os: windows-latest
+            name: windows
+            suffix: '.exe'
+            ext: '.exe'
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
