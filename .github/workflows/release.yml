@@ -48,10 +48,10 @@ jobs:
             name: linux
             suffix: ''
             ext: ''
-          - os: windows-latest
-            name: windows
-            suffix: '.exe'
-            ext: '.exe'
+          # - os: windows-latest
+          #   name: windows
+          #   suffix: '.exe'
+          #   ext: '.exe'
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
