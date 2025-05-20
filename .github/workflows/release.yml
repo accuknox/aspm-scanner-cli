@@ -44,7 +44,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: Ubuntu 22.04
+          - os: ubuntu-latest
             name: linux
             suffix: ''
             ext: ''
