@@ -44,10 +44,10 @@ jobs:
     strategy:
       matrix:
         include:
-          # - os: ubuntu-latest
-            # name: linux
-            # suffix: ''
-            # ext: ''
+          - os: ubuntu-latest
+            name: linux
+            suffix: ''
+            ext: ''
           - os: windows-latest
             name: windows
             suffix: '.exe'
