@@ -12,6 +12,7 @@ from aspm_cli.utils import ConfigValidator, ALLOWED_SCAN_TYPES, upload_results, 
 from aspm_cli.scan import IaCScanner
 from aspm_cli.utils.spinner import Spinner
 from aspm_cli.utils.logger import Logger
+from aspm_cli.utils.version import get_version
 
 init(autoreset=True)
 
@@ -224,6 +225,7 @@ def main():
     subparsers = parser.add_subparsers(dest="command")
 
     parser.add_argument('--softfail', action='store_true', help='Enable soft fail mode for scanning')
+    parser.add_argument('--version', action='version', version=f"%(prog)s v{get_version()}")
 
     # Environment validation
     env_parser = subparsers.add_parser("env", help="Validate and print config from environment")
