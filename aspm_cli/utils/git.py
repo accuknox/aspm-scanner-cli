@@ -41,16 +41,22 @@ class GitInfo:
         except subprocess.CalledProcessError:
             return None
 
-    @staticmethod
     def get_commit_ref():
-        """Returns the commit reference, such as 'origin/main'."""
+        """
+        Returns the current commit reference, such as 'refs/heads/main' or short commit hash if in detached HEAD.
+        """
         try:
+            # Try to get the symbolic ref (e.g., refs/heads/main)
             return subprocess.check_output(
-                ["git", "symbolic-ref", "HEAD"],
+                ["git", "symbolic-ref", "-q", "HEAD"],
                 stderr=subprocess.DEVNULL
             ).decode().strip()
         except subprocess.CalledProcessError:
-            return None
+            try:
+                # If that fails (detached HEAD), fall back to branch name
+                return GitInfo.get_branch_name()
+            except subprocess.CalledProcessError:
+                return None
 
     @staticmethod
     def get_repository_name():
