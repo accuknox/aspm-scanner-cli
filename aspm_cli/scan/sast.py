@@ -6,7 +6,7 @@ from aspm_cli.utils import docker_pull
 from aspm_cli.utils.logger import Logger
 
 class SASTScanner:
-    opengrep_image = "accuknox/opengrepjob:1.0.1"
+    opengrep_image = "accuknox/opengrepjob:1.0.2"
     result_file = f'results.json'
 
     def __init__(self, repo_url=None, commit_ref=None, commit_sha=None, pipeline_id=None, job_url=False):
