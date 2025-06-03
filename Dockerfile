@@ -13,9 +13,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 COPY --from=docker-cli /usr/local/bin /usr/local/bin
 
-RUN apt update -y && apt install curl git -y
-RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
-RUN curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
+RUN apt update -y && apt install git -y
 
 COPY . /CODE
 RUN  pip install  --no-cache-dir --no-cache /CODE
