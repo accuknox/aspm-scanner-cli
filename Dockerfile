@@ -17,7 +17,8 @@ RUN apt update -y && apt install curl git -y
 RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
 RUN curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
 
-COPY . .
-RUN  pip install  --no-cache-dir --no-cache .
+COPY . /CODE
+RUN  pip install  --no-cache-dir --no-cache /CODE
+RUN rm -rf /CODE
 
 ENTRYPOINT ["accuknox-aspm-scanner"]
