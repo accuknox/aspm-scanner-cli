@@ -20,11 +20,10 @@ class DASTScanner:
             Logger.get_logger().debug("Starting ZAP DAST scan...")
 
             zap_command = (
-                f"zap-baseline.py -t {self.target_url} -J {self.result_file} -I"
+                f"zap-baseline.py -t {self.target_url} -J report.json -I"
                 if self.scan_type == "baseline"
-                else f"zap-full-scan.py -t {self.target_url} -J {self.result_file} -I"
+                else f"zap-full-scan.py -t {self.target_url} -J report.json -I"
             )
-            print(zap_command)
 
             cmd = [
                 "docker", "run", "--rm",
