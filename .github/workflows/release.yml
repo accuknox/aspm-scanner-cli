@@ -52,10 +52,6 @@ jobs:
             name: windows
             suffix: '.exe'
             ext: '.exe'
-          - os: ubuntu-latest
-            name: alpine
-            suffix: ''
-            ext: ''
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
@@ -63,15 +59,11 @@ jobs:
     env:
       PYTHON_VERSION: "3.10"
 
-    container:
-      image: ${{ matrix.name == 'alpine' && 'python:3.10.18-alpine' || '' }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Python
-        if: matrix.name != 'alpine'
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -84,10 +76,6 @@ jobs:
         run: |
           python3 -m pipenv install
           python3 -m pipenv run pip install pyinstaller
-
-      - name: Build executable
-        if: matrix.name == 'alpine'
-        run: apk add binutils bash git
 
       - name: Build executable
         run: python3 -m pipenv run pyinstaller accuknox-aspm-scanner.spec
