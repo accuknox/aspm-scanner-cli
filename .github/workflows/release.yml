@@ -87,7 +87,7 @@ jobs:
 
       - name: Build executable
         if: matrix.name == 'alpine'
-        run: apk add binutils bash
+        run: apk add binutils bash git
 
       - name: Build executable
         run: python3 -m pipenv run pyinstaller accuknox-aspm-scanner.spec
