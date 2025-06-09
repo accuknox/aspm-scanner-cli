@@ -7,7 +7,7 @@ from aspm_cli.utils.logger import Logger
 
 class DASTScanner:
     zap_image = "zaproxy/zap-stable:2.16.1"
-    result_file = "/tmp/report.json"
+    result_file = './results.json'
 
     def __init__(self, target_url=None, severity_threshold=None, scan_type=None):
         self.target_url = target_url
@@ -20,14 +20,14 @@ class DASTScanner:
             Logger.get_logger().debug("Starting ZAP DAST scan...")
 
             zap_command = (
-                f"zap-baseline.py -t {self.target_url} -J report.json -I"
+                f"zap-baseline.py -t {self.target_url} -J results.json -I"
                 if self.scan_type == "baseline"
-                else f"zap-full-scan.py -t {self.target_url} -J report.json -I"
+                else f"zap-full-scan.py -t {self.target_url} -J results.json -I"
             )
 
             cmd = [
                 "docker", "run", "--rm",
-                "-v", f"/tmp:/zap/wrk:rw",
+                "-v", f"{os.getcwd()}:/zap/wrk",
                 "-t", self.zap_image,
                 zap_command
             ]
