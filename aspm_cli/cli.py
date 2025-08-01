@@ -77,8 +77,8 @@ def run_scan(args):
             scanner = SQSASTScanner(args.skip_sonar_scan, args.sonar_project_key, args.sonar_token, args.sonar_host_url, args.sonar_org_id, args.repo_url, args.branch, args.commit_sha, args.pipeline_url, args.base_command)
             data_type = "SQ"
         elif args.scantype.lower() == "secret":
-            validator.validate_secret_scan(args.results, args.branch, args.exclude_paths, args.additional_arguments)
-            scanner = SecretScanner(args.results, args.branch, args.exclude_paths, args.additional_arguments, args.base_command)
+            # validator.validate_secret_scan(args.results, args.branch, args.exclude_paths, args.additional_arguments)
+            scanner = SecretScanner(args.command, args.non_container_mode)
             data_type = "TruffleHog"
         elif args.scantype.lower() == "container":
             # TODO: cleanup
@@ -168,18 +168,16 @@ def add_sq_sast_scan_args(parser):
 
 def add_secret_scan_args(parser):
     """Add arguments specific to Secret Scan."""
-    parser.add_argument("--results", help="Specifies which type(s) of results to output: verified, unknown, unverified, filtered_unverified. Defaults to all types.")
-    parser.add_argument("--branch", default=GitInfo.get_commit_sha(), help="The branch to scan. Use all-branches to scan all branches. (default: latest commit sha)")
-    parser.add_argument("--exclude-paths", help="Paths to exclude from the scan")
-    parser.add_argument("--additional-arguments", help="Additional CLI arguments to pass to Secret Scan")
     parser.add_argument(
-        "--base-command",
-        help=(
-            "Optional override for the base command used to run Secret Scan"
-            "Use this to switch from the default Docker-based execution to a custom command. "
-            "For example, to run TruffleHog locally: 'trufflehog'. "
-            "Or to run it with a custom Docker version: 'docker run --rm -v $PWD:/app trufflesecurity/trufflehog:3.88.29', (ensure /app is mounted to the scan directory)"
-        )
+        "--command",
+        type=str,
+        required=True,
+        help="Arguments to pass to the secret scanner (e.g., 'git file://.')"
+    )
+    parser.add_argument(
+        "--non-container-mode",
+        action="store_true",
+        help="Run in non-container mode"
     )
 
 def add_dast_scan_args(parser):
