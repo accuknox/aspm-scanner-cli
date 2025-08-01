@@ -4,38 +4,44 @@ import os
 import shlex
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils import docker_pull
+from aspm_cli.utils import config
+from colorama import Fore
 
 class ContainerScanner:
-    trivy_image = "aquasec/trivy:0.62.1"
+    ak_container_image = "aquasec/trivy:0.62.1"
     result_file = './results.json'
 
-    def __init__(self, image_name, tag=None, severity=None, base_command=None):
-        self.image_name = image_name
-        self.tag = tag
-        self.severity = [s.strip().upper() for s in (severity or "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL").split(',')]
-        self.base_command = base_command
+    def __init__(self, command, non_container_mode=False):
+        self.command = command
+        self.non_container_mode = non_container_mode
 
     def run(self):
         try:
-            if not self.base_command:
-                docker_pull(self.trivy_image)
+            if not self.non_container_mode:
+                docker_pull(self.ak_container_image)
 
-            scan_cmd = self._build_scan_command()
+            severity_threshold, sanitized_args = self._build_container_scan_args()
+            scan_cmd = self._build_scan_command(sanitized_args)
 
             Logger.get_logger().debug(f"Scanning container image: {' '.join(scan_cmd)}")
             result = subprocess.run(scan_cmd, capture_output=True, text=True)
 
             if result.stdout:
-                Logger.get_logger().debug(result.stdout)
+                sanitized_stdout = result.stdout.replace("trivy", "[scanner]")
+                Logger.get_logger().debug(sanitized_stdout)
+                if("--help" in self.command):
+                    Logger.log_with_color('INFO', sanitized_stdout, Fore.WHITE)
+                    return config.PASS_RETURN_CODE, None
             if result.stderr:
-                Logger.get_logger().error(result.stderr)
+                sanitized_stderr = result.stderr.replace("trivy", "[scanner]")
+                Logger.get_logger().error(sanitized_stderr)
 
             if not os.path.exists(self.result_file):
-                Logger.get_logger().info("No results found. Skipping upload.")
-                return 0, None
+                return config.SOMETHING_WENT_WRONG_RETURN_CODE, None
 
-            if self._severity_threshold_met():
-                Logger.get_logger().error(f"Vulnerabilities matching severities: {', '.join(self.severity)} found.")
+            severity_threshold = [s.strip().upper() for s in (severity_threshold or "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL").split(',')]
+            if self._severity_threshold_met(severity_threshold):
+                Logger.get_logger().error(f"Vulnerabilities matching severities: {', '.join(severity_threshold)} found.")
                 return 1, self.result_file
 
             return 0, self.result_file
@@ -43,35 +49,60 @@ class ContainerScanner:
             Logger.get_logger().error(f"Error during container scan: {e}")
             raise
 
-    def _build_scan_command(self):
-        if self.base_command:
-            cmd = shlex.split(self.base_command)
+    def _build_container_scan_args(self):
+        """
+        Parses the raw command, strips forbidden arguments, and enforces
+        the required output format and file. This ensures the class can
+        reliably find the JSON output.
+        """
+        # Flags that take a value and should be removed.
+        flags_to_strip = {"-s", "--severity", "-o", "--output", "-f", "--format", "--exit-code", "--quiet"}
+        severity_threshold = None
+
+        # Use shlex to handle quotes and spaces correctly
+        original_args = shlex.split(self.command)
+        sanitized_args = []
+        
+        i = 0
+        while i < len(original_args):
+            arg = original_args[i]
+            # If the arg is a flag to strip, skip it and its value
+            if arg in flags_to_strip:
+                if arg in ("-s", "--severity"):
+                    if i + 1 < len(original_args):
+                        severity_threshold = original_args[i + 1]
+                i += 2
+                continue
+            
+            sanitized_args.append(arg)
+            i += 1
+
+        sanitized_args.extend(["--quiet", "--exit-code", "1", "-f", "json", "-o", self.result_file])
+        return severity_threshold, sanitized_args
+    
+    def _build_scan_command(self, container_scan_args):
+        if self.non_container_mode:
+            cmd = (['trivy'])
         else:
             cmd = [
                 "docker", "run", "--rm",
                 "-v", "/var/run/docker.sock:/var/run/docker.sock",
                 "-v", f"{os.getcwd()}:/workdir",
                 "--workdir", "/workdir",
-                self.trivy_image,
+                self.ak_container_image,
             ]
-
-        cmd.extend([
-            "image", "--exit-code", "1", "-f", "json",
-            f"{self.image_name}:{self.tag}",
-            "-o", self.result_file,
-            "--quiet"
-        ])
-
+        
+        cmd.extend(container_scan_args)
         return cmd
 
-    def _severity_threshold_met(self):
+    def _severity_threshold_met(self, severity_threshold):
         try:
             with open(self.result_file, 'r') as f:
                 data = json.load(f)
 
             for result in data.get("Results", []):
                 for vuln in result.get("Vulnerabilities", []):
-                    if vuln.get("Severity", "").upper() in self.severity:
+                    if vuln.get("Severity", "").upper() in severity_threshold:
                         return True
             return False
         except Exception as e:
