@@ -7,12 +7,12 @@ from colorama import Fore
 from aspm_cli.utils import config
 
 class SecretScanner:
-    trufflehog_image = "trufflesecurity/trufflehog:3.88.29"
+    ak_secretscan_image = "trufflesecurity/trufflehog:3.88.29"
     result_file = 'results.json'
 
     def __init__(self, command, non_container_mode=False):
         """
-        :param command: Raw trufflehog CLI arguments string
+        :param command: Raw ak_secretscan CLI arguments string
         :param non_container_mode: Run locally if True, else use Docker
         """
         self.command = command
@@ -20,9 +20,9 @@ class SecretScanner:
 
     def run(self):
         try:
-            Logger.get_logger().debug("Starting Secret Scan using TruffleHog...")
+            Logger.get_logger().debug("Starting Secret Scan using ak_secretscan...")
             if not self.non_container_mode:
-                docker_pull(self.trufflehog_image)
+                docker_pull(self.ak_secretscan_image)
 
             args = self._build_secretscan_args()
             cmd = self._build_secretscan_command(args)
@@ -90,7 +90,7 @@ class SecretScanner:
                 "docker", "run", "--rm",
                 "-v", f"{os.getcwd()}:/app",
                 "--workdir", "/app",
-                self.trufflehog_image
+                self.ak_secretscan_image
             ]
 
         cmd.extend(args)

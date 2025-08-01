@@ -8,7 +8,7 @@ from colorama import Fore
 from aspm_cli.utils import config
 
 class IaCScanner:
-    checkov_image = "ghcr.io/bridgecrewio/checkov:3.2.21"
+    ak_iac_image = "ghcr.io/bridgecrewio/checkov:3.2.21"
     output_format = 'json'
     output_file_path = '.'
     result_file = os.path.join(output_file_path, 'results_json.json')
@@ -16,7 +16,7 @@ class IaCScanner:
     def __init__(self, command, non_container_mode=False, repo_url=None, repo_branch=None):
         """
         :param command: Raw command string passed by the user (e.g., "-d .")
-        :param non_container_mode: If True, run Checkov locally instead of in Docker
+        :param non_container_mode: If True, run ak_iac locally instead of in Docker
         """
         self.command = command
         self.non_container_mode = non_container_mode
@@ -26,13 +26,13 @@ class IaCScanner:
     def run(self):
         try:
             if not self.non_container_mode:
-                docker_pull(self.checkov_image)
+                docker_pull(self.ak_iac_image)
 
-            sanitized_args = self._build_checkov_args()
-            checkov_cmd = self._build_checkov_command(sanitized_args)
+            sanitized_args = self._build_iac_args()
+            iac_cmd = self._build_iac_command(sanitized_args)
 
-            Logger.get_logger().debug(f"Executing command: {' '.join(checkov_cmd)}")
-            result = subprocess.run(checkov_cmd, capture_output=True, text=True)
+            Logger.get_logger().debug(f"Executing command: {' '.join(iac_cmd)}")
+            result = subprocess.run(iac_cmd, capture_output=True, text=True)
 
             if result.stdout:
                 sanitized_stdout = result.stdout.replace("checkov", "[scanner]")
@@ -56,7 +56,7 @@ class IaCScanner:
             Logger.get_logger().error(f"Error during IaC scan: {e}")
             raise
 
-    def _build_checkov_args(self):
+    def _build_iac_args(self):
         """
         Sanitize the raw command and enforce output flags.
         """
@@ -80,7 +80,7 @@ class IaCScanner:
 
         return sanitized_args
 
-    def _build_checkov_command(self, args):
+    def _build_iac_command(self, args):
         if self.non_container_mode:
             return ["checkov"] + args
 
@@ -88,7 +88,7 @@ class IaCScanner:
             "docker", "run", "--rm",
             "-v", f"{os.getcwd()}:/workdir",
             "--workdir", "/workdir",
-            self.checkov_image
+            self.iac_image
         ]
         cmd.extend(args)
         return cmd
@@ -101,7 +101,7 @@ class IaCScanner:
                     "-v", f"{os.getcwd()}:/workdir",
                     "--workdir", "/workdir",
                     "--entrypoint", "bash",
-                    self.checkov_image,
+                    self.iac_image,
                     "-c", f"chmod 777 {self.result_file}"
                 ]
                 subprocess.run(chmod_cmd, capture_output=True, text=True)
