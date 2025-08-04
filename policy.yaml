@@ -1,0 +1,18 @@
+name: default-policy
+description: Default policy for evaluating the tool output
+rules:
+  critical:
+    condition:
+      operator: "greater_than"
+      value: 0
+    action: FAIL
+  high:
+    condition:
+      operator: "greater_than"
+      value: 3
+    action: FAIL
+  medium:
+    condition:
+      operator: "greater_than"
+      value: 3
+    action: FAIL

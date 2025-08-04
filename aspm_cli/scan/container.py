@@ -6,6 +6,7 @@ from aspm_cli.utils.logger import Logger
 from aspm_cli.utils import docker_pull
 from aspm_cli.utils import config
 from colorama import Fore
+from aspm_cli.utils.policy import policy_threshold_triggered
 
 class ContainerScanner:
     ak_container_image = "aquasec/trivy:0.62.1"
@@ -40,10 +41,10 @@ class ContainerScanner:
                 return config.SOMETHING_WENT_WRONG_RETURN_CODE, None
 
             severity_threshold = [s.strip().upper() for s in (severity_threshold or "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL").split(',')]
-            if self._severity_threshold_met(severity_threshold):
-                Logger.get_logger().error(f"Vulnerabilities matching severities: {', '.join(severity_threshold)} found.")
+            if self._severity_threshold_met():
+                # Logger.get_logger().error(f"Vulnerabilities matching severities: {', '.join(severity_threshold)} found.")
                 return 1, self.result_file
-
+            print(self._severity_threshold_met())
             return 0, self.result_file
         except Exception as e:
             Logger.get_logger().error(f"Error during container scan: {e}")
@@ -95,16 +96,21 @@ class ContainerScanner:
         cmd.extend(container_scan_args)
         return cmd
 
-    def _severity_threshold_met(self, severity_threshold):
+    def _severity_threshold_met(self):
         try:
             with open(self.result_file, 'r') as f:
                 data = json.load(f)
 
+            findings = []
+
             for result in data.get("Results", []):
                 for vuln in result.get("Vulnerabilities", []):
-                    if vuln.get("Severity", "").upper() in severity_threshold:
-                        return True
-            return False
+                    findings.append({
+                        "severity": vuln.get("Severity", "")
+                    })
+
+            return policy_threshold_triggered(findings)
+
         except Exception as e:
             Logger.get_logger().error(f"Error reading scan results: {e}")
             raise
