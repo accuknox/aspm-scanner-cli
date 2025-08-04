@@ -13,10 +13,10 @@ def handle_failure(exit_code, soft_fail):
         elif exit_code == PASS_RETURN_CODE:
             sys.exit(0)
         elif soft_fail:
-            Logger.get_logger().warning("Vulnerabilities detected, but soft fail is enabled. Continuing...")
+            Logger.get_logger().warning("Policy threshold breached, but soft fail is enabled. Continuing...")
             sys.exit(0)
         else:
-            Logger.get_logger().error("Vulnerabilities detected and soft fail is disabled. Exiting with failure.")
+            Logger.get_logger().error("Policy threshold breached and soft fail is disabled. Exiting with failure.")
             sys.exit(1)
     else:
         Logger.log_with_color('INFO', "Scan completed successfully.", Fore.GREEN)
