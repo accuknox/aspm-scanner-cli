@@ -1,94 +1,97 @@
 import subprocess
 import os
+import shlex
 from aspm_cli.utils import docker_pull
 from aspm_cli.utils.logger import Logger
-import shlex
+from colorama import Fore
+from aspm_cli.utils import config
 
 class SecretScanner:
+    ak_secretscan_image = "trufflesecurity/trufflehog:3.88.29"
     result_file = 'results.json'
-    trufflehog_image = "trufflesecurity/trufflehog:3.88.29"
 
-    def __init__(self, results=None, branch=None, exclude_paths=None, additional_arguments=None, base_command=None):
-        self.results = results
-        self.branch = branch
-        self.exclude_paths = exclude_paths
-        self.additional_arguments = additional_arguments
-        self.base_command = base_command
+    def __init__(self, command, non_container_mode=False):
+        """
+        :param command: Raw ak_secretscan CLI arguments string
+        :param non_container_mode: Run locally if True, else use Docker
+        """
+        self.command = command
+        self.non_container_mode = non_container_mode
 
     def run(self):
         try:
-            if not self.base_command:
-                docker_pull(self.trufflehog_image)
-                Logger.get_logger().debug("Starting Secret Scan using TruffleHog...")
+            Logger.get_logger().debug("Starting Secret Scan using ak_secretscan...")
+            if not self.non_container_mode:
+                docker_pull(self.ak_secretscan_image)
 
-            cmd = self._build_trufflehog_command()
+            args = self._build_secretscan_args()
+            cmd = self._build_secretscan_command(args)
+
             Logger.get_logger().debug(f"Running command: {' '.join(cmd)}")
-
             result = subprocess.run(cmd, capture_output=True, text=True)
 
             if result.stdout:
-                Logger.get_logger().debug(result.stdout)
+                sanitized_stdout = result.stdout.replace("TruffleHog", "[scanner]")
+                Logger.get_logger().debug(sanitized_stdout)
+
+                if("--help" in self.command):
+                    Logger.log_with_color('INFO', sanitized_stdout, Fore.WHITE)
+                    return config.PASS_RETURN_CODE, None
             if result.stderr:
-                Logger.get_logger().error(result.stderr)
+                sanitized_stderr = result.stderr.replace("TruffleHog", "[scanner]")
+
+                if("--help" in self.command and result.returncode == 0):
+                    Logger.log_with_color('INFO', sanitized_stderr, Fore.WHITE)
+                    return config.PASS_RETURN_CODE, None
+                else:
+                    Logger.get_logger().error(sanitized_stderr)
 
             with open(self.result_file, 'w') as f:
                 f.write(result.stdout)
 
-            Logger.get_logger().debug(f"Scan returncode: {result.returncode}")
             if os.path.exists(self.result_file) and os.stat(self.result_file).st_size > 0:
                 return result.returncode, self.result_file
             else:
-                Logger.get_logger().info("No secrets found. Skipping upload")
+                Logger.get_logger().info("No secrets found. Skipping upload.")
                 return result.returncode, None
 
         except subprocess.CalledProcessError as e:
             Logger.get_logger().error(f"Error during Secret scan: {e}")
             raise
 
-    def _build_common_flags(self):
+    def _build_secretscan_args(self):
         """
-        Helper function to build the common flags for trufflehog command
+        Parse raw command, filter conflicting flags, and append mandatory ones.
         """
-        flags = [
-            "--json",
-            "--no-update",
-            "--fail"
-        ]
+        args = shlex.split(self.command)
 
-        if self.results:
-            flags.extend(["--results", self.results])
+        # Strip known conflicting or redundant flags
+        forbidden_flags = {"--json", "--fail", "--no-update"}
+        sanitized_args = []
+        i = 0
+        while i < len(args):
+            if args[i] in forbidden_flags:
+                i += 1
+                continue
+            sanitized_args.append(args[i])
+            i += 1
 
-        if self.exclude_paths:
-            flags.extend(["-x", self.exclude_paths])
+        sanitized_args.extend(["--json", "--fail", "--no-update"])
+        return sanitized_args
 
-        if self.branch:
-            branch_flag = f"--branch={self.branch}" if self.branch != "all-branches" else ""
-            if branch_flag:
-                flags.append(branch_flag)
-
-        if self.additional_arguments:
-            flags.extend(shlex.split(self.additional_arguments))
-
-        return flags
-
-    def _build_trufflehog_command(self):
-        if self.base_command:
-            cmd = self.base_command.split()
-            is_docker = cmd[0] == "docker"
+    def _build_secretscan_command(self, args):
+        """
+        Construct the full command with target and args.
+        """
+        if self.non_container_mode:
+            cmd = ["trufflehog"]
         else:
             cmd = [
                 "docker", "run", "--rm",
                 "-v", f"{os.getcwd()}:/app",
-                self.trufflehog_image
+                "--workdir", "/app",
+                self.ak_secretscan_image
             ]
-            is_docker = True
 
-
-        if is_docker:
-            target_path = "file:///app"
-        else:
-            target_path = f"file://."
-
-        cmd.extend(["git", target_path])
-        cmd.extend(self._build_common_flags())
+        cmd.extend(args)
         return cmd

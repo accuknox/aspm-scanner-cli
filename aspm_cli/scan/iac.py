@@ -4,44 +4,50 @@ import os
 import shlex
 from aspm_cli.utils import docker_pull
 from aspm_cli.utils.logger import Logger
+from colorama import Fore
+from aspm_cli.utils import config
 
 class IaCScanner:
-    checkov_image = "ghcr.io/bridgecrewio/checkov:3.2.21"
+    ak_iac_image = "ghcr.io/bridgecrewio/checkov:3.2.21"
     output_format = 'json'
     output_file_path = '.'
     result_file = os.path.join(output_file_path, 'results_json.json')
 
-    def __init__(self, repo_url=None, repo_branch=None, file=None, directory=None,
-                 compact=False, quiet=False, framework=None, base_command=None):
-        self.file = file
-        self.directory = directory
-        self.compact = compact
-        self.quiet = quiet
-        self.framework = framework
+    def __init__(self, command, non_container_mode=False, repo_url=None, repo_branch=None):
+        """
+        :param command: Raw command string passed by the user (e.g., "-d .")
+        :param non_container_mode: If True, run ak_iac locally instead of in Docker
+        """
+        self.command = command
+        self.non_container_mode = non_container_mode
         self.repo_url = repo_url
         self.repo_branch = repo_branch
-        self.base_command = base_command
 
     def run(self):
         try:
-            if not self.base_command:
-                docker_pull(self.checkov_image)
+            if not self.non_container_mode:
+                docker_pull(self.ak_iac_image)
 
-            checkov_cmd = self._build_checkov_command()
+            sanitized_args = self._build_iac_args()
+            iac_cmd = self._build_iac_command(sanitized_args)
 
-            Logger.get_logger().debug(f"Executing command: {' '.join(checkov_cmd)}")
-            result = subprocess.run(checkov_cmd, capture_output=True, text=True)
+            Logger.get_logger().debug(f"Executing command: {' '.join(iac_cmd)}")
+            result = subprocess.run(iac_cmd, capture_output=True, text=True)
 
             if result.stdout:
-                Logger.get_logger().debug(result.stdout)
+                sanitized_stdout = result.stdout.replace("checkov", "[scanner]")
+                Logger.get_logger().debug(sanitized_stdout)
+                if("--help" in self.command):
+                    Logger.log_with_color('INFO', sanitized_stdout, Fore.WHITE)
+                    return config.PASS_RETURN_CODE, None
             if result.stderr:
-                Logger.get_logger().error(result.stderr)
+                sanitized_stderr = result.stderr.replace("checkov", "[scanner]")
+                Logger.get_logger().error(sanitized_stderr)
 
             self._fix_file_permissions_if_docker()
 
             if not os.path.exists(self.result_file):
-                Logger.get_logger().info("No results found. Skipping API upload.")
-                return result.returncode, None
+                return config.SOMETHING_WENT_WRONG_RETURN_CODE, None
 
             self.process_result_file()
             return result.returncode, self.result_file
@@ -50,44 +56,52 @@ class IaCScanner:
             Logger.get_logger().error(f"Error during IaC scan: {e}")
             raise
 
-    def _build_checkov_command(self):
-        if self.base_command:
-            cmd = shlex.split(self.base_command)
-            is_docker = cmd[0] == "docker"
-        else:
-            cmd = [
-                "docker", "run", "--rm",
-                "-v", f"{os.getcwd()}:/workdir",
-                "--workdir", "/workdir",
-                self.checkov_image
-            ]
-            is_docker = True
+    def _build_iac_args(self):
+        """
+        Sanitize the raw command and enforce output flags.
+        """
+        args = shlex.split(self.command)
+        # Remove conflicting output flags if present
+        forbidden_flags = {"-o", "--output-file-path"}
+        sanitized_args = []
+        i = 0
+        while i < len(args):
+            if args[i] in forbidden_flags:
+                i += 2  # Skip flag and value
+                continue
+            sanitized_args.append(args[i])
+            i += 1
 
-        if self.file:
-            cmd.extend(["-f", self.file])
-        if self.directory:
-            cmd.extend(["-d", self.directory])
-        if self.compact:
-            cmd.append("--compact")
-        if self.quiet:
-            cmd.append("--quiet")
-        if self.framework:
-            cmd.extend(["--framework", self.framework])
+        sanitized_args.extend([
+            "-o", self.output_format,
+            "--output-file-path", self.output_file_path,
+            "--quiet"
+        ])
 
-        cmd.extend(["-o", self.output_format, "--output-file-path", self.output_file_path])
+        return sanitized_args
 
+    def _build_iac_command(self, args):
+        if self.non_container_mode:
+            return ["checkov"] + args
+
+        cmd = [
+            "docker", "run", "--rm",
+            "-v", f"{os.getcwd()}:/workdir",
+            "--workdir", "/workdir",
+            self.iac_image
+        ]
+        cmd.extend(args)
         return cmd
 
     def _fix_file_permissions_if_docker(self):
-        # Only run chmod if using docker
-        if not self.base_command or self.base_command.startswith("docker"):
+        if not self.non_container_mode:
             try:
                 chmod_cmd = [
                     "docker", "run", "--rm",
                     "-v", f"{os.getcwd()}:/workdir",
                     "--workdir", "/workdir",
                     "--entrypoint", "bash",
-                    self.checkov_image,
+                    self.iac_image,
                     "-c", f"chmod 777 {self.result_file}"
                 ]
                 subprocess.run(chmod_cmd, capture_output=True, text=True)
@@ -95,7 +109,6 @@ class IaCScanner:
                 Logger.get_logger().debug(f"Could not fix file permissions: {e}")
 
     def process_result_file(self):
-        """Process the result JSON file to ensure it is an array and append additional metadata."""
         try:
             with open(self.result_file, 'r') as file:
                 data = json.load(file)
