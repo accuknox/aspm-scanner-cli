@@ -10,21 +10,29 @@ from accuknox_sq_sast.sonarqube_fetcher import SonarQubeFetcher
 class SQSASTScanner:
     sast_image = "sonarsource/sonar-scanner-cli:11.3"
 
-    def __init__(self, skip_sonar_scan=True, sonar_project_key=None, sonar_token=None, sonar_host_url=None,
-                 sonar_org_id=None, repo_url=None, branch=None, commit_sha=None, pipeline_url=None,
-                 base_command=None):
+    def __init__(self, skip_sonar_scan, command, non_container_mode=False, repo_url=None, branch=None,
+                 commit_sha=None, pipeline_url=None):
+        """
+        :param command: Raw command string (e.g., "-Dsonar.projectKey=... -Dsonar.token=...")
+        :param non_container_mode: If True, run sonar-scanner natively instead of Docker
+        :param repo_url: Git repository URL
+        :param branch: Branch name
+        :param commit_sha: Git commit SHA
+        :param pipeline_url: CI/CD pipeline URL
+        """
         self.skip_sonar_scan = skip_sonar_scan
-        self.sonar_project_key = sonar_project_key
-        self.sonar_token = sonar_token
-        self.sonar_host_url = sonar_host_url
-        self.sonar_org_id = sonar_org_id
-
+        self.command = command
+        self.non_container_mode = non_container_mode
         self.repo_url = repo_url
-        self.commit_sha = commit_sha
         self.branch = branch
+        self.commit_sha = commit_sha
         self.pipeline_url = pipeline_url
 
-        self.base_command = base_command
+        # Extract needed values from command (for fetcher)
+        self.sonar_project_key = self._extract_arg("-Dsonar.projectKey")
+        self.sonar_token = self._extract_arg("-Dsonar.token")
+        self.sonar_host_url = self._extract_arg("-Dsonar.host.url")
+        self.sonar_org_id = self._extract_arg("-Dsonar.organization")
 
     def run(self):
         try:
@@ -37,33 +45,25 @@ class SQSASTScanner:
             self._process_result_file(result_file)
             return returncode, result_file
         except subprocess.CalledProcessError as e:
-            Logger.get_logger().error(f"SAST scan failed: {e}")
+            Logger.get_logger().error(f"SonarQube-based AccuKnox SAST scan failed: {e}")
             raise
 
     def _run_sq_scan(self):
         try:
-            if not self.base_command:
-                docker_pull(self.sast_image)
-
             Logger.get_logger().debug("Starting SonarQube-based AccuKnox SAST scan...")
-            if self.base_command:
-                cmd = shlex.split(self.base_command)
-            else:
+
+            cmd = shlex.split(self.command)
+
+            if not self.non_container_mode:
+                docker_pull(self.sast_image)
                 cmd = [
                     "docker", "run", "--rm",
                     "-v", f"{os.getcwd()}:/usr/src/",
+                    "--workdir", "/usr/src/",
                     self.sast_image
-                ]
-
-            org_option = f"-Dsonar.organization={self.sonar_org_id}" if self.sonar_org_id else ""
-            cmd.extend([
-                f"-Dsonar.projectKey={self.sonar_project_key}",
-                f"-Dsonar.host.url={self.sonar_host_url}",
-                f"-Dsonar.token={self.sonar_token}",
-                f"-Dsonar.qualitygate.wait=true"
-            ])
-            if org_option:
-                cmd.append(org_option)
+                ] + cmd
+            else:
+                cmd = ["sonar-scanner"] + cmd
 
             Logger.get_logger().debug(f"Running scan: {' '.join(cmd)}")
             result = subprocess.run(cmd, capture_output=True, text=True)
@@ -117,3 +117,10 @@ class SQSASTScanner:
             Logger.get_logger().debug(f"Error processing result file: {e}")
             Logger.get_logger().error(f"Error during SQ SAST scan: {e}")
             raise
+
+    def _extract_arg(self, key):
+        """Extracts a value from the raw command string (e.g. -Dsonar.projectKey=foo)."""
+        for arg in shlex.split(self.command):
+            if arg.startswith(key + "="):
+                return arg.split("=", 1)[1]
+        return None

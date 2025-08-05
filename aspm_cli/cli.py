@@ -65,7 +65,7 @@ def run_scan(args):
 
         # Select scan type and run respective scanner
         if args.scantype.lower() == "iac":
-            # validator.validate_iac_scan(args.repo_url, args.repo_branch, args.file, args.directory, args.compact, args.quiet, args.framework)
+            validator.validate_iac_scan(args.command, args.non_container_mode, args.repo_url, args.repo_branch)
             scanner = IaCScanner(args.command, args.non_container_mode, args.repo_url, args.repo_branch)
             data_type = "IAC"
         elif args.scantype.lower() == "sast":
@@ -73,16 +73,15 @@ def run_scan(args):
             scanner = SASTScanner(args.repo_url, args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url)
             data_type = "SG"
         elif args.scantype.lower() == "sq-sast":
-            validator.validate_sq_sast_scan(args.sonar_project_key, args.sonar_token, args.sonar_host_url, args.sonar_org_id, args.repo_url, args.branch, args.commit_sha, args.pipeline_url)
-            scanner = SQSASTScanner(args.skip_sonar_scan, args.sonar_project_key, args.sonar_token, args.sonar_host_url, args.sonar_org_id, args.repo_url, args.branch, args.commit_sha, args.pipeline_url, args.base_command)
+            validator.validate_sq_sast_scan(args.skip_sonar_scan, args.command, args.non_container_mode, args.repo_url, args.branch, args.commit_sha, args.pipeline_url)
+            scanner = SQSASTScanner(args.skip_sonar_scan, args.command, args.non_container_mode, args.repo_url, args.branch, args.commit_sha, args.pipeline_url)
             data_type = "SQ"
         elif args.scantype.lower() == "secret":
-            # validator.validate_secret_scan(args.results, args.branch, args.exclude_paths, args.additional_arguments)
+            validator.validate_secret_scan(args.command, args.non_container_mode)
             scanner = SecretScanner(args.command, args.non_container_mode)
             data_type = "TruffleHog"
         elif args.scantype.lower() == "container":
-            # TODO: cleanup
-            # validator.validate_container_scan(args.image_name, args.tag, args.severity)
+            validator.validate_container_scan(args.command, args.non_container_mode)
             scanner = ContainerScanner(args.command, args.non_container_mode)
             data_type = "TR"
         elif args.scantype.lower() == "dast":
@@ -145,26 +144,24 @@ def add_container_scan_args(parser):
     )
 def add_sq_sast_scan_args(parser):
     """Add arguments specific to SQ SAST scan."""
-    # TODO: update description
     parser.add_argument('--skip-sonar-scan', action='store_true', help="Skip the SonarQube scan")
-    parser.add_argument("--sonar-project-key", help="")
-    parser.add_argument("--sonar-token", help="")
-    parser.add_argument("--sonar-host-url", help="")
-    parser.add_argument("--sonar-org-id", help="")
+
+    parser.add_argument(
+        "--command",
+        type=str,
+        required=True,
+        help="Arguments to pass to the SQ scanner (e.g., '-Dsonar.projectKey='<PROJECT KEY>' -Dsonar.host.url=<HOST URL> -Dsonar.token=<TOKEN> -Dsonar.organization=<ORG ID>')"
+    )
+    parser.add_argument(
+        "--non-container-mode",
+        action="store_true",
+        help="Run in non-container mode"
+    )
 
     parser.add_argument("--repo-url", default=GitInfo.get_repo_url(), help="Git repository URL")
     parser.add_argument("--branch", default=GitInfo.get_branch_name(), help="Git repository branch")
     parser.add_argument("--commit-sha", default=GitInfo.get_commit_sha(), help="Commit SHA for scanning")
     parser.add_argument("--pipeline-url", help="Pipeline URL for scanning")
-    parser.add_argument(
-        "--base-command",
-        help=(
-            "Optional override for the base command used to run SQ SAST Scan"
-            "Use this to switch from the default Docker-based execution to a custom command. "
-            "For example, to run SQ Scan locally: 'sonar-scanner'. "
-            "Or to run it with a custom Docker version: ' docker run --rm -v $PWD:/usr/src/ sonarsource/sonar-scanner-cli:11.3', (ensure /usr/src is mounted to the scan directory)"
-        )
-    )
 
 def add_secret_scan_args(parser):
     """Add arguments specific to Secret Scan."""

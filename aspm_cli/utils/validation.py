@@ -1,5 +1,4 @@
-from pydantic import BaseModel, ValidationError, Field, field_validator, root_validator
-import os
+from pydantic import BaseModel, ValidationError, field_validator
 from typing import Optional
 from aspm_cli.utils.logger import Logger
 import sys
@@ -22,30 +21,14 @@ class Config(BaseModel):
         return v
 
 class ContainerScannerConfig(BaseModel):
-    IMAGE_NAME: str
-    TAG: str
-    SEVERITY: Optional[str]
-
-    @field_validator("SEVERITY", mode="before")
-    @classmethod
-    def validate_severity(cls, v):
-        allowed_severities = {"UNKNOWN", "LOW", "MEDIUM", "HIGH", "CRITICAL"}
-        if v:
-            severities = [s.strip().upper() for s in v.split(",")]
-            for s in severities:
-                if s not in allowed_severities:
-                    raise ValueError(f"Invalid SEVERITY '{s}'. Allowed values: {', '.join(allowed_severities)}.")
-        return v
-
+    COMMAND: str
+    NON_CONTAINER_MODE: bool
 
 class IaCScannerConfig(BaseModel):
     REPOSITORY_URL: str
     REPOSITORY_BRANCH: str
-    FILE: str
-    DIRECTORY: str 
-    COMPACT: bool
-    QUIET: bool
-    FRAMEWORK: Optional[str]
+    COMMAND: str
+    NON_CONTAINER_MODE: bool
 
     @field_validator("REPOSITORY_URL", mode="before")
     @classmethod
@@ -122,10 +105,10 @@ class SASTScannerConfig(BaseModel):
         return v
     
 class SQSASTScannerConfig(BaseModel):
-    SONAR_PROJECT_KEY: str
-    SONAR_TOKEN: str
-    SONAR_HOST_URL: str
-    SONAR_ORG_ID: Optional[str] 
+    COMMAND: str
+    SKIP_SONAR_SCAN: bool
+    NON_CONTAINER_MODE: bool
+    
     REPOSITORY_URL: str
     BRANCH: str
     COMMIT_SHA: str
@@ -155,10 +138,8 @@ class SQSASTScannerConfig(BaseModel):
         return v
 
 class SecretScannerConfig(BaseModel):
-    RESULTS: Optional[str]
-    BRANCH: Optional[str]
-    EXCLUDE_PATHS: Optional[str]
-    ADDITIONAL_ARGUMENTS: Optional[str]
+    COMMAND: str
+    NON_CONTAINER_MODE: bool
 
 class ConfigValidator:
     def __init__(self, scan_type, accuknox_endpoint, accuknox_tenant, accuknox_label, accuknox_token, softfail):
@@ -176,16 +157,13 @@ class ConfigValidator:
                 Logger.get_logger().error(f"{error['loc'][0]}: {error['msg']}")
             sys.exit(1)
 
-    def validate_iac_scan(self, repo_url, repo_branch, input_file, input_directory, input_compact, input_quiet, input_framework):
+    def validate_iac_scan(self, command, non_container_mode, repo_url, repo_branch):
         try:
             self.config = IaCScannerConfig(
+                COMMAND=command,
+                NON_CONTAINER_MODE=non_container_mode,
                 REPOSITORY_URL=repo_url,
-                REPOSITORY_BRANCH=repo_branch,
-                FILE=input_file,
-                DIRECTORY=input_directory,
-                COMPACT=input_compact,
-                QUIET=input_quiet,
-                FRAMEWORK=input_framework
+                REPOSITORY_BRANCH=repo_branch
             )
         except ValidationError as e:
             for error in e.errors():
@@ -207,13 +185,12 @@ class ConfigValidator:
             sys.exit(1)
 
 
-    def validate_sq_sast_scan(self, sonar_project_key,  sonar_token, sonar_host_url, sonar_org_id, repo_url, branch, commit_sha, pipeline_url):
+    def validate_sq_sast_scan(self, skip_sonar_scan, command,  non_container_mode, repo_url, branch, commit_sha, pipeline_url):
         try:
             self.config = SQSASTScannerConfig(
-                SONAR_PROJECT_KEY=sonar_project_key,
-                SONAR_TOKEN=sonar_token,
-                SONAR_HOST_URL=sonar_host_url,
-                SONAR_ORG_ID = sonar_org_id, 
+                COMMAND=command,
+                NON_CONTAINER_MODE=non_container_mode,
+                SKIP_SONAR_SCAN=skip_sonar_scan,
                 REPOSITORY_URL=repo_url,
                 BRANCH=branch,
                 COMMIT_SHA=commit_sha,
@@ -224,25 +201,22 @@ class ConfigValidator:
                 Logger.get_logger().error(f"{error['loc'][0]}: {error['msg']}")
             sys.exit(1)
 
-    def validate_secret_scan(self, results, branch, exclude_paths, additional_arguments):
+    def validate_secret_scan(self, command, non_container_mode):
         try:
             self.config = SecretScannerConfig(
-                RESULTS=results,
-                BRANCH=branch,
-                EXCLUDE_PATHS=exclude_paths,
-                ADDITIONAL_ARGUMENTS=additional_arguments,
+                COMMAND=command,
+                NON_CONTAINER_MODE=non_container_mode,
             )
         except ValidationError as e:
             for error in e.errors():
                 Logger.get_logger().error(f"{error['loc'][0]}: {error['msg']}")
             sys.exit(1)
 
-    def validate_container_scan(self, image_name, tag, severity):
+    def validate_container_scan(self, command,  non_container_mode):
         try:
             self.config = ContainerScannerConfig(
-                IMAGE_NAME=image_name,
-                TAG=tag,
-                SEVERITY=severity,
+                COMMAND=command,
+                NON_CONTAINER_MODE=non_container_mode,
             )
         except ValidationError as e:
             for error in e.errors():
