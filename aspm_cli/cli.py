@@ -34,30 +34,15 @@ def print_banner():
         # Skipping if there are any issues with Unicode chars
         print(Fore.BLUE + "ACCUKNOX ASPM SCANNER")
 
-def print_env(args):
-    """Print environment configurations."""
-    try:
-        for var in ['ACCUKNOX_ENDPOINT', 'ACCUKNOX_TENANT', 'ACCUKNOX_LABEL']:
-            Logger.get_logger().info(f"{var}={os.getenv(var)}")
-        
-        accuknox_token = os.getenv('ACCUKNOX_TOKEN')
-        if accuknox_token:
-            Logger.get_logger().info(f"ACCUKNOX_TOKEN={accuknox_token[:5]}...{accuknox_token[-5:]}")  # First 5 and last 5 characters
-        else:
-            Logger.get_logger().info("ACCUKNOX_TOKEN not set")
-
-    except Exception as e:
-        Logger.get_logger().error(f"Error printing environment variables: {e}")
-
 def run_scan(args):
     """Run the specified scan type."""
     try:
         softfail = args.softfail
         accuknox_config = {
-            "accuknox_endpoint": os.getenv("ACCUKNOX_ENDPOINT"),
-            "accuknox_tenant": os.getenv("ACCUKNOX_TENANT"),
-            "accuknox_label": os.getenv("ACCUKNOX_LABEL"),
-            "accuknox_token": os.getenv("ACCUKNOX_TOKEN")
+            "accuknox_endpoint": args.endpoint or os.getenv("ACCUKNOX_ENDPOINT"),
+            "accuknox_tenant": args.tenant or os.getenv("ACCUKNOX_TENANT"),
+            "accuknox_label": args.label or os.getenv("ACCUKNOX_LABEL"),
+            "accuknox_token": args.token or os.getenv("ACCUKNOX_TOKEN")
         }
         
         # Validate configurations
@@ -68,10 +53,6 @@ def run_scan(args):
             validator.validate_iac_scan(args.command, args.non_container_mode, args.repo_url, args.repo_branch)
             scanner = IaCScanner(args.command, args.non_container_mode, args.repo_url, args.repo_branch)
             data_type = "IAC"
-        elif args.scantype.lower() == "sast":
-            validator.validate_sast_scan(args.repo_url, args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url)
-            scanner = SASTScanner(args.repo_url, args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url)
-            data_type = "SG"
         elif args.scantype.lower() == "sq-sast":
             validator.validate_sq_sast_scan(args.skip_sonar_scan, args.command, args.non_container_mode, args.repo_url, args.branch, args.commit_sha, args.pipeline_url)
             scanner = SQSASTScanner(args.skip_sonar_scan, args.command, args.non_container_mode, args.repo_url, args.branch, args.commit_sha, args.pipeline_url)
@@ -84,6 +65,10 @@ def run_scan(args):
             validator.validate_container_scan(args.command, args.non_container_mode)
             scanner = ContainerScanner(args.command, args.non_container_mode)
             data_type = "TR"
+        elif args.scantype.lower() == "sast":
+            validator.validate_sast_scan(args.repo_url, args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url)
+            scanner = SASTScanner(args.repo_url, args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url)
+            data_type = "SG"
         elif args.scantype.lower() == "dast":
             validator.validate_dast_scan(args.target_url, args.severity_threshold, args.dast_scan_type)
             scanner = DASTScanner(args.target_url, args.severity_threshold, args.dast_scan_type)
@@ -204,9 +189,11 @@ def main():
     parser.add_argument('--softfail', action='store_true', help='Enable soft fail mode for scanning')
     parser.add_argument('--version', action='version', version=f"%(prog)s v{get_version()}")
 
-    # Environment validation
-    env_parser = subparsers.add_parser("env", help="Validate and print config from environment")
-    env_parser.set_defaults(func=print_env)
+    # Scan options
+    parser.add_argument('--endpoint', help='The URL of the Control panel to push the scan results to.')
+    parser.add_argument('--tenant', help='The ID of the tenant associated with the Control panel.	')
+    parser.add_argument('--label', help='The label created in AccuKnox for associating scan results.	')
+    parser.add_argument('--token', help='The token for authenticating with the Control Panel')
 
     # Scan options
     scan_parser = subparsers.add_parser("scan", help=f"Run a scan (e.g. {', '.join(ALLOWED_SCAN_TYPES)})")
@@ -216,11 +203,6 @@ def main():
     iac_parser = scan_subparsers.add_parser("iac", help="Run IAC scan")
     add_iac_scan_args(iac_parser)
     iac_parser.set_defaults(func=run_scan)
-
-    # SAST Scan
-    sast_parser = scan_subparsers.add_parser("sast", help="Run SAST scan")
-    add_sast_scan_args(sast_parser) 
-    sast_parser.set_defaults(func=run_scan)
 
     # SQ SAST Scan
     sq_sast_parser = scan_subparsers.add_parser("sq-sast", help="Run SQ SAST scan")
@@ -237,10 +219,17 @@ def main():
     add_container_scan_args(container_parser)
     container_parser.set_defaults(func=run_scan)
 
+    # ----------------------------- Non Container Mode does not supported ----------------------------- #
     # DAST Scan
     dast_parser = scan_subparsers.add_parser("dast", help="Run a DAST scan")
     add_dast_scan_args(dast_parser)
     dast_parser.set_defaults(func=run_scan)
+
+    # SAST Scan
+    sast_parser = scan_subparsers.add_parser("sast", help="Run SAST scan")
+    add_sast_scan_args(sast_parser) 
+    sast_parser.set_defaults(func=run_scan)
+    # ----------------------------- Non Container Mode does not supported ----------------------------- #
 
     # Parse arguments and execute respective function
     args = parser.parse_args()
