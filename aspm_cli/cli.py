@@ -186,18 +186,17 @@ def main():
     parser = argparse.ArgumentParser(prog="accuknox-aspm-scanner", description="ASPM CLI Tool")
     subparsers = parser.add_subparsers(dest="command")
 
-    parser.add_argument('--softfail', action='store_true', help='Enable soft fail mode for scanning')
     parser.add_argument('--version', action='version', version=f"%(prog)s v{get_version()}")
-
-    # Scan options
-    parser.add_argument('--endpoint', help='The URL of the Control panel to push the scan results to.')
-    parser.add_argument('--tenant', help='The ID of the tenant associated with the Control panel.	')
-    parser.add_argument('--label', help='The label created in AccuKnox for associating scan results.	')
-    parser.add_argument('--token', help='The token for authenticating with the Control Panel')
 
     # Scan options
     scan_parser = subparsers.add_parser("scan", help=f"Run a scan (e.g. {', '.join(ALLOWED_SCAN_TYPES)})")
     scan_subparsers = scan_parser.add_subparsers(dest="scantype")
+
+    scan_parser.add_argument("--endpoint", help="The URL of the Control Panel to push the scan results to.")
+    scan_parser.add_argument("--tenant", help="The ID of the tenant associated with the Control Panel.")
+    scan_parser.add_argument("--label", help="The label created in AccuKnox for associating scan results.")
+    scan_parser.add_argument("--token", help="The token for authenticating with the Control Panel.")
+    scan_parser.add_argument('--softfail', action='store_true', help='Enable soft fail mode for scanning')
 
     # IAC Scan
     iac_parser = scan_subparsers.add_parser("iac", help="Run IAC scan")
