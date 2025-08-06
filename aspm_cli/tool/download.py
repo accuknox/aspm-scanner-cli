@@ -13,12 +13,15 @@ class ToolDownloader:
         },
         "Linux": {
             "iac": f"https://github.com/safeer-accuknox/use-cases/releases/download/1.0/checkov",
+            "container": f"https://github.com/safeer-accuknox/use-cases/releases/download/1.0/trivy",
         }
     }
 
     def __init__(self):
         self.system = platform.system()
-        if self.system == "Windows":
+        self.is_windows = platform.system() == "Windows"
+
+        if self.is_windows:
             self.install_dir = Path(os.getenv("USERPROFILE")) / "AppData" / "Local" / "Programs" / "AccuKnox"
         else:
             self.install_dir = Path.home() / ".local" / "bin" / "accuknox"
@@ -30,11 +33,11 @@ class ToolDownloader:
             print(f"❌ No download URL found for {tool_type} on {self.system}")
             return
 
-        filename = os.path.basename(download_url)
-        destination = self.install_dir / filename
+        ext = ".exe" if self.system == "Windows" else ""
+        destination = (self.install_dir / tool_type).with_suffix(ext)
 
         Logger.get_logger().debug(f"Downloading {tool_type} from {download_url}")
         urllib.request.urlretrieve(download_url, destination)
-        if self.system != "Windows":
+        if not self.is_windows:
             destination.chmod(0o755)
         Logger.get_logger().debug(f"Installed {tool_type} from {destination}")
