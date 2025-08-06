@@ -50,20 +50,20 @@ def run_scan(args):
 
         # Select scan type and run respective scanner
         if args.scantype.lower() == "iac":
-            validator.validate_iac_scan(args.command, args.non_container_mode, args.repo_url, args.repo_branch)
-            scanner = IaCScanner(args.command, args.non_container_mode, args.repo_url, args.repo_branch)
+            validator.validate_iac_scan(args.command, args.container_mode, args.repo_url, args.repo_branch)
+            scanner = IaCScanner(args.command, args.container_mode, args.repo_url, args.repo_branch)
             data_type = "IAC"
         elif args.scantype.lower() == "sq-sast":
-            validator.validate_sq_sast_scan(args.skip_sonar_scan, args.command, args.non_container_mode, args.repo_url, args.branch, args.commit_sha, args.pipeline_url)
-            scanner = SQSASTScanner(args.skip_sonar_scan, args.command, args.non_container_mode, args.repo_url, args.branch, args.commit_sha, args.pipeline_url)
+            validator.validate_sq_sast_scan(args.skip_sonar_scan, args.command, args.container_mode, args.repo_url, args.branch, args.commit_sha, args.pipeline_url)
+            scanner = SQSASTScanner(args.skip_sonar_scan, args.command, args.container_mode, args.repo_url, args.branch, args.commit_sha, args.pipeline_url)
             data_type = "SQ"
         elif args.scantype.lower() == "secret":
-            validator.validate_secret_scan(args.command, args.non_container_mode)
-            scanner = SecretScanner(args.command, args.non_container_mode)
+            validator.validate_secret_scan(args.command, args.container_mode)
+            scanner = SecretScanner(args.command, args.container_mode)
             data_type = "TruffleHog"
         elif args.scantype.lower() == "container":
-            validator.validate_container_scan(args.command, args.non_container_mode)
-            scanner = ContainerScanner(args.command, args.non_container_mode)
+            validator.validate_container_scan(args.command, args.container_mode)
+            scanner = ContainerScanner(args.command, args.container_mode)
             data_type = "TR"
         elif args.scantype.lower() == "sast":
             validator.validate_sast_scan(args.repo_url, args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url)
@@ -99,9 +99,9 @@ def add_iac_scan_args(parser):
         help="Arguments to pass to the IAC scanner (e.g., '-d .')"
     )
     parser.add_argument(
-        "--non-container-mode",
+        "--container-mode",
         action="store_true",
-        help="Run in non-container mode"
+        help="Run in container mode"
     )
     parser.add_argument("--repo-url", default=GitInfo.get_repo_url(), help="Git repository URL")
     parser.add_argument("--repo-branch", default=GitInfo.get_branch_name(), help="Git repository branch")
@@ -123,9 +123,9 @@ def add_container_scan_args(parser):
         help="Arguments to pass to the container scanner (e.g., 'image nginx:latest')"
     )
     parser.add_argument(
-        "--non-container-mode",
+        "--container-mode",
         action="store_true",
-        help="Run in non-container mode"
+        help="Run in container mode"
     )
 def add_sq_sast_scan_args(parser):
     """Add arguments specific to SQ SAST scan."""
@@ -138,9 +138,9 @@ def add_sq_sast_scan_args(parser):
         help="Arguments to pass to the SQ scanner (e.g., '-Dsonar.projectKey='<PROJECT KEY>' -Dsonar.host.url=<HOST URL> -Dsonar.token=<TOKEN> -Dsonar.organization=<ORG ID>')"
     )
     parser.add_argument(
-        "--non-container-mode",
+        "--container-mode",
         action="store_true",
-        help="Run in non-container mode"
+        help="Run in container mode"
     )
 
     parser.add_argument("--repo-url", default=GitInfo.get_repo_url(), help="Git repository URL")
@@ -157,9 +157,9 @@ def add_secret_scan_args(parser):
         help="Arguments to pass to the secret scanner (e.g., 'git file://.')"
     )
     parser.add_argument(
-        "--non-container-mode",
+        "--container-mode",
         action="store_true",
-        help="Run in non-container mode"
+        help="Run in container mode"
     )
 
 def add_dast_scan_args(parser):

@@ -10,18 +10,18 @@ class SecretScanner:
     ak_secretscan_image = "trufflesecurity/trufflehog:3.88.29"
     result_file = 'results.json'
 
-    def __init__(self, command, non_container_mode=False):
+    def __init__(self, command, container_mode=False):
         """
         :param command: Raw ak_secretscan CLI arguments string
-        :param non_container_mode: Run locally if True, else use Docker
+        :param container_mode: Run locally if True, else use Docker
         """
         self.command = command
-        self.non_container_mode = non_container_mode
+        self.container_mode = container_mode
 
     def run(self):
         try:
             Logger.get_logger().debug("Starting Secret Scan using ak_secretscan...")
-            if not self.non_container_mode:
+            if self.container_mode:
                 docker_pull(self.ak_secretscan_image)
 
             args = self._build_secretscan_args()
@@ -83,7 +83,7 @@ class SecretScanner:
         """
         Construct the full command with target and args.
         """
-        if self.non_container_mode:
+        if not self.container_mode:
             cmd = ["trufflehog"]
         else:
             cmd = [

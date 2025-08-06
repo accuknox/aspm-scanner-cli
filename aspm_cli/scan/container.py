@@ -11,13 +11,13 @@ class ContainerScanner:
     ak_container_image = "aquasec/trivy:0.62.1"
     result_file = './results.json'
 
-    def __init__(self, command, non_container_mode=False):
+    def __init__(self, command, container_mode=False):
         self.command = command
-        self.non_container_mode = non_container_mode
+        self.container_mode = container_mode
 
     def run(self):
         try:
-            if not self.non_container_mode:
+            if self.container_mode:
                 docker_pull(self.ak_container_image)
 
             severity_threshold, sanitized_args = self._build_container_scan_args()
@@ -81,7 +81,7 @@ class ContainerScanner:
         return severity_threshold, sanitized_args
     
     def _build_scan_command(self, container_scan_args):
-        if self.non_container_mode:
+        if not self.container_mode:
             cmd = (['trivy'])
         else:
             cmd = [

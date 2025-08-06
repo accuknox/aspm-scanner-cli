@@ -22,13 +22,13 @@ class Config(BaseModel):
 
 class ContainerScannerConfig(BaseModel):
     COMMAND: str
-    NON_CONTAINER_MODE: bool
+    CONTAINER_MODE: bool
 
 class IaCScannerConfig(BaseModel):
     REPOSITORY_URL: str
     REPOSITORY_BRANCH: str
     COMMAND: str
-    NON_CONTAINER_MODE: bool
+    CONTAINER_MODE: bool
 
     @field_validator("REPOSITORY_URL", mode="before")
     @classmethod
@@ -107,7 +107,7 @@ class SASTScannerConfig(BaseModel):
 class SQSASTScannerConfig(BaseModel):
     COMMAND: str
     SKIP_SONAR_SCAN: bool
-    NON_CONTAINER_MODE: bool
+    CONTAINER_MODE: bool
     
     REPOSITORY_URL: str
     BRANCH: str
@@ -139,7 +139,7 @@ class SQSASTScannerConfig(BaseModel):
 
 class SecretScannerConfig(BaseModel):
     COMMAND: str
-    NON_CONTAINER_MODE: bool
+    CONTAINER_MODE: bool
 
 class ConfigValidator:
     def __init__(self, scan_type, accuknox_endpoint, accuknox_tenant, accuknox_label, accuknox_token, softfail):
@@ -157,11 +157,11 @@ class ConfigValidator:
                 Logger.get_logger().error(f"{error['loc'][0]}: {error['msg']}")
             sys.exit(1)
 
-    def validate_iac_scan(self, command, non_container_mode, repo_url, repo_branch):
+    def validate_iac_scan(self, command, container_mode, repo_url, repo_branch):
         try:
             self.config = IaCScannerConfig(
                 COMMAND=command,
-                NON_CONTAINER_MODE=non_container_mode,
+                CONTAINER_MODE=container_mode,
                 REPOSITORY_URL=repo_url,
                 REPOSITORY_BRANCH=repo_branch
             )
@@ -185,11 +185,11 @@ class ConfigValidator:
             sys.exit(1)
 
 
-    def validate_sq_sast_scan(self, skip_sonar_scan, command,  non_container_mode, repo_url, branch, commit_sha, pipeline_url):
+    def validate_sq_sast_scan(self, skip_sonar_scan, command,  container_mode, repo_url, branch, commit_sha, pipeline_url):
         try:
             self.config = SQSASTScannerConfig(
                 COMMAND=command,
-                NON_CONTAINER_MODE=non_container_mode,
+                CONTAINER_MODE=container_mode,
                 SKIP_SONAR_SCAN=skip_sonar_scan,
                 REPOSITORY_URL=repo_url,
                 BRANCH=branch,
@@ -201,22 +201,22 @@ class ConfigValidator:
                 Logger.get_logger().error(f"{error['loc'][0]}: {error['msg']}")
             sys.exit(1)
 
-    def validate_secret_scan(self, command, non_container_mode):
+    def validate_secret_scan(self, command, container_mode):
         try:
             self.config = SecretScannerConfig(
                 COMMAND=command,
-                NON_CONTAINER_MODE=non_container_mode,
+                CONTAINER_MODE=container_mode,
             )
         except ValidationError as e:
             for error in e.errors():
                 Logger.get_logger().error(f"{error['loc'][0]}: {error['msg']}")
             sys.exit(1)
 
-    def validate_container_scan(self, command,  non_container_mode):
+    def validate_container_scan(self, command,  container_mode):
         try:
             self.config = ContainerScannerConfig(
                 COMMAND=command,
-                NON_CONTAINER_MODE=non_container_mode,
+                CONTAINER_MODE=container_mode,
             )
         except ValidationError as e:
             for error in e.errors():

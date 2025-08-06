@@ -13,19 +13,19 @@ class IaCScanner:
     output_file_path = '.'
     result_file = os.path.join(output_file_path, 'results_json.json')
 
-    def __init__(self, command, non_container_mode=False, repo_url=None, repo_branch=None):
+    def __init__(self, command, container_mode=False, repo_url=None, repo_branch=None):
         """
         :param command: Raw command string passed by the user (e.g., "-d .")
-        :param non_container_mode: If True, run ak_iac locally instead of in Docker
+        :param container_mode: If True, run ak_iac locally instead of in Docker
         """
         self.command = command
-        self.non_container_mode = non_container_mode
+        self.container_mode = container_mode
         self.repo_url = repo_url
         self.repo_branch = repo_branch
 
     def run(self):
         try:
-            if not self.non_container_mode:
+            if self.container_mode:
                 docker_pull(self.ak_iac_image)
 
             sanitized_args = self._build_iac_args()
@@ -81,7 +81,7 @@ class IaCScanner:
         return sanitized_args
 
     def _build_iac_command(self, args):
-        if self.non_container_mode:
+        if not self.container_mode:
             return ["checkov"] + args
 
         cmd = [
@@ -94,7 +94,7 @@ class IaCScanner:
         return cmd
 
     def _fix_file_permissions_if_docker(self):
-        if not self.non_container_mode:
+        if self.container_mode:
             try:
                 chmod_cmd = [
                     "docker", "run", "--rm",

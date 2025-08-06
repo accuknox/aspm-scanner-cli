@@ -10,11 +10,11 @@ from accuknox_sq_sast.sonarqube_fetcher import SonarQubeFetcher
 class SQSASTScanner:
     sast_image = "sonarsource/sonar-scanner-cli:11.3"
 
-    def __init__(self, skip_sonar_scan, command, non_container_mode=False, repo_url=None, branch=None,
+    def __init__(self, skip_sonar_scan, command, container_mode=False, repo_url=None, branch=None,
                  commit_sha=None, pipeline_url=None):
         """
         :param command: Raw command string (e.g., "-Dsonar.projectKey=... -Dsonar.token=...")
-        :param non_container_mode: If True, run sonar-scanner natively instead of Docker
+        :param container_mode: If True, run sonar-scanner natively instead of Docker
         :param repo_url: Git repository URL
         :param branch: Branch name
         :param commit_sha: Git commit SHA
@@ -22,7 +22,7 @@ class SQSASTScanner:
         """
         self.skip_sonar_scan = skip_sonar_scan
         self.command = command
-        self.non_container_mode = non_container_mode
+        self.container_mode = container_mode
         self.repo_url = repo_url
         self.branch = branch
         self.commit_sha = commit_sha
@@ -54,7 +54,7 @@ class SQSASTScanner:
 
             cmd = shlex.split(self.command)
 
-            if not self.non_container_mode:
+            if self.container_mode:
                 docker_pull(self.sast_image)
                 cmd = [
                     "docker", "run", "--rm",
