@@ -1,17 +1,21 @@
 import argparse
 import os
+import sys
 from colorama import Fore, init
+from pydantic import ValidationError
 
 from aspm_cli.scan.container import ContainerScanner
 from aspm_cli.scan.sast import SASTScanner
 from aspm_cli.scan.secret import SecretScanner
 from aspm_cli.scan.sq_sast import SQSASTScanner
 from aspm_cli.scan.dast import DASTScanner
+from aspm_cli.tool.download import ToolDownloader
 from aspm_cli.utils.git import GitInfo
 from aspm_cli.utils import ConfigValidator, ALLOWED_SCAN_TYPES, upload_results, handle_failure
 from aspm_cli.scan import IaCScanner
 from aspm_cli.utils.spinner import Spinner
 from aspm_cli.utils.logger import Logger
+from aspm_cli.utils.validation import ALLOWED_TOOL_TYPES, ToolDownloadConfig
 from aspm_cli.utils.version import get_version
 
 init(autoreset=True)
@@ -33,6 +37,29 @@ def print_banner():
     except:
         # Skipping if there are any issues with Unicode chars
         print(Fore.BLUE + "ACCUKNOX ASPM SCANNER")
+
+def handle_tool_download(args):
+    try:
+        validated = ToolDownloadConfig(tooltype=args.type, all=args.all)
+    except ValidationError as e:
+        Logger.get_logger().error(str(e))
+        sys.exit(1)
+
+    downloader = ToolDownloader()
+
+    if validated.all:
+        for tool in ALLOWED_TOOL_TYPES:
+            spinner = Spinner(message=f"Downloading tool for: {tool}")
+            spinner.start()
+            downloader._download_tool(tool)
+            spinner.stop()
+            Logger.log_with_color('INFO', f"{tool} downloaded successfully.", Fore.GREEN)
+    else:
+        spinner = Spinner(message=f"Downloading tool for: {validated.tooltype}")
+        spinner.start()
+        downloader._download_tool(validated.tooltype)
+        spinner.stop()
+        Logger.log_with_color('INFO', f"{validated.tooltype} downloaded successfully.", Fore.GREEN)
 
 def run_scan(args):
     """Run the specified scan type."""
@@ -187,6 +214,29 @@ def main():
     subparsers = parser.add_subparsers(dest="command")
 
     parser.add_argument('--version', action='version', version=f"%(prog)s v{get_version()}")
+
+
+    tool_parser = subparsers.add_parser("tool", help="Manage internal tools")
+    tool_subparsers = tool_parser.add_subparsers(dest="toolcmd")
+
+    tool_download_parser = tool_subparsers.add_parser("download", help="Download a specific tool or all tools")
+
+    # Mutually exclusive group with optional arguments only
+    tool_download_group = tool_download_parser.add_mutually_exclusive_group(required=True)
+
+    tool_download_group.add_argument(
+        "--all",
+        action="store_true",
+        help="Download all tools"
+    )
+
+    tool_download_group.add_argument(
+        "--type",
+        choices=ALLOWED_TOOL_TYPES,
+        help=f"Tool to download (choices: {', '.join(ALLOWED_TOOL_TYPES)})"
+    )
+
+    tool_download_parser.set_defaults(func=handle_tool_download)
 
     # Scan options
     scan_parser = subparsers.add_parser("scan", help=f"Run a scan (e.g. {', '.join(ALLOWED_SCAN_TYPES)})")

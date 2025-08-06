@@ -1,10 +1,30 @@
-from pydantic import BaseModel, ValidationError, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 from typing import Optional
 from aspm_cli.utils.logger import Logger
 import sys
 
 ALLOWED_SCAN_TYPES = {"iac", "sast", "sq-sast", "secret", "container", "dast"}
+ALLOWED_TOOL_TYPES = {"iac", "sq-sast", "secret", "container"}
 
+class ToolDownloadConfig(BaseModel):
+    tooltype: Optional[str] = Field(default=None)
+    all: Optional[bool] = Field(default=False)
+
+    @field_validator("tooltype")
+    @classmethod
+    def validate_tooltype(cls, v):
+        if v and v not in ALLOWED_TOOL_TYPES:
+            raise ValueError(f"Invalid tooltype. Allowed values: {', '.join(ALLOWED_TOOL_TYPES)}")
+        return v
+
+    @model_validator(mode="after")
+    def validate_either_tooltype_or_all(self):
+        if self.all and self.tooltype:
+            raise ValueError("Cannot specify both --all and a tooltype at the same time.")
+        if not self.all and not self.tooltype:
+            raise ValueError("You must specify either a tooltype or use --all.")
+        return self
+    
 class Config(BaseModel):
     SCAN_TYPE: str
     ACCUKNOX_ENDPOINT: str
