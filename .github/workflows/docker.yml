@@ -29,7 +29,7 @@ jobs:
 
       - name: Login to AWS ECR
         run: |
-          aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws/k9v9d5v2/accuknox-aspm-scanner
+          aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws/k9v9d5v2
 
       - name: Build & Push image to Amazon ECR Public
         run: docker buildx build -f ./Dockerfile . --platform linux/arm64,linux/amd64 -t public.ecr.aws/k9v9d5v2/accuknox-aspm-scanner:$RELEASE_TAG --push
