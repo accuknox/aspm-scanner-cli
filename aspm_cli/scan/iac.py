@@ -88,7 +88,7 @@ class IaCScanner:
             "docker", "run", "--rm",
             "-v", f"{os.getcwd()}:/workdir",
             "--workdir", "/workdir",
-            self.iac_image
+            self.ak_iac_image
         ]
         cmd.extend(args)
         return cmd
@@ -101,7 +101,7 @@ class IaCScanner:
                     "-v", f"{os.getcwd()}:/workdir",
                     "--workdir", "/workdir",
                     "--entrypoint", "bash",
-                    self.iac_image,
+                    self.ak_iac_image,
                     "-c", f"chmod 777 {self.result_file}"
                 ]
                 subprocess.run(chmod_cmd, capture_output=True, text=True)
