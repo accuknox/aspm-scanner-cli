@@ -15,11 +15,6 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          platforms: linux/amd64,linux/arm64
-
       - name: Set up AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -31,5 +26,10 @@ jobs:
         run: |
           aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.REPO }}
 
-      - name: Build & Push image to Amazon ECR Public
-        run: make docker-buildx IMGTAG=${{ env.RELEASE_TAG }}
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ secrets.REPO }}:${{ env.RELEASE_TAG }} .
+
+      - name: Push Docker image to ECR Public
+        run: |
+          docker push ${{ secrets.REPO }}:${{ env.RELEASE_TAG }}
