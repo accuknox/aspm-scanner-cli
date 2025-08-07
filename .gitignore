@@ -176,3 +176,6 @@ terraform
 results_json.json
 results.json
 test.py
+utils/container.tar.gz
+utils/iac
+utils/secret
