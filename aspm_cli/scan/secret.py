@@ -7,7 +7,7 @@ from colorama import Fore
 from aspm_cli.utils import config
 
 class SecretScanner:
-    ak_secretscan_image = "trufflesecurity/trufflehog:3.88.29"
+    ak_secretscan_image = os.getenv("SCAN_IMAGE", "trufflesecurity/trufflehog:3.90.3")
     result_file = 'results.json'
 
     def __init__(self, command, container_mode=False):
