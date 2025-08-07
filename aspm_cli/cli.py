@@ -47,19 +47,23 @@ def handle_tool_download(args):
 
     downloader = ToolDownloader()
 
+    overwrite = args.mode == "update"
+    action_message = {"install": "installed", "update": "updated"}
+    action_message_present = {"install": "Installing", "update": "Updating"}
+
     if validated.all:
         for tool in ALLOWED_TOOL_TYPES:
-            spinner = Spinner(message=f"Downloading tool for: {tool}")
+            spinner = Spinner(message=f"{action_message_present[args.mode]} tool for: {tool}")
             spinner.start()
-            downloader._download_tool(tool)
+            downloaded = downloader._download_tool(tool, overwrite)
             spinner.stop()
-            Logger.log_with_color('INFO', f"{tool} downloaded successfully.", Fore.GREEN)
+            downloaded and Logger.log_with_color('INFO', f"{tool} {action_message[args.mode]} successfully.", Fore.GREEN)
     else:
-        spinner = Spinner(message=f"Downloading tool for: {validated.tooltype}")
+        spinner = Spinner(message=f"{action_message_present[args.mode]} tool for: {validated.tooltype}")
         spinner.start()
-        downloader._download_tool(validated.tooltype)
+        downloaded = downloader._download_tool(validated.tooltype, overwrite)
         spinner.stop()
-        Logger.log_with_color('INFO', f"{validated.tooltype} downloaded successfully.", Fore.GREEN)
+        downloaded and Logger.log_with_color('INFO', f"{validated.tooltype} {action_message[args.mode]} successfully.", Fore.GREEN)
 
 def run_scan(args):
     """Run the specified scan type."""
@@ -207,6 +211,19 @@ def add_dast_scan_args(parser):
         help="DAST scan type to run. Allowed values: baseline, full-scan. Default is baseline"
     )
 
+def add_download_args(subparser):
+    group = subparser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "--all",
+        action="store_true",
+        help="Install/update all tools"
+    )
+    group.add_argument(
+        "--type",
+        choices=ALLOWED_TOOL_TYPES,
+        help=f"Tool to install/update (choices: {', '.join(ALLOWED_TOOL_TYPES)})"
+    )
+
 def main():
     clean_env_vars()
     print_banner()
@@ -216,27 +233,19 @@ def main():
     parser.add_argument('--version', action='version', version=f"%(prog)s v{get_version()}")
 
 
+
     tool_parser = subparsers.add_parser("tool", help="Manage internal tools")
-    tool_subparsers = tool_parser.add_subparsers(dest="toolcmd")
+    tool_subparsers = tool_parser.add_subparsers(dest="toolcmd", required=True)
 
-    tool_download_parser = tool_subparsers.add_parser("download", help="Download a specific tool or all tools")
+    # tool install
+    tool_install_parser = tool_subparsers.add_parser("install", help="Install a specific tool or all tools")
+    add_download_args(tool_install_parser)
+    tool_install_parser.set_defaults(func=handle_tool_download, mode="install")
 
-    # Mutually exclusive group with optional arguments only
-    tool_download_group = tool_download_parser.add_mutually_exclusive_group(required=True)
-
-    tool_download_group.add_argument(
-        "--all",
-        action="store_true",
-        help="Download all tools"
-    )
-
-    tool_download_group.add_argument(
-        "--type",
-        choices=ALLOWED_TOOL_TYPES,
-        help=f"Tool to download (choices: {', '.join(ALLOWED_TOOL_TYPES)})"
-    )
-
-    tool_download_parser.set_defaults(func=handle_tool_download)
+    # tool update
+    tool_update_parser = tool_subparsers.add_parser("update", help="Update a specific tool or all tools")
+    add_download_args(tool_update_parser)
+    tool_update_parser.set_defaults(func=handle_tool_download, mode="update")
 
     # Scan options
     scan_parser = subparsers.add_parser("scan", help=f"Run a scan (e.g. {', '.join(ALLOWED_SCAN_TYPES)})")
