@@ -67,16 +67,9 @@ class IaCScannerConfig(BaseModel):
         return v
 
 class DASTScannerConfig(BaseModel):
-    TARGET_URL: str
     SEVERITY_THRESHOLD: str
-    DAST_SCAN_TYPE: str
-
-    @field_validator("TARGET_URL", mode="before")
-    @classmethod
-    def validate_target_url(cls, v):
-        if not isinstance(v, str) or not v.startswith("http"):
-            raise ValueError("Invalid TARGET_URL. It must be a valid URL starting with 'http'.")
-        return v
+    COMMAND: str
+    CONTAINER_MODE: bool
 
     @field_validator("SEVERITY_THRESHOLD", mode="before")
     @classmethod
@@ -84,14 +77,6 @@ class DASTScannerConfig(BaseModel):
         allowed = {"HIGH", "MEDIUM", "LOW"}
         if v and v.upper() not in allowed:
             raise ValueError(f"Invalid SEVERITY_THRESHOLD '{v}'. Allowed values: {', '.join(allowed)}.")
-        return v
-
-    @field_validator("DAST_SCAN_TYPE", mode="before")
-    @classmethod
-    def validate_scan_type(cls, v):
-        allowed = {"baseline", "full-scan"}
-        if v and v.lower() not in allowed:
-            raise ValueError(f"Invalid DAST_SCAN_TYPE '{v}'. Allowed values: {', '.join(allowed)}.")
         return v
 
 class SASTScannerConfig(BaseModel):
@@ -243,12 +228,12 @@ class ConfigValidator:
                 Logger.get_logger().error(f"{error['loc'][0]}: {error['msg']}")
             sys.exit(1)
 
-    def validate_dast_scan(self, target_url, severity_threshold, dast_scan_type):
+    def validate_dast_scan(self, command, severity_threshold, container_mode):
         try:
             self.config = DASTScannerConfig(
-                TARGET_URL=target_url,
                 SEVERITY_THRESHOLD=severity_threshold,
-                DAST_SCAN_TYPE=dast_scan_type,
+                COMMAND=command,
+                CONTAINER_MODE=container_mode,
             )
         except ValidationError as e:
             for error in e.errors():

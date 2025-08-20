@@ -1,58 +1,117 @@
 import subprocess
 import json
 import os
-from aspm_cli.utils import docker_pull
+import shlex
+
+from colorama import Fore
+from aspm_cli.utils import config, docker_pull
 from aspm_cli.utils.logger import Logger
 
 
 class DASTScanner:
     zap_image = os.getenv("SCAN_IMAGE", "zaproxy/zap-stable:2.16.1")
-    result_file = './results.json'
+    result_file = "results.json"
 
-    def __init__(self, target_url=None, severity_threshold=None, scan_type=None):
-        self.target_url = target_url
+    def __init__(self, command="", severity_threshold=None, container_mode=True):
+        """
+        :param command: Raw CLI args string for zap scripts
+                        Example: "zap-baseline.py -t https://example.com -J results.json -I"
+        :param severity_threshold: Minimum severity to fail on ("High", "Medium", "Low", "Informational")
+        :param container_mode: Currently only container mode is supported
+        """
+        self.command = command
         self.severity_threshold = severity_threshold
-        self.scan_type = scan_type
+        self.container_mode = container_mode
 
     def run(self):
         try:
+            if not self.container_mode:
+                raise NotImplementedError(
+                    "DASTScanner currently supports only container mode. Please rerun with --container-mode enabled."
+                )
+
             docker_pull(self.zap_image)
-            Logger.get_logger().debug("Starting ZAP DAST scan...")
+            Logger.get_logger().debug("Starting DAST scan...")
 
-            zap_command = (
-                f"zap-baseline.py -t {self.target_url} -J results.json -I"
-                if self.scan_type == "baseline"
-                else f"zap-full-scan.py -t {self.target_url} -J results.json -I"
-            )
-
-            cmd = [
-                "docker", "run", "--rm",
-                "-v", f"{os.getcwd()}:/zap/wrk",
-                "-t", self.zap_image,
-                zap_command
-            ]
+            sanitized_args = self._build_dast_args()
+            cmd = self._build_dast_command(sanitized_args)
 
             Logger.get_logger().debug(f"Running DAST scan: {' '.join(cmd)}")
-            result = subprocess.run(" ".join(cmd), shell=True, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True)
 
             if result.stdout:
                 Logger.get_logger().debug(result.stdout)
             if result.stderr:
                 Logger.get_logger().error(result.stderr)
 
+            if result.stdout:
+                sanitized_stdout = result.stdout ##.replace("zap", "[scanner]")
+                Logger.get_logger().debug(sanitized_stdout)
+                if("-help" in self.command):
+                    Logger.log_with_color('INFO', sanitized_stdout, Fore.WHITE)
+                    return config.PASS_RETURN_CODE, None
+            if result.stderr:
+                sanitized_stderr = result.stderr ##.replace("zap", "[scanner]")
+                Logger.get_logger().error(sanitized_stderr)
+
+            if not os.path.exists(self.result_file):
+                return config.SOMETHING_WENT_WRONG_RETURN_CODE, None
+            
             exit_code = self.evaluate_results()
-            return exit_code, self.result_file
+            return exit_code, self.result_file if os.path.exists(self.result_file) else None
 
         except subprocess.CalledProcessError as e:
             Logger.get_logger().error(f"Error during DAST scan: {e}")
             raise
 
+    def _build_dast_args(self):
+        """
+        Sanitize the raw command, remove conflicting report flags,
+        and enforce JSON output.
+        """
+        args = shlex.split(self.command)
+
+        # ZAP conflicting report flags
+        forbidden_flags = {"-r", "-w", "-x", "-J"}
+        sanitized_args = []
+        i = 0
+        while i < len(args):
+            if args[i] in forbidden_flags:
+                # Skip the flag and its value
+                i += 2
+                continue
+            sanitized_args.append(args[i])
+            i += 1
+
+        # Always enforce JSON report at results.json
+        sanitized_args.extend([
+            "-J", os.path.basename(self.result_file)
+        ])
+
+        return sanitized_args
+
+    def _build_dast_command(self, args):
+        """
+        Construct full Docker run command.
+        """
+        cmd = [
+            "docker", "run", "--rm",
+            "-v", f"{os.getcwd()}:/zap/wrk",
+            "-w", "/zap/wrk",
+            "-t", self.zap_image
+        ]
+        cmd.extend(args)
+        return cmd
+
     def evaluate_results(self):
+        """
+        Parse ZAP JSON report and check alerts against severity threshold.
+        """
         risk_map = {"High": 3, "Medium": 2, "Low": 1, "Informational": 0}
         risk_code = risk_map.get(self.severity_threshold, 3)
 
         try:
-            with open(self.result_file, 'r') as f:
+            with open(self.result_file, "r") as f:
                 zap_results = json.load(f)
 
             alerts = [
