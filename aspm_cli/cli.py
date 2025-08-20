@@ -101,8 +101,8 @@ def run_scan(args):
             scanner = SASTScanner(args.repo_url, args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url)
             data_type = "SG"
         elif args.scantype.lower() == "dast":
-            validator.validate_dast_scan(args.target_url, args.severity_threshold, args.dast_scan_type)
-            scanner = DASTScanner(args.target_url, args.severity_threshold, args.dast_scan_type)
+            validator.validate_dast_scan(args.command, args.severity_threshold, args.container_mode)
+            scanner = DASTScanner(args.command, args.severity_threshold, args.container_mode)
             data_type = "ZAP"
         else:
             Logger.get_logger().error("Invalid scan type.")
@@ -194,21 +194,20 @@ def add_secret_scan_args(parser):
     )
 
 def add_dast_scan_args(parser):
-    """Add arguments specific to DAST scan."""
-    parser.add_argument(
-        "--target-url",
-        required=True,
-        help="The target web application URL to scan (must start with http or https)"
-    )
     parser.add_argument(
         "--severity-threshold",
         default="High",
         help="Severity level to fail the scan. Allowed values: LOW, MEDIUM, HIGH. Default is HIGH"
     )
     parser.add_argument(
-        "--dast-scan-type",
-        default="baseline",
-        help="DAST scan type to run. Allowed values: baseline, full-scan. Default is baseline"
+        "--command",
+        required=True,
+        help="Arguments to pass to the DAST scanner (e.g., 'zap-baseline.py -t https://example.com -I')"
+    )
+    parser.add_argument(
+        "--container-mode",
+        action="store_true",
+        help="Run in container mode"
     )
 
 def add_download_args(subparser):
