@@ -72,7 +72,10 @@ class DASTScanner:
         args = shlex.split(self.command)
 
         # ZAP conflicting report flags
-        forbidden_flags = {"-r", "-w", "-x", "-J"}
+        forbidden_flags = []
+        if "zap-baseline.py" in shlex.join(args) or "zap-full-scan.py" in shlex.join(args):
+            forbidden_flags = {"-r", "-w", "-x", "-J"}
+
         sanitized_args = []
         i = 0
         while i < len(args):
@@ -83,10 +86,11 @@ class DASTScanner:
             sanitized_args.append(args[i])
             i += 1
 
-        # Always enforce JSON report at results.json
-        sanitized_args.extend([
-            "-J", os.path.basename(self.result_file)
-        ])
+        if "zap-baseline.py" in shlex.join(args) or "zap-full-scan.py" in shlex.join(args):
+            # Always enforce JSON report at results.json
+            sanitized_args.extend([
+                "-J", os.path.basename(self.result_file)
+            ])
 
         return sanitized_args
 
