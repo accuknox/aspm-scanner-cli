@@ -8,7 +8,7 @@ from aspm_cli.utils.logger import Logger
 from colorama import Fore
 from aspm_cli.utils import config
 from urllib.parse import urlparse
-
+import re
 
 class SASTScanner:
     opengrep_image = os.getenv("SCAN_IMAGE", "accuknox/opengrepjob:0.1.0")
@@ -50,14 +50,14 @@ class SASTScanner:
 
             # Log outputs
             if result.stdout:
-                sanitized_stdout = result.stdout.replace("OpenGrep", "[scanner]")
+                sanitized_stdout = re.sub(r"opengrep", "[scanner]", result.stdout, flags=re.IGNORECASE)
                 Logger.get_logger().debug(sanitized_stdout)
                 if "--help" in (self.command or ""):
                     Logger.log_with_color("INFO", sanitized_stdout, Fore.WHITE)
                     return config.PASS_RETURN_CODE, None
 
             if result.stderr:
-                sanitized_stderr = result.stderr.replace("OpenGrep", "[scanner]")
+                sanitized_stderr = re.sub(r"opengrep", "[scanner]", result.stderr, flags=re.IGNORECASE)
                 if "--help" in (self.command or "") and result.returncode == 0:
                     Logger.log_with_color("INFO", sanitized_stderr, Fore.WHITE)
                     return config.PASS_RETURN_CODE, None
