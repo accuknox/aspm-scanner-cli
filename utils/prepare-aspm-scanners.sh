@@ -67,9 +67,9 @@ set -e
 ### OpenGrep -> sast.tar.gz
 echo "=== [1/1] Downloading OpenGrep Core + Rules ==="
 
-OPENGREP_VERSION="1.8.6"
-OPENGREP_TAR="opengrep-core_linux_x86.tar.gz"
-OPENGREP_URL="https://github.com/opengrep/opengrep/releases/download/v${OPENGREP_VERSION}/${OPENGREP_TAR}"
+OPENGREP_VERSION="v1.0.0-alpha.14"
+OPENGREP_CLI="opengrep_manylinux_x86"
+OPENGREP_URL="https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/${OPENGREP_CLI}"
 
 RULES_COMMIT="f1d2b562b414783763fd02a6ed2736eaed622efa"
 RULES_URL="https://api.github.com/repos/opengrep/opengrep-rules/tarball/${RULES_COMMIT}"
@@ -80,10 +80,8 @@ rm -rf "$SAST_FOLDER" temp_sast_download
 mkdir -p temp_sast_download
 cd temp_sast_download
 curl -LO "$OPENGREP_URL"
-tar -xzf "$OPENGREP_TAR"
 mkdir -p "../$SAST_FOLDER"
-tar -xzf "$OPENGREP_TAR"
-mv opengrep-core "../$SAST_FOLDER/sast"
+mv $OPENGREP_CLI "../$SAST_FOLDER/sast"
 mkdir -p rules_extract
 curl -L --silent "$RULES_URL" | tar -xz -C rules_extract --strip-components=1 2>/dev/null
 rm -rf rules_extract/.pre-commit-config.yaml rules_extract/stats rules_extract/.github 2>/dev/null
