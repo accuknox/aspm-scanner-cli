@@ -97,8 +97,8 @@ def run_scan(args):
             scanner = ContainerScanner(args.command, args.container_mode)
             data_type = "TR"
         elif args.scantype.lower() == "sast":
-            validator.validate_sast_scan(args.repo_url, args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url)
-            scanner = SASTScanner(args.repo_url, args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url)
+            validator.validate_sast_scan(args.command, args.container_mode, args.severity, args.repo_url, args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url)
+            scanner = SASTScanner(args.command, args.container_mode, args.severity, args.repo_url, args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url)
             data_type = "SG"
         elif args.scantype.lower() == "dast":
             validator.validate_dast_scan(args.command, args.severity_threshold, args.container_mode)
@@ -139,6 +139,21 @@ def add_iac_scan_args(parser):
 
 def add_sast_scan_args(parser):
     """Add arguments specific to SAST scan."""
+    parser.add_argument(
+        "--command",
+        required=True,
+        help="Arguments to pass to the SAST scanner (e.g., 'scan .')"
+    )
+    parser.add_argument(
+        "--container-mode",
+        action="store_true",
+        help="Run in container mode"
+    )
+    parser.add_argument(
+        "--severity",
+        default="INFO,WARNING,LOW,MEDIUM,HIGH,CRITICAL",
+        help="Comma-separated list of severities to check. If any match, the scan will fail. Defaults to all severities."
+    )
     parser.add_argument("--repo-url", default=GitInfo.get_repo_url(), help="Git repository URL")
     parser.add_argument("--commit-ref", default=GitInfo.get_commit_ref(), help="Commit reference for scanning")
     parser.add_argument("--commit-sha", default=GitInfo.get_commit_sha(), help="Commit SHA for scanning")

@@ -36,65 +36,65 @@ cd ..
 rm -rf temp_secret_download
 echo "✅ Packaged as $SECRET_TAR"
 
-# ### 3. Trivy -> container.tar.gz
-# echo "=== [3/5] Downloading Trivy ==="
-# TRIVY_VERSION="0.65.0"
-# TRIVY_URL="https://get.trivy.dev/trivy?type=tar.gz&version=${TRIVY_VERSION}&os=linux&arch=amd64"
-# TRIVY_TAR="trivy.tar.gz"
-# mkdir -p temp_container_download
-# cd temp_container_download
-# curl -L "$TRIVY_URL" -o "$TRIVY_TAR"
-# tar -xzf "$TRIVY_TAR"
-# chmod +x trivy
-# mv trivy ../container
-# cd ..
-# tar -czvf container.tar.gz container
-# rm -rf temp_container_download container
-# echo "✅ Trivy downloaded, renamed to 'container', and archived as 'container.tar.gz'"
+### 3. Trivy -> container.tar.gz
+echo "=== [3/5] Downloading Trivy ==="
+TRIVY_VERSION="0.65.0"
+TRIVY_URL="https://get.trivy.dev/trivy?type=tar.gz&version=${TRIVY_VERSION}&os=linux&arch=amd64"
+TRIVY_TAR="trivy.tar.gz"
+mkdir -p temp_container_download
+cd temp_container_download
+curl -L "$TRIVY_URL" -o "$TRIVY_TAR"
+tar -xzf "$TRIVY_TAR"
+chmod +x trivy
+mv trivy ../container
+cd ..
+tar -czvf container.tar.gz container
+rm -rf temp_container_download container
+echo "✅ Trivy downloaded, renamed to 'container', and archived as 'container.tar.gz'"
 
-# ### 4. SonarScanner -> sq-sast.tar.gz
-# echo "=== [4/5] Downloading SonarScanner ==="
-# SQ_VERSION="7.1.0.4889"
-# SQ_ZIP="sonar-scanner-cli-${SQ_VERSION}-linux-x64.zip"
-# SQ_URL="https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/${SQ_ZIP}"
-# SQ_FOLDER="sq-sast"
-# SQ_TAR="sq-sast.tar.gz"
-# mkdir -p temp_sq_sast_download
-# cd temp_sq_sast_download
-# curl -LO "$SQ_URL"
-# unzip "$SQ_ZIP"
-# EXTRACTED_DIR=$(find . -maxdepth 1 -type d -name "sonar-scanner*" | head -n 1)
-# mv "$EXTRACTED_DIR" "../$SQ_FOLDER"
-# cd ..
-# tar -czvf "$SQ_TAR" "$SQ_FOLDER"
-# rm -rf temp_sq_sast_download "$SQ_FOLDER"
-# echo "✅ SonarScanner downloaded, renamed to '$SQ_FOLDER', and archived as '$SQ_TAR'"
+### 4. SonarScanner -> sq-sast.tar.gz
+echo "=== [4/5] Downloading SonarScanner ==="
+SQ_VERSION="7.1.0.4889"
+SQ_ZIP="sonar-scanner-cli-${SQ_VERSION}-linux-x64.zip"
+SQ_URL="https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/${SQ_ZIP}"
+SQ_FOLDER="sq-sast"
+SQ_TAR="sq-sast.tar.gz"
+mkdir -p temp_sq_sast_download
+cd temp_sq_sast_download
+curl -LO "$SQ_URL"
+unzip "$SQ_ZIP"
+EXTRACTED_DIR=$(find . -maxdepth 1 -type d -name "sonar-scanner*" | head -n 1)
+mv "$EXTRACTED_DIR" "../$SQ_FOLDER"
+cd ..
+tar -czvf "$SQ_TAR" "$SQ_FOLDER"
+rm -rf temp_sq_sast_download "$SQ_FOLDER"
+echo "✅ SonarScanner downloaded, renamed to '$SQ_FOLDER', and archived as '$SQ_TAR'"
 
-# ## OpenGrep -> sast.tar.gz
-# echo "=== [5/5] Downloading OpenGrep Core + Rules ==="
-# OPENGREP_VERSION="v1.0.0-alpha.14"
-# OPENGREP_CLI="opengrep_manylinux_x86"
-# OPENGREP_URL="https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/${OPENGREP_CLI}"
+## OpenGrep -> sast.tar.gz
+echo "=== [5/5] Downloading OpenGrep Core + Rules ==="
+OPENGREP_VERSION="v1.0.0-alpha.14"
+OPENGREP_CLI="opengrep_manylinux_x86"
+OPENGREP_URL="https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/${OPENGREP_CLI}"
 
-# RULES_COMMIT="f1d2b562b414783763fd02a6ed2736eaed622efa"
-# RULES_URL="https://api.github.com/repos/opengrep/opengrep-rules/tarball/${RULES_COMMIT}"
+RULES_COMMIT="f1d2b562b414783763fd02a6ed2736eaed622efa"
+RULES_URL="https://api.github.com/repos/opengrep/opengrep-rules/tarball/${RULES_COMMIT}"
 
-# SAST_FOLDER="sast"
-# SAST_TAR="sast.tar.gz"
-# rm -rf "$SAST_FOLDER" temp_sast_download
-# mkdir -p temp_sast_download
-# cd temp_sast_download
-# curl -LO "$OPENGREP_URL"
-# mkdir -p "../$SAST_FOLDER"
-# mv $OPENGREP_CLI "../$SAST_FOLDER/sast"
-# chmod +x "../$SAST_FOLDER/sast"
-# mkdir -p rules_extract
-# curl -L --silent "$RULES_URL" | tar -xz -C rules_extract --strip-components=1 2>/dev/null
-# rm -rf rules_extract/.pre-commit-config.yaml rules_extract/stats rules_extract/.github 2>/dev/null
-# mv rules_extract "../$SAST_FOLDER/rules"
-# cd ..
-# tar -czvf "$SAST_TAR" "$SAST_FOLDER"
-# rm -rf temp_sast_download "$SAST_FOLDER"
-# echo "✅ OpenGrep core + rules (commit $RULES_COMMIT) packaged into '$SAST_TAR'"
+SAST_FOLDER="sast"
+SAST_TAR="sast.tar.gz"
+rm -rf "$SAST_FOLDER" temp_sast_download
+mkdir -p temp_sast_download
+cd temp_sast_download
+curl -LO "$OPENGREP_URL"
+mkdir -p "../$SAST_FOLDER"
+mv $OPENGREP_CLI "../$SAST_FOLDER/sast"
+chmod +x "../$SAST_FOLDER/sast"
+mkdir -p rules_extract
+curl -L --silent "$RULES_URL" | tar -xz -C rules_extract --strip-components=1 2>/dev/null
+rm -rf rules_extract/.pre-commit-config.yaml rules_extract/stats rules_extract/.github 2>/dev/null
+mv rules_extract "../$SAST_FOLDER/rules"
+cd ..
+tar -czvf "$SAST_TAR" "$SAST_FOLDER"
+rm -rf temp_sast_download "$SAST_FOLDER"
+echo "✅ OpenGrep core + rules (commit $RULES_COMMIT) packaged into '$SAST_TAR'"
 
 echo "🎉 All tools downloaded and prepared successfully."

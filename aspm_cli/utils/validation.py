@@ -4,7 +4,7 @@ from aspm_cli.utils.logger import Logger
 import sys
 
 ALLOWED_SCAN_TYPES = {"iac", "sast", "sq-sast", "secret", "container", "dast"}
-ALLOWED_TOOL_TYPES = {"iac", "sq-sast", "secret", "container"}
+ALLOWED_TOOL_TYPES = {"iac", "sq-sast", "secret", "container", "sast"}
 
 class ToolDownloadConfig(BaseModel):
     tooltype: Optional[str] = Field(default=None)
@@ -80,11 +80,25 @@ class DASTScannerConfig(BaseModel):
         return v
 
 class SASTScannerConfig(BaseModel):
+    COMMAND: str
+    CONTAINER_MODE: bool
     REPOSITORY_URL: str
     COMMIT_REF: str
     COMMIT_SHA: str
     PIPELINE_ID: Optional[str] 
     JOB_URL: Optional[str]
+    SEVERITY: Optional[str]
+
+    @field_validator("SEVERITY", mode="before")
+    @classmethod
+    def validate_severity(cls, v):
+        allowed_severities = {"WARNING", "INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"}
+        if v:
+            severities = [s.strip().upper() for s in v.split(",")]
+            for s in severities:
+                if s not in allowed_severities:
+                    raise ValueError(f"Invalid SEVERITY '{s}'. Allowed values: {', '.join(allowed_severities)}.")
+        return v
 
     @field_validator("REPOSITORY_URL", mode="before")
     @classmethod
@@ -175,9 +189,12 @@ class ConfigValidator:
                 Logger.get_logger().error(f"{error['loc'][0]}: {error['msg']}")
             sys.exit(1)
 
-    def validate_sast_scan(self, repo_url, commit_ref, commit_sha, pipeline_id, job_url):
+    def validate_sast_scan(self, command, container_mode, severity, repo_url, commit_ref, commit_sha, pipeline_id, job_url):
         try:
             self.config = SASTScannerConfig(
+                COMMAND=command,
+                CONTAINER_MODE=container_mode,
+                SEVERITY=severity,
                 REPOSITORY_URL=repo_url,
                 COMMIT_REF=commit_ref,
                 COMMIT_SHA=commit_sha,

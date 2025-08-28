@@ -3,6 +3,7 @@ import os
 import json
 import shlex
 import asyncio
+from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import docker_pull
 from aspm_cli.utils.logger import Logger
 from accuknox_sq_sast.sonarqube_fetcher import SonarQubeFetcher
@@ -63,7 +64,7 @@ class SQSASTScanner:
                     self.sast_image
                 ] + cmd
             else:
-                cmd = ["sonar-scanner"] + cmd
+                cmd = [ToolManager.get_path("sq-sast")] + cmd
 
             Logger.get_logger().debug(f"Running scan: {' '.join(cmd)}")
             result = subprocess.run(cmd, capture_output=True, text=True)

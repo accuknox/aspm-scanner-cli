@@ -1,6 +1,7 @@
 import subprocess
 import os
 import shlex
+from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import docker_pull
 from aspm_cli.utils.logger import Logger
 from colorama import Fore
@@ -84,7 +85,7 @@ class SecretScanner:
         Construct the full command with target and args.
         """
         if not self.container_mode:
-            cmd = ["trufflehog"]
+            cmd = [ToolManager.get_path("secret")]
         else:
             cmd = [
                 "docker", "run", "--rm",
