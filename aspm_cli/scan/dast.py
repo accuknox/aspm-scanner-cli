@@ -9,7 +9,7 @@ from aspm_cli.utils.logger import Logger
 from aspm_cli.tool.manager import ToolManager
 
 class DASTScanner:
-    zap_image = os.getenv("SCAN_IMAGE", "zaproxy/zap-stable:2.16.1")
+    zap_image = os.getenv("SCAN_IMAGE", "public.ecr.aws/k9v9d5v2/zaproxy/zap-stable:2.16.1")
     result_file = "results.json"
 
     def __init__(self, command="", severity_threshold=None, container_mode=True):
