@@ -2,7 +2,7 @@
 set -e
 
 ### 1. Checkov -> iac.tar.gz
-echo "=== [1/5] Downloading Checkov ==="
+echo "=== [1/6] Downloading Checkov ==="
 CHECKOV_VERSION="3.2.458"
 CHECKOV_URL="https://github.com/bridgecrewio/checkov/releases/download/${CHECKOV_VERSION}/checkov_linux_X86_64.zip"
 CHECKOV_ZIP="checkov_linux_X86_64.zip"
@@ -19,7 +19,7 @@ rm -rf temp_iac_download
 echo "✅ Packaged as $CHECKOV_TAR"
 
 # ### 2. TruffleHog -> secret.tar.gz
-echo "=== [2/5] Downloading TruffleHog ==="
+echo "=== [2/6] Downloading TruffleHog ==="
 TRUFFLE_VERSION="3.90.3"
 TRUFFLE_TAR="trufflehog_${TRUFFLE_VERSION}_linux_amd64.tar.gz"
 TRUFFLE_URL="https://github.com/trufflesecurity/trufflehog/releases/download/v${TRUFFLE_VERSION}/${TRUFFLE_TAR}"
@@ -37,7 +37,7 @@ rm -rf temp_secret_download
 echo "✅ Packaged as $SECRET_TAR"
 
 ### 3. Trivy -> container.tar.gz
-echo "=== [3/5] Downloading Trivy ==="
+echo "=== [3/6] Downloading Trivy ==="
 TRIVY_VERSION="0.65.0"
 TRIVY_URL="https://get.trivy.dev/trivy?type=tar.gz&version=${TRIVY_VERSION}&os=linux&arch=amd64"
 TRIVY_TAR="trivy.tar.gz"
@@ -53,7 +53,7 @@ rm -rf temp_container_download container
 echo "✅ Trivy downloaded, renamed to 'container', and archived as 'container.tar.gz'"
 
 ### 4. SonarScanner -> sq-sast.tar.gz
-echo "=== [4/5] Downloading SonarScanner ==="
+echo "=== [4/6] Downloading SonarScanner ==="
 SQ_VERSION="7.1.0.4889"
 SQ_ZIP="sonar-scanner-cli-${SQ_VERSION}-linux-x64.zip"
 SQ_URL="https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/${SQ_ZIP}"
@@ -71,7 +71,7 @@ rm -rf temp_sq_sast_download "$SQ_FOLDER"
 echo "✅ SonarScanner downloaded, renamed to '$SQ_FOLDER', and archived as '$SQ_TAR'"
 
 ## OpenGrep -> sast.tar.gz
-echo "=== [5/5] Downloading OpenGrep Core + Rules ==="
+echo "=== [5/6] Downloading OpenGrep Core + Rules ==="
 OPENGREP_VERSION="v1.0.0-alpha.14"
 OPENGREP_CLI="opengrep_manylinux_x86"
 OPENGREP_URL="https://github.com/opengrep/opengrep/releases/download/${OPENGREP_VERSION}/${OPENGREP_CLI}"
@@ -96,5 +96,30 @@ cd ..
 tar -czvf "$SAST_TAR" "$SAST_FOLDER"
 rm -rf temp_sast_download "$SAST_FOLDER"
 echo "✅ OpenGrep core + rules (commit $RULES_COMMIT) packaged into '$SAST_TAR'"
+
+echo "=== [6/6] Downloading OpenJDK 25 + ZAP 2.16.1 ==="
+JDK_VERSION="25"
+ZAP_VERSION="2.16.1"
+JDK_URL="https://download.java.net/java/GA/jdk${JDK_VERSION}/bd75d5f9689641da8e1daabeccb5528b/36/GPL/openjdk-${JDK_VERSION}_linux-x64_bin.tar.gz"
+ZAP_URL="https://github.com/zaproxy/zaproxy/releases/download/v${ZAP_VERSION}/ZAP_${ZAP_VERSION}_Linux.tar.gz"
+DAST_FOLDER="dast"
+DAST_TAR="dast.tar.gz"
+TEMP_DIR="temp_dast_download"
+
+rm -rf "$DAST_FOLDER" "$TEMP_DIR"
+mkdir -p "$TEMP_DIR"
+cd "$TEMP_DIR"
+echo "Downloading OpenJDK ${JDK_VERSION}..."
+curl -LO "$JDK_URL"
+echo "Downloading ZAP ${ZAP_VERSION}..."
+curl -LO "$ZAP_URL"
+mkdir -p "../$DAST_FOLDER/java"
+mkdir -p "../$DAST_FOLDER/zap"
+tar -xzf openjdk-${JDK_VERSION}_linux-x64_bin.tar.gz -C "../$DAST_FOLDER/java" --strip-components=1
+tar -xzf ZAP_${ZAP_VERSION}_Linux.tar.gz -C "../$DAST_FOLDER/zap" --strip-components=1
+cd ..
+tar -czvf "$DAST_TAR" "$DAST_FOLDER"
+rm -rf "$TEMP_DIR" "$DAST_FOLDER"
+echo "✅ OpenJDK ${JDK_VERSION} + ZAP ${ZAP_VERSION} packaged into '$DAST_TAR'"
 
 echo "🎉 All tools downloaded and prepared successfully."
