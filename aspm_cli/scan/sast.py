@@ -114,6 +114,7 @@ class SASTScanner:
             i += 1
 
         # Ensure rules path (-f) is set
+        sast_binary = ToolManager.get_path("sast")
         default_rules = "/rules/default-rules/" if self.container_mode else ToolManager.get_path("sast-rules")
         if not saw_rules_flag:
             sanitized_args.extend(["-f", default_rules])

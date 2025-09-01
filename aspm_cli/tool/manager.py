@@ -41,6 +41,6 @@ class ToolManager:
         full_path = ToolManager._install_dir / subpath
 
         if not full_path.exists():
-            raise FileNotFoundError(f"Tool not found. Please run tool --type {name}")
+            raise FileNotFoundError(f"Tool not found. Please run `scanner tool install --type {name}`")
 
         return str(full_path)
