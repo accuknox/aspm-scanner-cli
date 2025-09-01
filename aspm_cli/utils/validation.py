@@ -4,7 +4,7 @@ from aspm_cli.utils.logger import Logger
 import sys
 
 ALLOWED_SCAN_TYPES = {"iac", "sast", "sq-sast", "secret", "container", "dast"}
-ALLOWED_TOOL_TYPES = {"iac", "sq-sast", "secret", "container", "sast"}
+ALLOWED_TOOL_TYPES = {"iac", "sq-sast", "secret", "container", "sast", "dast"}
 
 class ToolDownloadConfig(BaseModel):
     tooltype: Optional[str] = Field(default=None)

@@ -9,7 +9,7 @@ from aspm_cli.utils import config
 from colorama import Fore
 
 class ContainerScanner:
-    ak_container_image = os.getenv("SCAN_IMAGE", "aquasec/trivy:0.65.0")
+    ak_container_image = os.getenv("SCAN_IMAGE", "public.ecr.aws/k9v9d5v2/aquasec/trivy:0.65.0")
     result_file = './results.json'
 
     def __init__(self, command, container_mode=False):
