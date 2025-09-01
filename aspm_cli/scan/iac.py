@@ -9,7 +9,7 @@ from colorama import Fore
 from aspm_cli.utils import config
 
 class IaCScanner:
-    ak_iac_image = os.getenv("SCAN_IMAGE", "bridgecrew/checkov:3.2.458")
+    ak_iac_image = os.getenv("SCAN_IMAGE", "public.ecr.aws/k9v9d5v2/bridgecrew/checkov:3.2.458")
     output_format = 'json'
     output_file_path = '.'
     result_file = os.path.join(output_file_path, 'results_json.json')

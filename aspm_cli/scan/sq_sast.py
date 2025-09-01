@@ -9,7 +9,7 @@ from aspm_cli.utils.logger import Logger
 from accuknox_sq_sast.sonarqube_fetcher import SonarQubeFetcher
 
 class SQSASTScanner:
-    sast_image = os.getenv("SCAN_IMAGE", "sonarsource/sonar-scanner-cli:11.4")
+    sast_image = os.getenv("SCAN_IMAGE", "public.ecr.aws/k9v9d5v2/sonarsource/sonar-scanner-cli:11.4")
 
     def __init__(self, skip_sonar_scan, command, container_mode=False, repo_url=None, branch=None,
                  commit_sha=None, pipeline_url=None):

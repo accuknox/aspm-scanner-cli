@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 import re
 
 class SASTScanner:
-    opengrep_image = os.getenv("SCAN_IMAGE", "accuknox/opengrepjob:0.1.0")
+    opengrep_image = os.getenv("SCAN_IMAGE", "public.ecr.aws/k9v9d5v2/accuknox/opengrepjob:0.1.0")
     result_file = "results.json"
 
     def __init__(self, command=None, container_mode=True, severity = None,
