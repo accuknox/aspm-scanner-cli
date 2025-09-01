@@ -24,6 +24,8 @@ class ToolManager:
             "container": Path("container"),
             "secret": Path("secret"),
             "sq-sast": Path("sq-sast") / "bin" / "sonar-scanner",
+            "dast": Path("dast") / "zap",
+            "dast-java": Path("dast") / "java" / "bin",
             "sast": Path("sast") / "sast",
             "sast-rules": Path("sast") / "rules",
         }

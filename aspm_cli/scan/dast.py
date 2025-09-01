@@ -6,7 +6,7 @@ import shlex
 from colorama import Fore
 from aspm_cli.utils import config, docker_pull
 from aspm_cli.utils.logger import Logger
-
+from aspm_cli.tool.manager import ToolManager
 
 class DASTScanner:
     zap_image = os.getenv("SCAN_IMAGE", "zaproxy/zap-stable:2.16.1")
@@ -25,19 +25,15 @@ class DASTScanner:
 
     def run(self):
         try:
-            if not self.container_mode:
-                raise NotImplementedError(
-                    "DASTScanner currently supports only container mode. Please rerun with --container-mode enabled."
-                )
-
-            docker_pull(self.zap_image)
-            Logger.get_logger().debug("Starting DAST scan...")
+            if self.container_mode:
+                docker_pull(self.zap_image)
+                Logger.get_logger().debug("Starting DAST scan...")
 
             sanitized_args = self._build_dast_args()
-            cmd = self._build_dast_command(sanitized_args)
+            cmd, env = self._build_dast_command(sanitized_args)
 
             Logger.get_logger().debug(f"Running DAST scan: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, env=env)
 
             if result.stdout:
                 Logger.get_logger().debug(result.stdout)
@@ -71,6 +67,11 @@ class DASTScanner:
         """
         args = shlex.split(self.command)
 
+        if not self.container_mode and ("zap-baseline.py" in shlex.join(args) or "zap-full-scan.py" in shlex.join(args)):
+            raise NotImplementedError(
+                "DASTScanner currently supports zap.sh only"
+            )
+
         # ZAP conflicting report flags
         forbidden_flags = []
         if "zap-baseline.py" in shlex.join(args) or "zap-full-scan.py" in shlex.join(args):
@@ -95,17 +96,26 @@ class DASTScanner:
         return sanitized_args
 
     def _build_dast_command(self, args):
-        """
-        Construct full Docker run command.
-        """
-        cmd = [
-            "docker", "run", "--rm",
-            "-v", f"{os.getcwd()}:/zap/wrk",
-            "-w", "/zap/wrk",
-            "-t", self.zap_image
-        ]
-        cmd.extend(args)
-        return cmd
+        env = os.environ.copy()
+
+        if not self.container_mode:
+            first_arg = os.path.join(ToolManager.get_path("dast"), args[0])
+            cmd = [first_arg]
+
+            cmd.extend(args[1:])
+            java_home = ToolManager.get_path("dast-java")
+            env = os.environ.copy()
+            env["JAVA_HOME"] = java_home
+            env["PATH"] = java_home + os.pathsep + env.get("PATH", "")
+        else:
+            cmd = [
+                "docker", "run", "--rm",
+                "-v", f"{os.getcwd()}:/zap/wrk",
+                "-w", "/zap/wrk",
+                "-t", self.zap_image
+            ]
+            cmd.extend(args)
+        return cmd, env
 
     def evaluate_results(self):
         """
