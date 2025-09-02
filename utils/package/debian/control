@@ -1,0 +1,17 @@
+Source: aspm-scanner-cli
+Section: utils
+Priority: optional
+Maintainer: AccuKnox <accuknox@accuknox.com>
+Standards-Version: 4.5.0
+Build-Depends: debhelper-compat (= 12)
+
+Package: aspm-scanner-cli
+Architecture: all
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: AccuKnox ASPM Scanner CLI
+  The AccuKnox ASPM Scanner is a command-line tool designed to support a range of security testing methodologies, including:
+    SAST (Static Application Security Testing)
+    DAST (Dynamic Application Security Testing)
+    IaC (Infrastructure-as-Code) Scanning
+    Secret Scanning
+    Container Image Scanning
