@@ -26,7 +26,9 @@ jobs:
 
       - name: Build DEB package
         run: |
-          cd utils
+          cd package
+          export LC_ALL=C.UTF-8
+          export LANG=C.UTF-8
           dpkg-buildpackage -us -uc -b
 
       - name: Upload DEB artifact

@@ -1,1 +1,7 @@
 *.tar.gz
+package/debian/.debhelper
+package/debian/aspm-scanner-cli
+tools
+package/debian/aspm-scanner-cli.substvars
+package/debian/aspm-scanner-cli.substvars
+package/debian/debhelper-build-stamp
