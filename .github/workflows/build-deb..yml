@@ -1,0 +1,36 @@
+name: Build DEB Package
+
+on:
+  push:
+    branches:
+      - bundling-all-tools
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare ASPM scanners
+        run: |
+          cd utils
+          chmod +x ./prepare-aspm-scanners.sh
+          ./prepare-aspm-scanners.sh
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential devscripts debhelper
+
+      - name: Build DEB package
+        run: |
+          cd utils
+          dpkg-buildpackage -us -uc -b
+
+      - name: Upload DEB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aspm-scanners-deb
+          path: ../*.deb

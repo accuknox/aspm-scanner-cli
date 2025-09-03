@@ -1,2 +1,1 @@
-bin/container /usr/bin
-bin/secret /usr/bin
+tools /usr/share/accuknox-aspm-scanner/tools
