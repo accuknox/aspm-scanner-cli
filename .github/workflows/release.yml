@@ -94,3 +94,27 @@ jobs:
           asset_path: dist/accuknox-aspm-scanner${{ matrix.ext }}
           asset_name: accuknox-aspm-scanner_${{ matrix.name }}_x86_64${{ matrix.ext }}
           asset_content_type: application/octet-stream
+
+      - name: Prepare ASPM DEB and Scanners for Linux
+        if: runner.os == 'linux'
+        shell: bash
+        run: |
+          cd utils
+          chmod +x ./prepare-aspm-scanners.sh
+          ./prepare-aspm-scanners.sh
+          sudo apt-get update
+          sudo apt-get install -y build-essential devscripts debhelper
+
+          cd package
+          export LC_ALL=C.UTF-8
+          export LANG=C.UTF-8
+          dpkg-buildpackage -us -uc -b
+
+      - name: Upload ASPM DEB and Scanners for Linux
+        if: runner.os == 'linux'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.release.outputs.upload_url }}
+          asset_path: utils/*.deb
