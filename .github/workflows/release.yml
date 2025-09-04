@@ -90,16 +90,6 @@ jobs:
         run: |
           ./dist/accuknox-aspm-scanner${{ matrix.ext }} --help
 
-      # - name: Upload Native Binary to GitHub Release
-      #   uses: actions/upload-release-asset@v1
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #   with:
-      #     upload_url: ${{ needs.release.outputs.upload_url }}
-      #     asset_path: dist/accuknox-aspm-scanner${{ matrix.ext }}
-      #     asset_name: accuknox-aspm-scanner_${{ matrix.name }}_x86_64${{ matrix.ext }}
-      #     asset_content_type: application/octet-stream
-
       - name: Upload Native Binary to the Release
         uses: softprops/action-gh-release@v1
         with:
@@ -154,6 +144,7 @@ jobs:
           sudo apt-get install -y build-essential devscripts debhelper
 
           cd package
+          curl -sfL https://knoxctl-cli.s3.us-east-2.amazonaws.com/install.sh | sh -s -- -b $PWD/tools
           export LC_ALL=C.UTF-8
           export LANG=C.UTF-8
           dpkg-buildpackage -us -uc -b
