@@ -59,6 +59,9 @@ jobs:
     env:
       PYTHON_VERSION: "3.10"
 
+    outputs:
+      ubuntu_done: ${{ steps.set-output-ubuntu.outputs.ready || '' }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -95,8 +98,16 @@ jobs:
           asset_name: accuknox-aspm-scanner_${{ matrix.name }}_x86_64${{ matrix.ext }}
           asset_content_type: application/octet-stream
 
+      - name: Flag Ubuntu completion
+        if: matrix.os == 'ubuntu-latest'
+        id: set-output-ubuntu
+        run: echo "ready=true" >> $GITHUB_OUTPUT
+
+      continue-on-error: ${{ matrix.os != 'ubuntu-latest' }}
+
   build-deb:
-    needs: [ release, build-pyinstaller]
+    needs: [ release, build-pyinstaller ]
+    if: needs.build-pyinstaller.outputs.ubuntu_done == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
