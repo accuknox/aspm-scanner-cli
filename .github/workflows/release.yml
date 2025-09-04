@@ -90,15 +90,21 @@ jobs:
         run: |
           ./dist/accuknox-aspm-scanner${{ matrix.ext }} --help
 
-      - name: Upload Native Binary to GitHub Release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # - name: Upload Native Binary to GitHub Release
+      #   uses: actions/upload-release-asset@v1
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #   with:
+      #     upload_url: ${{ needs.release.outputs.upload_url }}
+      #     asset_path: dist/accuknox-aspm-scanner${{ matrix.ext }}
+      #     asset_name: accuknox-aspm-scanner_${{ matrix.name }}_x86_64${{ matrix.ext }}
+      #     asset_content_type: application/octet-stream
+
+      - name: Upload Native Binary to the Release
+        uses: softprops/action-gh-release@v1
         with:
-          upload_url: ${{ needs.release.outputs.upload_url }}
-          asset_path: dist/accuknox-aspm-scanner${{ matrix.ext }}
-          asset_name: accuknox-aspm-scanner_${{ matrix.name }}_x86_64${{ matrix.ext }}
-          asset_content_type: application/octet-stream
+          files: |
+            dist/accuknox-aspm-scanner${{ matrix.ext }}
 
       - name: Upload Ubuntu Native Binary Artifact
         if: matrix.os == 'ubuntu-latest'
@@ -147,18 +153,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential devscripts debhelper
 
-          ls -lahR package
           cd package
           export LC_ALL=C.UTF-8
           export LANG=C.UTF-8
           dpkg-buildpackage -us -uc -b
 
+          ls -lahR ../../
+          cd ../../
+
       - name: Upload ASPM DEB and Scanners for Linux
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
         with:
-          upload_url: ${{ needs.release.outputs.upload_url }}
-          asset_path: utils/*.deb
-          asset_name: accuknox-aspm-scanner.deb
-          asset_content_type: application/vnd.debian.binary-package
+          files: |
+            utils/*.deb
