@@ -59,6 +59,8 @@ jobs:
     env:
       PYTHON_VERSION: "3.10"
 
+    continue-on-error: "true"
+
     outputs:
       ubuntu_done: ${{ steps.set-output-ubuntu.outputs.ready || '' }}
 
@@ -102,8 +104,6 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         id: set-output-ubuntu
         run: echo "ready=true" >> $GITHUB_OUTPUT
-
-      continue-on-error: ${{ matrix.os != 'ubuntu-latest' }}
 
   build-deb:
     needs: [ release, build-pyinstaller ]

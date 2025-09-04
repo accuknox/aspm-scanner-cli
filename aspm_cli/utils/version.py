@@ -1,2 +1,2 @@
 def get_version():
-    return '0.12.4-test'
+    return '0.12.5-test'
