@@ -59,7 +59,7 @@ jobs:
     env:
       PYTHON_VERSION: "3.10"
 
-    continue-on-error: "true"
+    continue-on-error: true
 
     outputs:
       ubuntu_done: ${{ steps.set-output-ubuntu.outputs.ready || '' }}
