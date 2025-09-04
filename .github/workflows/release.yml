@@ -95,8 +95,25 @@ jobs:
           asset_name: accuknox-aspm-scanner_${{ matrix.name }}_x86_64${{ matrix.ext }}
           asset_content_type: application/octet-stream
 
+  build-deb:
+    needs: [ release, build-pyinstaller]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    env:
+      PYTHON_VERSION: "3.10"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+    
       - name: Prepare ASPM DEB and Scanners for Linux
-        if: runner.os == 'ubuntu-latest'
         shell: bash
         run: |
           cd utils
@@ -111,7 +128,6 @@ jobs:
           dpkg-buildpackage -us -uc -b
 
       - name: Upload ASPM DEB and Scanners for Linux
-        if: runner.os == 'ubuntu-latest'
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
