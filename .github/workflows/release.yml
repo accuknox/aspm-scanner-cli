@@ -100,6 +100,14 @@ jobs:
           asset_name: accuknox-aspm-scanner_${{ matrix.name }}_x86_64${{ matrix.ext }}
           asset_content_type: application/octet-stream
 
+      - name: Upload Ubuntu Native Binary Artifact
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-binary-linux
+          retention-days: 1
+          path: dist/accuknox-aspm-scanner
+
       - name: Flag Ubuntu completion
         if: matrix.os == 'ubuntu-latest'
         id: set-output-ubuntu
@@ -123,6 +131,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Download Ubuntu Native Binary
+        uses: actions/download-artifact@v5
+        with:
+          name: native-binary-linux
+          path: utils/tools
     
       - name: Prepare ASPM DEB and Scanners for Linux
         shell: bash
@@ -145,3 +159,5 @@ jobs:
         with:
           upload_url: ${{ needs.release.outputs.upload_url }}
           asset_path: utils/*.deb
+          asset_name: accuknox-aspm-scanner.deb
+          asset_content_type: application/vnd.debian.binary-package
