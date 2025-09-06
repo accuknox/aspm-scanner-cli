@@ -55,8 +55,6 @@ class IaCScannerConfig(BaseModel):
     def validate_repository_url(cls, v):
         if not v:
             raise ValueError("Unable to retrieve REPOSITORY_URL from Git metadata. Please pass the --repo-url variable.")
-        if not isinstance(v, str) or not v.startswith("http"):
-            raise ValueError("Invalid REPOSITORY_URL. It must be a valid URL starting with 'http'.")
         return v
 
     @field_validator("REPOSITORY_BRANCH", mode="before")
@@ -105,8 +103,6 @@ class SASTScannerConfig(BaseModel):
     def validate_repository_url(cls, v):
         if not v:
             raise ValueError("Unable to retrieve REPOSITORY_URL from Git metadata. Please pass the --repo-url variable.")
-        if not isinstance(v, str) or not v.startswith("http"):
-            raise ValueError("Invalid REPOSITORY_URL. It must be a valid URL starting with 'http'.")
         return v
 
     @field_validator("COMMIT_REF", mode="before")
@@ -138,8 +134,6 @@ class SQSASTScannerConfig(BaseModel):
     def validate_repository_url(cls, v):
         if not v:
             raise ValueError("Unable to retrieve REPOSITORY_URL from Git metadata. Please pass the --repo-url variable.")
-        if not isinstance(v, str) or not v.startswith("http"):
-            raise ValueError("Invalid REPOSITORY_URL. It must be a valid URL starting with 'http'.")
         return v
 
     @field_validator("BRANCH", mode="before")
