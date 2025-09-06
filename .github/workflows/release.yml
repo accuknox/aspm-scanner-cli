@@ -59,6 +59,11 @@ jobs:
     env:
       PYTHON_VERSION: "3.10"
 
+    continue-on-error: true
+
+    outputs:
+      ubuntu_done: ${{ steps.set-output-ubuntu.outputs.ready || '' }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -85,12 +90,70 @@ jobs:
         run: |
           ./dist/accuknox-aspm-scanner${{ matrix.ext }} --help
 
-      - name: Upload Native Binary to GitHub Release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload Native Binary to the Release
+        uses: softprops/action-gh-release@v1
         with:
-          upload_url: ${{ needs.release.outputs.upload_url }}
-          asset_path: dist/accuknox-aspm-scanner${{ matrix.ext }}
-          asset_name: accuknox-aspm-scanner_${{ matrix.name }}_x86_64${{ matrix.ext }}
-          asset_content_type: application/octet-stream
+          files: |
+            dist/accuknox-aspm-scanner${{ matrix.ext }}
+
+      - name: Upload Ubuntu Native Binary Artifact
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-binary-linux
+          retention-days: 1
+          path: dist/accuknox-aspm-scanner
+
+      - name: Flag Ubuntu completion
+        if: matrix.os == 'ubuntu-latest'
+        id: set-output-ubuntu
+        run: echo "ready=true" >> $GITHUB_OUTPUT
+
+  build-deb:
+    needs: [ release, build-pyinstaller ]
+    if: needs.build-pyinstaller.outputs.ubuntu_done == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    env:
+      PYTHON_VERSION: "3.10"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Download Ubuntu Native Binary
+        uses: actions/download-artifact@v5
+        with:
+          name: native-binary-linux
+          path: utils/package/tools
+    
+      - name: Prepare ASPM DEB and Scanners for Linux
+        shell: bash
+        run: |
+          cd utils
+          chmod +x ./prepare-aspm-scanners.sh
+          ./prepare-aspm-scanners.sh
+          sudo apt-get update
+          sudo apt-get install -y build-essential devscripts debhelper
+
+          cd package
+          curl -sfL https://knoxctl-cli.s3.us-east-2.amazonaws.com/install.sh | sh -s -- -b $PWD/tools
+          export LC_ALL=C.UTF-8
+          export LANG=C.UTF-8
+          dpkg-buildpackage -us -uc -b
+
+          ls -lahR ../../
+          cd ../../
+
+      - name: Upload ASPM DEB and Scanners for Linux
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            utils/*.deb

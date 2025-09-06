@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+PACKAGE_BIN_DIR="./package/tools"
+
 ### 1. Checkov -> iac.tar.gz
 echo "=== [1/6] Downloading Checkov ==="
 CHECKOV_VERSION="3.2.458"
@@ -11,14 +13,15 @@ CHECKOV_TAR="iac.tar.gz"
 mkdir -p temp_iac_download
 cd temp_iac_download
 curl -LO "$CHECKOV_URL"
-unzip "$CHECKOV_ZIP"
-mv dist/checkov "$CHECKOV_BIN"
+unzip -o -q "$CHECKOV_ZIP"
+cp dist/checkov "$CHECKOV_BIN"
 tar -czvf "../$CHECKOV_TAR" "$CHECKOV_BIN"
 cd ..
+cp temp_iac_download/dist/checkov $PACKAGE_BIN_DIR/$CHECKOV_BIN
 rm -rf temp_iac_download
 echo "✅ Packaged as $CHECKOV_TAR"
 
-# ### 2. TruffleHog -> secret.tar.gz
+### 2. TruffleHog -> secret.tar.gz
 echo "=== [2/6] Downloading TruffleHog ==="
 TRUFFLE_VERSION="3.90.3"
 TRUFFLE_TAR="trufflehog_${TRUFFLE_VERSION}_linux_amd64.tar.gz"
@@ -30,9 +33,10 @@ mkdir -p temp_secret_download
 cd temp_secret_download
 curl -LO "$TRUFFLE_URL"
 tar -xzf "$TRUFFLE_TAR"
-mv trufflehog "$SECRET_BIN"
+cp trufflehog "$SECRET_BIN"
 tar -czvf "../$SECRET_TAR" "$SECRET_BIN"
 cd ..
+cp temp_secret_download/trufflehog $PACKAGE_BIN_DIR/$SECRET_BIN
 rm -rf temp_secret_download
 echo "✅ Packaged as $SECRET_TAR"
 
@@ -41,14 +45,16 @@ echo "=== [3/6] Downloading Trivy ==="
 TRIVY_VERSION="0.65.0"
 TRIVY_URL="https://get.trivy.dev/trivy?type=tar.gz&version=${TRIVY_VERSION}&os=linux&arch=amd64"
 TRIVY_TAR="trivy.tar.gz"
+CONTAINER_BIN="container"
 mkdir -p temp_container_download
 cd temp_container_download
 curl -L "$TRIVY_URL" -o "$TRIVY_TAR"
 tar -xzf "$TRIVY_TAR"
 chmod +x trivy
-mv trivy ../container
+cp trivy ../$CONTAINER_BIN
 cd ..
 tar -czvf container.tar.gz container
+cp temp_container_download/trivy $PACKAGE_BIN_DIR/$CONTAINER_BIN
 rm -rf temp_container_download container
 echo "✅ Trivy downloaded, renamed to 'container', and archived as 'container.tar.gz'"
 
@@ -66,11 +72,12 @@ unzip "$SQ_ZIP"
 EXTRACTED_DIR=$(find . -maxdepth 1 -type d -name "sonar-scanner*" | head -n 1)
 mv "$EXTRACTED_DIR" "../$SQ_FOLDER"
 cd ..
+cp -r $SQ_FOLDER $PACKAGE_BIN_DIR
 tar -czvf "$SQ_TAR" "$SQ_FOLDER"
 rm -rf temp_sq_sast_download "$SQ_FOLDER"
 echo "✅ SonarScanner downloaded, renamed to '$SQ_FOLDER', and archived as '$SQ_TAR'"
 
-## OpenGrep -> sast.tar.gz
+### OpenGrep -> sast.tar.gz
 echo "=== [5/6] Downloading OpenGrep Core + Rules ==="
 OPENGREP_VERSION="v1.0.0-alpha.14"
 OPENGREP_CLI="opengrep_manylinux_x86"
@@ -93,10 +100,12 @@ curl -L --silent "$RULES_URL" | tar -xz -C rules_extract --strip-components=1 2>
 rm -rf rules_extract/.pre-commit-config.yaml rules_extract/stats rules_extract/.github 2>/dev/null
 mv rules_extract "../$SAST_FOLDER/rules"
 cd ..
+cp -r $SAST_FOLDER $PACKAGE_BIN_DIR
 tar -czvf "$SAST_TAR" "$SAST_FOLDER"
 rm -rf temp_sast_download "$SAST_FOLDER"
 echo "✅ OpenGrep core + rules (commit $RULES_COMMIT) packaged into '$SAST_TAR'"
 
+### DAST -> dast.tar.gz
 echo "=== [6/6] Downloading OpenJDK 25 + ZAP 2.16.1 ==="
 JDK_VERSION="25"
 ZAP_VERSION="2.16.1"
@@ -118,6 +127,7 @@ mkdir -p "../$DAST_FOLDER/zap"
 tar -xzf openjdk-${JDK_VERSION}_linux-x64_bin.tar.gz -C "../$DAST_FOLDER/java" --strip-components=1
 tar -xzf ZAP_${ZAP_VERSION}_Linux.tar.gz -C "../$DAST_FOLDER/zap" --strip-components=1
 cd ..
+cp -r $DAST_FOLDER $PACKAGE_BIN_DIR
 tar -czvf "$DAST_TAR" "$DAST_FOLDER"
 rm -rf "$TEMP_DIR" "$DAST_FOLDER"
 echo "✅ OpenJDK ${JDK_VERSION} + ZAP ${ZAP_VERSION} packaged into '$DAST_TAR'"
