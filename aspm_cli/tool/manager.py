@@ -8,12 +8,25 @@ class ToolManager:
     Static helper class to get OS-aware paths under the AccuKnox install directory.
     """
 
-    # Determine OS and install directory
+    # Determine OS
     _system = platform.system()
     _is_windows = _system == "Windows"
-    _install_dir = (Path(os.getenv("USERPROFILE")) / "AppData" / "Local" / "Programs" / "AccuKnox"
-                    if _is_windows else Path.home() / ".local" / "bin" / "accuknox")
-    _install_dir.mkdir(parents=True, exist_ok=True)
+
+    if _is_windows:
+        # Windows path
+        _root_dir = Path(os.getenv("USERPROFILE")) / "AppData" / "Local" / "Programs" / "AccuKnox"
+        _root_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        # Linux global and fallback path
+        _global_install_dir = Path("/") / "usr" / "share" / "accuknox-aspm-scanner" / "tools"
+        _fallback_dir = Path.home() / ".local" / "bin" / "accuknox"
+        _root_dir = _global_install_dir if _global_install_dir.exists() else _fallback_dir
+
+        if not _root_dir.exists() and _root_dir == _fallback_dir:
+            _root_dir.mkdir(parents=True, exist_ok=True)
+
+    # Backward compatibility alias
+    _install_dir = _root_dir
 
     # OS-aware tool paths
     if _is_windows:
@@ -29,6 +42,7 @@ class ToolManager:
             "sast": Path("sast") / "sast",
             "sast-rules": Path("sast") / "rules",
         }
+
 
     @staticmethod
     def get_path(name: str) -> str:
