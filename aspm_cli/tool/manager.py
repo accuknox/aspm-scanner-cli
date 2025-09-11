@@ -28,24 +28,24 @@ class ToolManager:
     # Backward compatibility alias
     _install_dir = _root_dir
 
-    # OS-aware tool paths
-    if _is_windows:
-        raise ValueError("Non-container mode is not supported currently on Windows")
-    else:  # Linux
-        TOOL_PATHS = {
-            "iac": Path("iac"),
-            "container": Path("container"),
-            "secret": Path("secret"),
-            "sq-sast": Path("sq-sast") / "bin" / "sonar-scanner",
-            "dast": Path("dast") / "zap",
-            "dast-java": Path("dast") / "java" / "bin",
-            "sast": Path("sast") / "sast",
-            "sast-rules": Path("sast") / "rules",
-        }
+
+    TOOL_PATHS = {
+        "iac": Path("iac"),
+        "container": Path("container"),
+        "secret": Path("secret"),
+        "sq-sast": Path("sq-sast") / "bin" / "sonar-scanner",
+        "dast": Path("dast") / "zap",
+        "dast-java": Path("dast") / "java" / "bin",
+        "sast": Path("sast") / "sast",
+        "sast-rules": Path("sast") / "rules",
+    }
 
 
     @staticmethod
     def get_path(name: str) -> str:
+        if ToolManager._is_windows:
+            raise ValueError("Non-container mode is not supported currently on Windows")
+
         """
         Returns the full OS-aware path under the AccuKnox install directory
         for the given tool/directory name. Raises an error if the path does not exist.
