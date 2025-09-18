@@ -71,7 +71,6 @@ def run_scan(args):
         softfail = args.softfail
         accuknox_config = {
             "accuknox_endpoint": args.endpoint or os.getenv("ACCUKNOX_ENDPOINT"),
-            "accuknox_tenant": args.tenant or os.getenv("ACCUKNOX_TENANT"),
             "accuknox_label": args.label or os.getenv("ACCUKNOX_LABEL"),
             "accuknox_token": args.token or os.getenv("ACCUKNOX_TOKEN")
         }
@@ -116,7 +115,7 @@ def run_scan(args):
 
         # Upload results and handle failure
         if result_file:
-            upload_results(result_file, accuknox_config["accuknox_endpoint"], accuknox_config["accuknox_tenant"], accuknox_config["accuknox_label"], accuknox_config["accuknox_token"], data_type)
+            upload_results(result_file, accuknox_config["accuknox_endpoint"], accuknox_config["accuknox_label"], accuknox_config["accuknox_token"], data_type)
         handle_failure(exit_code, softfail)
     except Exception as e:
         Logger.get_logger().error("Scan failed.")
@@ -266,7 +265,6 @@ def main():
     scan_subparsers = scan_parser.add_subparsers(dest="scantype")
 
     scan_parser.add_argument("--endpoint", help="The URL of the Control Panel to push the scan results to.")
-    scan_parser.add_argument("--tenant", help="The ID of the tenant associated with the Control Panel.")
     scan_parser.add_argument("--label", help="The label created in AccuKnox for associating scan results.")
     scan_parser.add_argument("--token", help="The token for authenticating with the Control Panel.")
     scan_parser.add_argument('--softfail', action='store_true', help='Enable soft fail mode for scanning')

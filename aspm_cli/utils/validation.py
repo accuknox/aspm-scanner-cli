@@ -28,7 +28,6 @@ class ToolDownloadConfig(BaseModel):
 class Config(BaseModel):
     SCAN_TYPE: str
     ACCUKNOX_ENDPOINT: str
-    ACCUKNOX_TENANT: int
     ACCUKNOX_LABEL: str
     ACCUKNOX_TOKEN: str
     SOFT_FAIL: bool
@@ -155,12 +154,11 @@ class SecretScannerConfig(BaseModel):
     CONTAINER_MODE: bool
 
 class ConfigValidator:
-    def __init__(self, scan_type, accuknox_endpoint, accuknox_tenant, accuknox_label, accuknox_token, softfail):
+    def __init__(self, scan_type, accuknox_endpoint, accuknox_label, accuknox_token, softfail):
         try:
             self.config = Config(
                 SCAN_TYPE=scan_type,
                 ACCUKNOX_ENDPOINT=accuknox_endpoint,
-                ACCUKNOX_TENANT=accuknox_tenant,
                 ACCUKNOX_LABEL=accuknox_label,
                 ACCUKNOX_TOKEN=accuknox_token,
                 SOFT_FAIL=softfail

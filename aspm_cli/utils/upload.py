@@ -9,7 +9,7 @@ from requests.exceptions import HTTPError
 # Suppress SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-def upload_results(result_file, endpoint, tenant_id, label, token, data_type):
+def upload_results(result_file, endpoint, label, token, data_type):
 
     spinner = Spinner(message=f"Uploading the result to AccuKnox control plane...",  color=Fore.GREEN)
     spinner.start()
@@ -21,11 +21,9 @@ def upload_results(result_file, endpoint, tenant_id, label, token, data_type):
             response = requests.post(
                 f"https://{endpoint}/api/v1/artifact/",
                 headers={
-                    "Tenant-Id": tenant_id,
                     "Authorization": f"Bearer {token}"
                 },
                 params={
-                    "tenant_id": tenant_id,
                     "data_type": data_type,
                     "label_id": label,
                     "save_to_s3": "true"
