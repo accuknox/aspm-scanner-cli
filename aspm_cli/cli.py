@@ -115,7 +115,7 @@ def run_scan(args):
 
         # Upload results and handle failure
         if result_file:
-            upload_results(result_file, accuknox_config["accuknox_endpoint"], accuknox_config["accuknox_label"], accuknox_config["accuknox_token"], data_type)
+            upload_results(result_file, accuknox_config["accuknox_endpoint"], os.getenv("ACCUKNOX_TENANT"), accuknox_config["accuknox_label"], accuknox_config["accuknox_token"], data_type)
         handle_failure(exit_code, softfail)
     except Exception as e:
         Logger.get_logger().error("Scan failed.")

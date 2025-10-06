@@ -9,7 +9,7 @@ from requests.exceptions import HTTPError
 # Suppress SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-def upload_results(result_file, endpoint, label, token, data_type):
+def upload_results(result_file, endpoint, tenant_id, label, token, data_type):
 
     spinner = Spinner(message=f"Uploading the result to AccuKnox control plane...",  color=Fore.GREEN)
     spinner.start()
@@ -17,17 +17,24 @@ def upload_results(result_file, endpoint, label, token, data_type):
     """Upload the result JSON to the specified endpoint."""
     Logger.get_logger().debug("Uploading results...")
     try:
+        headers = {
+            "Authorization": f"Bearer {token}"
+        }
+        if tenant_id:
+            headers["Tenant-Id"] = tenant_id
+        params = {
+            "data_type": data_type,
+            "label_id": label,
+            "save_to_s3": "true"
+        }
+        if tenant_id:
+            params["tenant_id"] = tenant_id
+            
         with open(result_file, 'rb') as file:
             response = requests.post(
                 f"https://{endpoint}/api/v1/artifact/",
-                headers={
-                    "Authorization": f"Bearer {token}"
-                },
-                params={
-                    "data_type": data_type,
-                    "label_id": label,
-                    "save_to_s3": "true"
-                },
+                headers=headers,
+                params=params,
                 files={"file": file},
                 verify=False  # Bypass SSL verification
             )
