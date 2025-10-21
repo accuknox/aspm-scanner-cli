@@ -17,6 +17,7 @@ from aspm_cli.utils.spinner import Spinner
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils.validation import ALLOWED_TOOL_TYPES, ToolDownloadConfig
 from aspm_cli.utils.version import get_version
+from aspm_cli.pre_commit_wrapper.config import handle_pre_commit
 
 init(autoreset=True)
 
@@ -68,15 +69,16 @@ def handle_tool_download(args):
 def run_scan(args):
     """Run the specified scan type."""
     try:
-        softfail = args.softfail
+        softfail = args.softfail or os.getenv("SOFT_FAIL") == "TRUE"
+        skip_upload = args.skip_upload
+
         accuknox_config = {
             "accuknox_endpoint": args.endpoint or os.getenv("ACCUKNOX_ENDPOINT"),
             "accuknox_label": args.label or os.getenv("ACCUKNOX_LABEL"),
             "accuknox_token": args.token or os.getenv("ACCUKNOX_TOKEN")
         }
-        
         # Validate configurations
-        validator = ConfigValidator(args.scantype.lower(), **accuknox_config, softfail=softfail)
+        validator = ConfigValidator(args.scantype.lower(), **accuknox_config, softfail=softfail, skip_upload=skip_upload)
 
         # Select scan type and run respective scanner
         if args.scantype.lower() == "iac":
@@ -114,8 +116,12 @@ def run_scan(args):
         spinner.stop()
 
         # Upload results and handle failure
-        if result_file:
+        if skip_upload is not True and result_file:
             upload_results(result_file, accuknox_config["accuknox_endpoint"], os.getenv("ACCUKNOX_TENANT"), accuknox_config["accuknox_label"], accuknox_config["accuknox_token"], data_type)
+        elif result_file and os.path.exists(result_file):
+            os.remove(result_file)
+        else:
+            pass
         handle_failure(exit_code, softfail)
     except Exception as e:
         Logger.get_logger().error("Scan failed.")
@@ -245,8 +251,28 @@ def main():
 
     parser.add_argument('--version', action='version', version=f"%(prog)s v{get_version()}")
 
+    #---------------------------------Pre-commit: START---------------------------------#
+    # Pre-commit wrapper
+    precommit_parser = subparsers.add_parser(
+        "pre-commit", help="Manage pre-commit hooks"
+    )
+    precommit_subparsers = precommit_parser.add_subparsers(dest="precommit_cmd", required=True)
 
+    install_parser = precommit_subparsers.add_parser(
+        "install", help="Install pre-commit hooks"
+    )
+    install_parser.add_argument(
+        "--global", action="store_true", help="Run install globally"
+    )
+    install_parser.set_defaults(func=handle_pre_commit)
 
+    uninstall_parser = precommit_subparsers.add_parser(
+        "uninstall", help="Uninstall pre-commit hooks"
+    )
+    uninstall_parser.set_defaults(func=handle_pre_commit)
+    #---------------------------------Pre-commit: END---------------------------------#
+
+    #---------------------------------TOOL: START---------------------------------#
     tool_parser = subparsers.add_parser("tool", help="Manage internal tools")
     tool_subparsers = tool_parser.add_subparsers(dest="toolcmd", required=True)
 
@@ -259,7 +285,9 @@ def main():
     tool_update_parser = tool_subparsers.add_parser("update", help="Update a specific tool or all tools")
     add_download_args(tool_update_parser)
     tool_update_parser.set_defaults(func=handle_tool_download, mode="update")
+    #---------------------------------TOOL: END---------------------------------#
 
+    #---------------------------------SCAN: START---------------------------------#
     # Scan options
     scan_parser = subparsers.add_parser("scan", help=f"Run a scan (e.g. {', '.join(ALLOWED_SCAN_TYPES)})")
     scan_subparsers = scan_parser.add_subparsers(dest="scantype")
@@ -268,6 +296,7 @@ def main():
     scan_parser.add_argument("--label", help="The label created in AccuKnox for associating scan results.")
     scan_parser.add_argument("--token", help="The token for authenticating with the Control Panel.")
     scan_parser.add_argument('--softfail', action='store_true', help='Enable soft fail mode for scanning')
+    scan_parser.add_argument('--skip-upload', action='store_true', help='Skip control plane upload')
 
     # IAC Scan
     iac_parser = scan_subparsers.add_parser("iac", help="Run IAC scan")
@@ -289,7 +318,6 @@ def main():
     add_container_scan_args(container_parser)
     container_parser.set_defaults(func=run_scan)
 
-    # ----------------------------- Non Container Mode does not supported ----------------------------- #
     # DAST Scan
     dast_parser = scan_subparsers.add_parser("dast", help="Run a DAST scan")
     add_dast_scan_args(dast_parser)
@@ -299,7 +327,7 @@ def main():
     sast_parser = scan_subparsers.add_parser("sast", help="Run SAST scan")
     add_sast_scan_args(sast_parser) 
     sast_parser.set_defaults(func=run_scan)
-    # ----------------------------- Non Container Mode does not supported ----------------------------- #
+    #---------------------------------SCAN: END---------------------------------#
 
     # Parse arguments and execute respective function
     args = parser.parse_args()

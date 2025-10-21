@@ -27,10 +27,11 @@ class ToolDownloadConfig(BaseModel):
     
 class Config(BaseModel):
     SCAN_TYPE: str
-    ACCUKNOX_ENDPOINT: str
-    ACCUKNOX_LABEL: str
-    ACCUKNOX_TOKEN: str
+    ACCUKNOX_ENDPOINT: str | None = None
+    ACCUKNOX_LABEL: str | None = None
+    ACCUKNOX_TOKEN: str | None = None
     SOFT_FAIL: bool
+    SKIP_UPLOAD: bool
 
     @field_validator("SCAN_TYPE")
     @classmethod
@@ -38,6 +39,20 @@ class Config(BaseModel):
         if v not in ALLOWED_SCAN_TYPES:
             raise ValueError(f"Invalid SCAN_TYPE. Allowed values: {', '.join(ALLOWED_SCAN_TYPES)}.")
         return v
+
+    @model_validator(mode="after")
+    def check_upload_fields(self):
+        if not self.SKIP_UPLOAD:
+            missing = [
+                name
+                for name in ["ACCUKNOX_ENDPOINT", "ACCUKNOX_LABEL", "ACCUKNOX_TOKEN"]
+                if not getattr(self, name)
+            ]
+            if missing:
+                raise ValueError(
+                    f"Missing required fields when SKIP_UPLOAD is False: {', '.join(missing)}"
+                )
+        return self
 
 class ContainerScannerConfig(BaseModel):
     COMMAND: str
@@ -154,18 +169,19 @@ class SecretScannerConfig(BaseModel):
     CONTAINER_MODE: bool
 
 class ConfigValidator:
-    def __init__(self, scan_type, accuknox_endpoint, accuknox_label, accuknox_token, softfail):
+    def __init__(self, scan_type, accuknox_endpoint, accuknox_label, accuknox_token, softfail, skip_upload):
         try:
             self.config = Config(
                 SCAN_TYPE=scan_type,
                 ACCUKNOX_ENDPOINT=accuknox_endpoint,
                 ACCUKNOX_LABEL=accuknox_label,
                 ACCUKNOX_TOKEN=accuknox_token,
-                SOFT_FAIL=softfail
+                SOFT_FAIL=softfail,
+                SKIP_UPLOAD=skip_upload
             )
         except ValidationError as e:
             for error in e.errors():
-                Logger.get_logger().error(f"{error['loc'][0]}: {error['msg']}")
+                Logger.get_logger().error(f"{error['msg']}")
             sys.exit(1)
 
     def validate_iac_scan(self, command, container_mode, repo_url, repo_branch):
