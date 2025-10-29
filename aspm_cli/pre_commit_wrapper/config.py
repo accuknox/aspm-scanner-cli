@@ -16,6 +16,7 @@ PRE_COMMIT_CONTENT = """repos:
         pass_filenames: false
 """
 
+# TODO: precommit global support, display the findings, remove results.json file
 def handle_pre_commit(args):
 
     try:

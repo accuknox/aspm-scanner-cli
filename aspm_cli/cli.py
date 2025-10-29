@@ -261,9 +261,10 @@ def main():
     install_parser = precommit_subparsers.add_parser(
         "install", help="Install pre-commit hooks"
     )
-    install_parser.add_argument(
-        "--global", action="store_true", help="Run install globally"
-    )
+    # TODO: precommit global support
+    # install_parser.add_argument(
+    #     "--global", action="store_true", help="Run install globally"
+    # )
     install_parser.set_defaults(func=handle_pre_commit)
 
     uninstall_parser = precommit_subparsers.add_parser(
