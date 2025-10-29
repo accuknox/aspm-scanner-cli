@@ -13,6 +13,7 @@ class Spinner:
     def __init__(self, message="Processing...", color=Fore.GREEN):
         self.message = message
         self.color = color
+        # GITHUB_ACTIONS / TF_BUILD-AzureDevOps Auto detect
         self.is_ci = os.getenv("DISABLE_SPINNER") == "TRUE" or os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("TF_BUILD") == "True"
         self._running = False
         self._spinner = itertools.cycle(["|", "/", "-", "\\"])
