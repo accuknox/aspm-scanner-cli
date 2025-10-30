@@ -1,58 +1,46 @@
+from pre_commit.commands.install_uninstall import install, uninstall
+from pre_commit.store import Store
+from pre_commit import git
+from pre_commit.constants import CONFIG_FILE
 import os
-import subprocess
-from aspm_cli.utils.logger import Logger
-from colorama import Fore
 
-def _run_command(cmd, cwd=None, check=True):
-    """Helper to run shell commands."""
-    Logger.get_logger().debug(f"Running command: {' '.join(cmd)}")
-    try:
-        result = subprocess.run(cmd, cwd=cwd, check=check, capture_output=True, text=True)
-        return result.stdout.strip(), result.stderr.strip()
-    except subprocess.CalledProcessError as e:
-        Logger.get_logger().error(f"Command failed: {' '.join(cmd)}")
-        Logger.get_logger().error(f"Stdout: {e.stdout.strip()}")
-        Logger.get_logger().error(f"Stderr: {e.stderr.strip()}")
-        raise
-    except FileNotFoundError:
-        Logger.get_logger().error(f"Command not found: {cmd[0]}. Is it installed and in PATH?")
-        raise
+PRE_COMMIT_CONTENT = """repos:
+  - repo: local
+    hooks:
+      - id: accuknox-secret-scan
+        name: AccuKnox Secret Scan
+        entry:  accuknox-aspm-scanner scan --skip-upload secret --command "git file://." --container-mode
+        language: system
+        stages: [pre-commit]
+        types: [text]
+        pass_filenames: false
+"""
 
+# TODO: precommit global support, display the findings, remove results.json file
 def handle_pre_commit(args):
-    """
-    Handles pre-commit hook installation and uninstallation.
-    This function replaces the pre-commit related logic from the original main.py.
-    """
-    precommit_cmd = args.precommit_cmd
-    project_root = os.getcwd() # Assume current directory is the project root
 
-    # Check if pre-commit is installed
     try:
-        _run_command(["pre-commit", "--version"], check=True)
-    except Exception:
-        Logger.get_logger().error(
-            f"{Fore.RED}pre-commit is not installed or not in PATH. "
-            f"Please install it (e.g., `pip install pre-commit`) and try again.{Fore.RESET}"
-        )
-        return
+        store = Store()
+        git.check_for_cygwin_mismatch()
 
-    if precommit_cmd == "install":
-        Logger.get_logger().info(f"Installing pre-commit hooks in {project_root}...")
-        try:
-            # This assumes your .pre-commit-config.yaml exists and is configured correctly
-            stdout, stderr = _run_command(["pre-commit", "install"], cwd=project_root)
-            Logger.log_with_color('INFO', f"Pre-commit hooks installed successfully!\n{stdout}", Fore.GREEN)
-        except Exception:
-            Logger.get_logger().error(f"{Fore.RED}Failed to install pre-commit hooks.{Fore.RESET}")
-            # Optionally show stderr from original command: Logger.get_logger().error(stderr_from_exception)
-            # This would require catching CalledProcessError specifically and accessing its stdout/stderr
-    elif precommit_cmd == "uninstall":
-        Logger.get_logger().info(f"Uninstalling pre-commit hooks from {project_root}...")
-        try:
-            stdout, stderr = _run_command(["pre-commit", "uninstall"], cwd=project_root)
-            Logger.log_with_color('INFO', f"Pre-commit hooks uninstalled successfully!\n{stdout}", Fore.GREEN)
-        except Exception:
-            Logger.get_logger().error(f"{Fore.RED}Failed to uninstall pre-commit hooks.{Fore.RESET}")
-    else:
-        # This case should ideally not be reached due to argparse 'required=True'
-        Logger.get_logger().error(f"Unknown pre-commit command: {precommit_cmd}")
+        # create .pre-commit-config.yaml
+        with open(CONFIG_FILE, "w") as f:
+            f.write(PRE_COMMIT_CONTENT)
+
+        if args.precommit_cmd == "install":
+            exit_code = install(
+                CONFIG_FILE,
+                store,
+                hook_types=None,
+                overwrite=True,
+                hooks=True,
+                # global_install if later supported
+                # global_install=args.global
+            )
+        elif args.precommit_cmd == "uninstall":
+            exit_code = uninstall(config_file=CONFIG_FILE, hook_types=None)
+        else:
+            exit_code = 1
+
+    except Exception as e:
+        print(f"Pre-commit failed: {e}")

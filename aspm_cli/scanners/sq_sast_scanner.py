@@ -2,7 +2,7 @@ import argparse
 from aspm_cli.scanners.base_scanner import BaseScanner
 from aspm_cli.utils.config import ConfigValidator
 from aspm_cli.utils.git_info import GitInfo
-from aspm_cli.scan.sq_sast import SQSASTScanner as OriginalSQSASTScanner # Import original scanner logic
+from aspm_cli.scan.sq_sast import SQSASTScanner as OriginalSQSASTScanner 
 
 class SQSASTScanner(BaseScanner):
     help_text = "Run SonarQube Static Application Security Testing (SAST) scan"
@@ -33,7 +33,6 @@ class SQSASTScanner(BaseScanner):
         )
 
     def run_scan(self, args: argparse.Namespace) -> tuple[int, str]:
-        # Instantiate and run the original scanner logic
         scanner = OriginalSQSASTScanner(
             args.skip_sonar_scan, args.command, args.container_mode,
             args.repo_url, args.branch, args.commit_sha, args.pipeline_url

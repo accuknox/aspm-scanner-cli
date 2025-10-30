@@ -1,7 +1,7 @@
 import argparse
 from aspm_cli.scanners.base_scanner import BaseScanner
 from aspm_cli.utils.config import ConfigValidator
-from aspm_cli.scan.secret import SecretScanner as OriginalSecretScanner # Import original scanner logic
+from aspm_cli.scan.secret import SecretScanner as OriginalSecretScanner
 
 class SecretScanner(BaseScanner):
     help_text = "Run Secret scan using TruffleHog"
@@ -24,6 +24,5 @@ class SecretScanner(BaseScanner):
         validator.validate_secret_scan(args.command, args.container_mode)
 
     def run_scan(self, args: argparse.Namespace) -> tuple[int, str]:
-        # Instantiate and run the original scanner logic
         scanner = OriginalSecretScanner(args.command, args.container_mode)
         return scanner.run()

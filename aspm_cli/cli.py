@@ -28,7 +28,7 @@ def main():
 
     if hasattr(args, 'func'):
         try:
-            # Command classes now directly execute via their 'func' attribute set in configure_parser
+            # Command classes directly execute via their 'func' attribute set in configure_parser
             args.func(args)
         except Exception as e:
             Logger.get_logger().error(f"Command execution failed: {e}")

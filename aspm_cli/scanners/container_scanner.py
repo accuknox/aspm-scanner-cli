@@ -1,7 +1,7 @@
 import argparse
 from aspm_cli.scanners.base_scanner import BaseScanner
 from aspm_cli.utils.config import ConfigValidator
-from aspm_cli.scan.container import ContainerScanner as OriginalContainerScanner # Import original scanner logic
+from aspm_cli.scan.container import ContainerScanner as OriginalContainerScanner
 
 class ContainerScanner(BaseScanner):
     help_text = "Run a container image scan using Trivy"

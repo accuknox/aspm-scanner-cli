@@ -10,12 +10,12 @@ class PreCommitCommand(BaseCommand):
         install_parser = subparsers.add_parser(
             "install", help="Install pre-commit hooks"
         )
-        install_parser.set_defaults(func=self.execute) # Direct execution
+        install_parser.set_defaults(func=self.execute) 
 
         uninstall_parser = subparsers.add_parser(
             "uninstall", help="Uninstall pre-commit hooks"
         )
-        uninstall_parser.set_defaults(func=self.execute) # Direct execution
+        uninstall_parser.set_defaults(func=self.execute)
 
     def execute(self, args):
         # The original handle_pre_commit already takes 'args' and handles the logic

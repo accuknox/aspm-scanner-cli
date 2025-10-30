@@ -2,7 +2,7 @@ import argparse
 from aspm_cli.scanners.base_scanner import BaseScanner
 from aspm_cli.utils.config import ConfigValidator
 from aspm_cli.utils.git_info import GitInfo
-from aspm_cli.scan.sast import SASTScanner as OriginalSASTScanner # Import original scanner logic
+from aspm_cli.scan.sast import SASTScanner as OriginalSASTScanner 
 
 class SASTScanner(BaseScanner):
     help_text = "Run Static Application Security Testing (SAST) scan using Semgrep"
@@ -37,7 +37,6 @@ class SASTScanner(BaseScanner):
         )
 
     def run_scan(self, args: argparse.Namespace) -> tuple[int, str]:
-        # Instantiate and run the original scanner logic
         scanner = OriginalSASTScanner(
             args.command, args.container_mode, args.severity, args.repo_url,
             args.commit_ref, args.commit_sha, args.pipeline_id, args.job_url

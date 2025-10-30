@@ -29,6 +29,5 @@ class DASTScanner(BaseScanner):
         validator.validate_dast_scan(args.command, args.severity_threshold, args.container_mode)
 
     def run_scan(self, args: argparse.Namespace) -> tuple[int, str]:
-        # Instantiate and run the original scanner logic
         scanner = OriginalDASTScanner(args.command, args.severity_threshold, args.container_mode)
         return scanner.run()

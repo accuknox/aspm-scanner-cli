@@ -2,7 +2,7 @@ import argparse
 from aspm_cli.scanners.base_scanner import BaseScanner
 from aspm_cli.utils.config import ConfigValidator
 from aspm_cli.utils.git_info import GitInfo
-from aspm_cli.scan import IaCScanner as OriginalIaCScanner # Import original scanner logic
+from aspm_cli.scan import IaCScanner as OriginalIaCScanner
 
 class IACScanner(BaseScanner):
     help_text = "Run Infrastructure as Code (IaC) scan using Checkov"
@@ -26,6 +26,5 @@ class IACScanner(BaseScanner):
         validator.validate_iac_scan(args.command, args.container_mode, args.repo_url, args.repo_branch)
 
     def run_scan(self, args: argparse.Namespace) -> tuple[int, str]:
-        # Instantiate and run the original scanner logic
         scanner = OriginalIaCScanner(args.command, args.container_mode, args.repo_url, args.repo_branch)
         return scanner.run()
