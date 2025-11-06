@@ -103,7 +103,7 @@ def run_scan(args):
             data_type = "SG"
         elif args.scantype.lower() == "dast":
             validator.validate_dast_scan(args.command, args.severity_threshold, args.container_mode)
-            scanner = DASTScanner(args.command, args.severity_threshold, args.container_mode)
+            scanner = DASTScanner(args.command, args.severity_threshold, args.container_mode, args.report_template)
             data_type = "ZAP"
         else:
             Logger.get_logger().error("Invalid scan type.")
@@ -228,6 +228,10 @@ def add_dast_scan_args(parser):
         "--container-mode",
         action="store_true",
         help="Run in container mode"
+    )
+    parser.add_argument(
+        "--report-template",
+        help="ZAP Reporting template to include request/response (e.g., 'traditional-json-plus'). Overrides ZAP_REPORT_TEMPLATE env var if set."
     )
 
 def add_download_args(subparser):
