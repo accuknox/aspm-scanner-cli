@@ -34,7 +34,7 @@ class ToolDownloader:
 
         self.install_dir.mkdir(parents=True, exist_ok=True)
 
-    def _download_tool(self, tool_type, overwrite=False):
+    def download_tool(self, tool_type, overwrite=False):
         download_url = self.TOOL_URLS[self.system].get(tool_type)
         if not download_url:
             Logger.get_logger().error(f"No download URL found for {tool_type} on {self.system}")
