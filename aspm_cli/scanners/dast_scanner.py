@@ -23,10 +23,14 @@ class DASTScanner(BaseScanner):
             action="store_true",
             help="Run in container mode"
         )
+        parser.add_argument(
+            "--report-template",
+            help="ZAP Reporting template to include request/response (e.g., 'traditional-json-plus'). Overrides ZAP_REPORT_TEMPLATE env var if set."
+        )
 
     def validate_config(self, args: argparse.Namespace, validator: ConfigValidator):
         validator.validate_dast_scan(args.command, args.severity_threshold, args.container_mode)
 
     def run_scan(self, args: argparse.Namespace) -> tuple[int, str]:
-        scanner = OriginalDASTScanner(args.command, args.severity_threshold, args.container_mode)
+        scanner = OriginalDASTScanner(args.command, args.severity_threshold, args.container_mode, args.report_template)
         return scanner.run()

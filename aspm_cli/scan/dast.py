@@ -11,17 +11,26 @@ from aspm_cli.tool.manager import ToolManager
 class DASTScanner:
     zap_image = os.getenv("SCAN_IMAGE", "public.ecr.aws/k9v9d5v2/zaproxy/zap-stable:2.16.1")
     result_file = "results.json"
+    report_template = os.getenv("ZAP_REPORT_TEMPLATE")  # default from env, can be overridden via CLI
 
-    def __init__(self, command="", severity_threshold=None, container_mode=True):
+    def __init__(self, command="", severity_threshold=None, container_mode=True, report_template=None):
         """
         :param command: Raw CLI args string for zap scripts
                         Example: "zap-baseline.py -t https://example.com -J results.json -I"
         :param severity_threshold: Minimum severity to fail on ("High", "Medium", "Low", "Informational")
         :param container_mode: Currently only container mode is supported
+        :param report_template: Optional ZAP Reporting template (e.g., "traditional-json-plus")
+                               Requires container_mode=True
         """
         self.command = command
         self.severity_threshold = severity_threshold
         self.container_mode = container_mode
+        # Prefer CLI-provided template, fallback to env var
+        self.report_template = report_template or self.report_template
+        
+        # Validate: Template requires container mode
+        if self.report_template and not container_mode:
+            raise ValueError("Report template requires container_mode=True. Automation Framework is only supported in container mode.")
 
     def run(self):
         try:
@@ -64,9 +73,30 @@ class DASTScanner:
         """
         Sanitize the raw command, remove conflicting report flags,
         and enforce JSON output.
+        
+        If report_template is set, use Automation Framework instead.
         """
         args = shlex.split(self.command)
 
+        # If template is set, use Automation Framework
+        if self.report_template:
+            # Extract target URL from command (look for -t flag)
+            target_url = None
+            for i, arg in enumerate(args):
+                if arg == "-t" and i + 1 < len(args):
+                    target_url = args[i + 1]
+                    break
+            
+            if not target_url:
+                raise ValueError("When using --report-template, the command must include '-t <URL>' to specify the target URL")
+            
+            # Generate Automation Framework YAML
+            self._write_zap_automation_yaml(target_url)
+            
+            # Return Automation Framework command
+            return ["zap.sh", "-cmd", "-autorun", "/zap/wrk/zap.yaml"]
+
+        # Original logic for baseline scans (no template)
         if not self.container_mode and ("zap-baseline.py" in shlex.join(args) or "zap-full-scan.py" in shlex.join(args)):
             raise NotImplementedError(
                 "DASTScanner currently supports zap.sh only"
@@ -149,3 +179,49 @@ class DASTScanner:
         except Exception as e:
             Logger.get_logger().error(f"Error evaluating DAST results: {e}")
             return 1
+
+    def _write_zap_automation_yaml(self, target_url: str):
+        """
+        Write a minimal ZAP Automation Framework YAML to generate a report using
+        the specified template directly to /zap/wrk/results.json (mounted cwd).
+        Optimized to match zap-baseline.py performance.
+        """
+        try:
+            yaml_content = f"""env:
+  contexts:
+    - name: ctx
+      urls:
+        - {target_url}
+  parameters:
+    failOnError: true
+    progressToStdout: false
+jobs:
+  - type: passiveScan-config
+    parameters:
+      enableTags: false
+      maxAlertsPerRule: 10
+  - type: spider
+    parameters:
+      context: ctx
+      url: {target_url}
+      maxDuration: 1
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 0
+  - type: report
+    parameters:
+      template: {self.report_template}
+      reportDir: /zap/wrk
+      reportFile: results.json
+      reportTitle: DAST
+""".lstrip()
+
+            with open("zap.yaml", "w") as f:
+                f.write(yaml_content)
+            
+            # Ensure our scanner expects the AF report output
+            self.result_file = "results.json"
+            Logger.get_logger().debug("Wrote ZAP Automation Framework yaml to zap.yaml")
+        except Exception as e:
+            Logger.get_logger().error(f"Failed writing zap.yaml: {e}")
+            raise
