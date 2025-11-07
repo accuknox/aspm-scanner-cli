@@ -54,14 +54,22 @@ class ToolCommand(BaseCommand):
             for tool in ALLOWED_TOOL_TYPES:
                 spinner = Spinner(message=f"{action_message_present[args.mode]} tool for: {tool}")
                 spinner.start()
-                downloaded = downloader.download_tool(validated.tooltype, overwrite)
+                downloaded = downloader.download_tool(tool, overwrite)  # <-- FIXED HERE
                 spinner.stop()
                 if downloaded:
-                    Logger.log_with_color('INFO', f"{tool} {action_message[args.mode]} successfully.", Fore.GREEN)
+                    Logger.log_with_color(
+                        'INFO',
+                        f"{tool} {action_message[args.mode]} successfully.",
+                        Fore.GREEN
+                    )
         else:
             spinner = Spinner(message=f"{action_message_present[args.mode]} tool for: {validated.tooltype}")
             spinner.start()
             downloaded = downloader.download_tool(validated.tooltype, overwrite)
             spinner.stop()
             if downloaded:
-                Logger.log_with_color('INFO', f"{validated.tooltype} {action_message[args.mode]} successfully.", Fore.GREEN)
+                Logger.log_with_color(
+                    'INFO',
+                    f"{validated.tooltype} {action_message[args.mode]} successfully.",
+                    Fore.GREEN
+                )

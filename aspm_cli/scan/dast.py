@@ -121,8 +121,9 @@ class DASTScanner:
         """
         Parse ZAP JSON report and check alerts against severity threshold.
         """
-        risk_map = {"High": 3, "Medium": 2, "Low": 1, "Informational": 0}
-        risk_code = risk_map.get(self.severity_threshold, 3)
+        risk_map = {"INFORMATIONAL": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3}
+        threshold = self.severity_threshold.strip().upper()
+        risk_code = risk_map.get(threshold)
 
         try:
             with open(self.result_file, "r") as f:
@@ -136,12 +137,12 @@ class DASTScanner:
 
             if alerts:
                 Logger.get_logger().error(
-                    f"Found vulnerabilities with severity {self.severity_threshold} or higher."
+                    f"Found vulnerabilities with severity {threshold} or higher."
                 )
                 return 1
             else:
                 Logger.get_logger().info(
-                    f"No vulnerabilities with severity {self.severity_threshold} or higher found."
+                    f"No vulnerabilities with severity {threshold} or higher found."
                 )
                 return 0
 

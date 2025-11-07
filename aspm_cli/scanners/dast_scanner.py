@@ -10,8 +10,7 @@ class DASTScanner(BaseScanner):
     def add_arguments(self, parser: argparse.ArgumentParser):
         parser.add_argument(
             "--severity-threshold",
-            default="High",
-            choices=["LOW", "MEDIUM", "HIGH"],
+            default="HIGH",
             help="Severity level to fail the scan. Allowed values: LOW, MEDIUM, HIGH. Default is HIGH"
         )
         parser.add_argument(

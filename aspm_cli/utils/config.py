@@ -1,16 +1,25 @@
 import os
-from pydantic import BaseModel, Field, ValidationError, validator, model_validator, FieldValidationInfo
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator, FieldValidationInfo
 from typing import Optional, Literal
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils.common import ALLOWED_SCAN_TYPES
+
+def _format_validation_error(e: ValidationError) -> str:
+    """Return a concise error summary (no verbose Pydantic metadata)."""
+    errors = []
+    for err in e.errors():
+        loc = " → ".join(str(x) for x in err.get("loc", []))
+        msg = err.get("msg", "")
+        errors.append(f"{loc}: {msg}")
+    return "; ".join(errors)
 
 class AccuknoxConfig(BaseModel):
     accuknox_endpoint: Optional[str] = Field(None, env="ACCUKNOX_ENDPOINT", description="AccuKnox API endpoint")
     accuknox_label: Optional[str] = Field(None, env="ACCUKNOX_LABEL", description="AccuKnox label for scan results")
     accuknox_token: Optional[str] = Field(None, env="ACCUKNOX_TOKEN", description="AccuKnox authentication token")
-    skip_upload: bool = Field(False) # Add this to the model as it's passed directly now
+    skip_upload: bool = Field(False) 
 
-    @model_validator(mode='after') # Pydantic V2 equivalent of root_validator(pre=True) or post-init
+    @model_validator(mode='after') 
     def check_env_vars_and_upload_requirements(self) -> 'AccuknoxConfig':
         # Check env vars (equivalent to root_validator(pre=True) for env vars)
         if self.accuknox_endpoint is None and "ACCUKNOX_ENDPOINT" in os.environ:
@@ -59,8 +68,9 @@ class ConfigValidator:
             # Pass kwargs directly; AccuknoxConfig now handles 'skip_upload'
             self.accuknox_config = AccuknoxConfig(skip_upload=skip_upload, **kwargs)
         except ValidationError as e:
-            Logger.get_logger().error(f"AccuKnox configuration error: {e}")
-            raise
+            concise_msg = _format_validation_error(e)
+            Logger.get_logger().debug(f"AccuKnox configuration error: {concise_msg}")
+            raise ValueError(concise_msg)
 
         Logger.get_logger().debug(f"Initialized ConfigValidator for scantype: {self.scantype}, softfail: {self.softfail}, skip_upload: {self.skip_upload}")
 
@@ -83,8 +93,9 @@ class ConfigValidator:
             IaCScanConfig(command=command, container_mode=container_mode, repo_url=repo_url, repo_branch=repo_branch)
             self._log_validation_success("IAC")
         except ValidationError as e:
-            Logger.get_logger().error(f"IAC scan configuration error: {e}")
-            raise
+            concise_msg = _format_validation_error(e)
+            Logger.get_logger().debug(f"IAC scan configuration error: {concise_msg}")
+            raise ValueError(concise_msg)
 
     def validate_sq_sast_scan(self, skip_sonar_scan: bool, command: str, container_mode: bool, repo_url: Optional[str], branch: Optional[str], commit_sha: Optional[str], pipeline_url: Optional[str]):
         class SQSAScanConfig(BaseModel):
@@ -114,8 +125,9 @@ class ConfigValidator:
             )
             self._log_validation_success("SQ SAST")
         except ValidationError as e:
-            Logger.get_logger().error(f"SQ SAST scan configuration error: {e}")
-            raise
+            concise_msg = _format_validation_error(e)
+            Logger.get_logger().debug(f"SQ SAST scan configuration error: {concise_msg}")
+            raise ValueError(concise_msg)
 
     def validate_secret_scan(self, command: str, container_mode: bool):
         class SecretScanConfig(BaseModel):
@@ -126,8 +138,9 @@ class ConfigValidator:
             SecretScanConfig(command=command, container_mode=container_mode)
             self._log_validation_success("Secret")
         except ValidationError as e:
-            Logger.get_logger().error(f"Secret scan configuration error: {e}")
-            raise
+            concise_msg = _format_validation_error(e)
+            Logger.get_logger().debug(f"Secret scan configuration error: {concise_msg}")
+            raise ValueError(concise_msg)
 
     def validate_container_scan(self, command: str, container_mode: bool):
         class ContainerScanConfig(BaseModel):
@@ -138,8 +151,9 @@ class ConfigValidator:
             ContainerScanConfig(command=command, container_mode=container_mode)
             self._log_validation_success("Container")
         except ValidationError as e:
-            Logger.get_logger().error(f"Container scan configuration error: {e}")
-            raise
+            concise_msg = _format_validation_error(e)
+            Logger.get_logger().debug(f"Container scan configuration error: {concise_msg}")
+            raise ValueError(concise_msg)
 
     def validate_sast_scan(self, command: str, container_mode: bool, severity: str, repo_url: Optional[str], commit_ref: Optional[str], commit_sha: Optional[str], pipeline_id: Optional[str], job_url: Optional[str]):
         class SASTScanConfig(BaseModel):
@@ -151,14 +165,26 @@ class ConfigValidator:
             commit_sha: Optional[str]
             pipeline_id: Optional[str]
             job_url: Optional[str]
-
-            @validator('severity')
-            def check_severity_values(cls, v: str, info: FieldValidationInfo):
+            
+            @field_validator("severity", mode="before")
+            @classmethod
+            def validate_severity(cls, v: str, info: FieldValidationInfo):
                 allowed_severities = {"INFO", "WARNING", "LOW", "MEDIUM", "HIGH", "CRITICAL"}
-                provided_severities = {s.strip().upper() for s in v.split(',')}
-                if not provided_severities.issubset(allowed_severities):
-                    raise ValueError(f"Invalid severity provided. Allowed: {', '.join(allowed_severities)}")
-                return v
+                if not isinstance(v, str):
+                    raise ValueError("Severity must be a comma-separated string.")
+
+                provided_severities = {s.strip().upper() for s in v.split(",") if s.strip()}
+
+                if not provided_severities:
+                    raise ValueError("At least one severity must be provided.")
+
+                invalid = provided_severities - allowed_severities
+                if invalid:
+                    raise ValueError(
+                        f"Invalid severity values: {', '.join(sorted(invalid))}. "
+                        f"Allowed values: {', '.join(sorted(allowed_severities))}."
+                )
+                return ",".join(sorted(provided_severities))
 
         try:
             SASTScanConfig(
@@ -173,8 +199,9 @@ class ConfigValidator:
             )
             self._log_validation_success("SAST")
         except ValidationError as e:
-            Logger.get_logger().error(f"SAST scan configuration error: {e}")
-            raise
+            concise_msg = _format_validation_error(e)
+            Logger.get_logger().debug(f"SAST scan configuration error: {concise_msg}")
+            raise ValueError(concise_msg)
 
     def validate_dast_scan(self, command: str, severity_threshold: str, container_mode: bool):
         class DASTScanConfig(BaseModel):
@@ -182,13 +209,15 @@ class ConfigValidator:
             severity_threshold: Literal["LOW", "MEDIUM", "HIGH"] = Field(..., description="Severity threshold for DAST scan")
             container_mode: bool
 
-            @validator('severity_threshold', pre=True)
-            def convert_to_upper(cls, v: str, info: FieldValidationInfo):
+            @field_validator("severity_threshold", mode="before")
+            @classmethod
+            def convert_to_upper(cls, v: str):
                 return v.upper()
 
         try:
             DASTScanConfig(command=command, severity_threshold=severity_threshold, container_mode=container_mode)
             self._log_validation_success("DAST")
         except ValidationError as e:
-            Logger.get_logger().error(f"DAST scan configuration error: {e}")
-            raise
+            concise_msg = _format_validation_error(e)
+            Logger.get_logger().debug(f"DAST scan configuration error: {concise_msg}")
+            raise ValueError(concise_msg)

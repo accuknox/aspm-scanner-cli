@@ -55,7 +55,7 @@ class ToolDownloader:
                     Logger.get_logger().error(f"Failed to remove existing {tool_type}: {e}")
                     return False
             else:
-                Logger.get_logger().info(f"{tool_type} already exists. Skipping download.")
+                Logger.get_logger().warning(f"{tool_type} already exists. Skipping download.")
                 return False
 
         Logger.get_logger().debug(f"Downloading {tool_type} from {download_url}")

@@ -1,17 +1,23 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Literal, Optional
 
-# Moved from original main.py / utils.py
 ALLOWED_TOOL_TYPES = ["iac", "sast", "secret", "container", "dast", "sq-sast"]
 
 class ToolDownloadConfig(BaseModel):
-    tooltype: Optional[Literal[tuple(ALLOWED_TOOL_TYPES)]] = None
-    all: bool = False
+    tooltype: Optional[str] = Field(default=None)
+    all: Optional[bool] = Field(default=False)
 
-    @validator('tooltype', always=True)
-    def check_tooltype_or_all(cls, v, values):
-        if not v and not values.get('all'):
-            raise ValueError('Either --type or --all must be specified.')
-        if v and values.get('all'):
-            raise ValueError('Cannot specify both --type and --all.')
+    @field_validator("tooltype")
+    @classmethod
+    def validate_tooltype(cls, v):
+        if v and v not in ALLOWED_TOOL_TYPES:
+            raise ValueError(f"Invalid tooltype. Allowed values: {', '.join(ALLOWED_TOOL_TYPES)}")
         return v
+
+    @model_validator(mode="after")
+    def validate_either_tooltype_or_all(self):
+        if self.all and self.tooltype:
+            raise ValueError("Cannot specify both --all and a tooltype at the same time.")
+        if not self.all and not self.tooltype:
+            raise ValueError("You must specify either a tooltype or use --all.")
+        return self
