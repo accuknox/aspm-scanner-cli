@@ -1,6 +1,9 @@
 import os
 import sys
 import requests
+import urllib3
+# Suppress SSL warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import json
 from colorama import Fore
 
@@ -28,7 +31,7 @@ def print_banner():
         # Skipping if there are any issues with Unicode chars
         print(Fore.BLUE + "ACCUKNOX ASPM SCANNER")
 
-def upload_results(file_path, endpoint, label, token, data_type):
+def upload_results(file_path, endpoint, label, token, tenant_id, data_type):
     upload_exit_code = 1
     """Uploads scan results to the AccuKnox endpoint."""
     if not os.path.exists(file_path):
@@ -39,10 +42,14 @@ def upload_results(file_path, endpoint, label, token, data_type):
     headers = {
         "Authorization": f"Bearer {token}"
     }
+    if tenant_id:
+        headers["Tenant-Id"] = tenant_id
     params = {
         "data_type": data_type,
         "label_id": label
     }
+    if tenant_id:
+        params["tenant_id"] = tenant_id
 
     spinner = Spinner(message="Uploading scan results...")
     try:

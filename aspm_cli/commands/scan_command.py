@@ -19,6 +19,7 @@ class ScanCommand(BaseCommand):
         parser.add_argument("--endpoint", help="The URL of the Control Panel to push the scan results to.")
         parser.add_argument("--label", help="The label created in AccuKnox for associating scan results.")
         parser.add_argument("--token", help="The token for authenticating with the Control Panel.")
+        parser.add_argument("--tenant", help="Tenant ID [Optional]")
         parser.add_argument('--softfail', action='store_true', help='Enable soft fail mode for scanning')
         parser.add_argument('--skip-upload', action='store_true', help='Skip control plane upload')
 
@@ -37,7 +38,8 @@ class ScanCommand(BaseCommand):
             accuknox_config = {
                 "accuknox_endpoint": args.endpoint or os.getenv("ACCUKNOX_ENDPOINT"),
                 "accuknox_label": args.label or os.getenv("ACCUKNOX_LABEL"),
-                "accuknox_token": args.token or os.getenv("ACCUKNOX_TOKEN")
+                "accuknox_token": args.token or os.getenv("ACCUKNOX_TOKEN"),
+                "accuknox_tenant": args.tenant or os.getenv("ACCUKNOX_TENANT"),
             }
 
             # Get the correct scanner strategy from the registry
@@ -64,7 +66,7 @@ class ScanCommand(BaseCommand):
             # Upload results and handle failure
             upload_exit_code = 0
             if not skip_upload and result_file:
-                upload_exit_code = upload_results(result_file, accuknox_config["accuknox_endpoint"], accuknox_config["accuknox_label"], accuknox_config["accuknox_token"], scanner.data_type_identifier)
+                upload_exit_code = upload_results(result_file, accuknox_config["accuknox_endpoint"], accuknox_config["accuknox_label"], accuknox_config["accuknox_token"], accuknox_config["accuknox_tenant"], scanner.data_type_identifier)
             elif result_file and os.path.exists(result_file):
                 os.remove(result_file)
             else:

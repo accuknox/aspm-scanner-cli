@@ -18,6 +18,7 @@ class AccuknoxConfig(BaseModel):
     accuknox_label: Optional[str] = Field(None, env="ACCUKNOX_LABEL", description="AccuKnox label for scan results")
     accuknox_token: Optional[str] = Field(None, env="ACCUKNOX_TOKEN", description="AccuKnox authentication token")
     skip_upload: bool = Field(False) 
+    accuknox_tenant: Optional[int]
 
     @model_validator(mode='after') 
     def check_env_vars_and_upload_requirements(self) -> 'AccuknoxConfig':
