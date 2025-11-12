@@ -32,7 +32,7 @@ def main():
             args.func(args)
         except Exception as e:
             Logger.get_logger().error(f"Command execution failed: {e}")
-            if os.getenv("ASPM_DEBUG"): # Optional: for more detailed debug
+            if os.getenv('DEBUG', 'FALSE').upper() == 'TRUE': # Optional: for more detailed debug
                 Logger.get_logger().debug("--- Full Traceback ---")
                 import traceback
                 Logger.get_logger().debug(traceback.format_exc())

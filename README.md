@@ -24,7 +24,7 @@ It integrates with the **AccuKnox ASPM Platform** but can also operate **complet
 ### 1. From PyPI (Cloud or Connected Environment)
 
 ```bash
-pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.13.6/accuknox_aspm_scanner-0.13.6-py3-none-any.whl
+pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.13.7/accuknox_aspm_scanner-0.13.7-py3-none-any.whl
 ````
 
 ### 2. From Precompiled Package (On-Prem Setup)
@@ -193,7 +193,7 @@ accuknox-aspm-scanner scan iac --command "-d ." --container-mode
 Enable verbose debug mode:
 
 ```bash
-ASPM_DEBUG=TRUE accuknox-aspm-scanner scan iac --command "-d ."
+DEBUG=TRUE accuknox-aspm-scanner scan iac --command "-d ."
 ```
 
 ---
