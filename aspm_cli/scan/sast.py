@@ -237,6 +237,7 @@ Output ONLY the JSON object - no markdown blocks, no explanations, no additional
             cmd = [
                 "docker", "run", "--rm",
                 "-e", f"ANTHROPIC_API_KEY={self.antropic_api_key}",
+                "-e", "CLAUDE_CODE_MAX_OUTPUT_TOKENS=200000",
                 "-v", f"{os.getcwd()}:/workspace",
                 self.claude_image,
                 "claude", "--system-prompt", system_prompt, user_prompt
