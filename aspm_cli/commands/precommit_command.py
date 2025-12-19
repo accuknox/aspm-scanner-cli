@@ -10,10 +10,22 @@ class PreCommitCommand(BaseCommand):
         install_parser = subparsers.add_parser(
             "install", help="Install pre-commit hooks"
         )
+        install_parser.add_argument(
+            "--global",
+            dest="global_install",
+            action="store_true",
+            help="Install a single pre-commit hook globally for all git repositories (sets git config core.hooksPath).",
+        )
         install_parser.set_defaults(func=self.execute) 
 
         uninstall_parser = subparsers.add_parser(
             "uninstall", help="Uninstall pre-commit hooks"
+        )
+        uninstall_parser.add_argument(
+            "--global",
+            dest="global_install",
+            action="store_true",
+            help="Uninstall the globally installed pre-commit hook (restores git config core.hooksPath).",
         )
         uninstall_parser.set_defaults(func=self.execute)
 
