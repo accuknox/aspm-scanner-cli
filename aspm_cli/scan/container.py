@@ -110,8 +110,12 @@ class ContainerScanner:
         if not self.container_mode:
             cmd = ([ToolManager.get_path("container")])
         else:
+            # Run as host user so result files are writable by the host process (for enrichment)
+            uid = os.getuid() if hasattr(os, "getuid") else 0
+            gid = os.getgid() if hasattr(os, "getgid") else 0
             cmd = [
                 "docker", "run", "--rm",
+                "--user", f"{uid}:{gid}",
                 "-v", "/var/run/docker.sock:/var/run/docker.sock",
                 "-v", f"{os.getcwd()}:/workdir",
                 "--workdir", "/workdir",
