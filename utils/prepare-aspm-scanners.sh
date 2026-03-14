@@ -42,7 +42,7 @@ echo "✅ Packaged as $SECRET_TAR"
 
 ### 3. Trivy -> container.tar.gz
 echo "=== [3/6] Downloading Trivy ==="
-TRIVY_VERSION="0.65.0"
+TRIVY_VERSION="0.69.2"
 TRIVY_URL="https://get.trivy.dev/trivy?type=tar.gz&version=${TRIVY_VERSION}&os=linux&arch=amd64"
 TRIVY_TAR="trivy.tar.gz"
 CONTAINER_BIN="container"
