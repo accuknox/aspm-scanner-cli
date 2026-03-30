@@ -42,8 +42,7 @@ echo "✅ Packaged as $SECRET_TAR"
 
 ### 3. Trivy -> container.tar.gz
 echo "=== [3/6] Downloading Trivy ==="
-TRIVY_VERSION=$(curl -s https://api.github.com/repos/accuknox/trivy/releases/latest \
-  | grep '"tag_name"' | cut -d'"' -f4 | sed 's/^v//')
+TRIVY_VERSION="0.69.3"
 TRIVY_TAR="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
 CONTAINER_BIN="container"
 mkdir -p temp_container_download
