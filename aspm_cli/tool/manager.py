@@ -38,6 +38,7 @@ class ToolManager:
         "dast-java": Path("dast") / "java" / "bin",
         "sast": Path("sast") / "sast",
         "sast-rules": Path("sast") / "rules",
+        "codeassure": Path("codeassure") / "codeassure",
     }
 
 
