@@ -17,7 +17,7 @@ class SASTScanner:
 
     def __init__(self, command=None, container_mode=True, severity = None,
                  repo_url=None, commit_ref=None, commit_sha=None,
-                 pipeline_id=None, job_url=None, anthropic_api_key=None, ai_analysis=True, codeassure_config=None,aiscan_severity="INFO,WARNING,LOW,MEDIUM,HIGH,CRITICAL,UNKNOWN,NOT_AVAILABLE,INFORMATIONAL"):
+                 pipeline_id=None, job_url=None, anthropic_api_key=None, ai_analysis=False, codeassure_config=None,aiscan_severity="INFO,WARNING,LOW,MEDIUM,HIGH,CRITICAL,UNKNOWN,NOT_AVAILABLE,INFORMATIONAL"):
         """
         :param command: Raw OpenGrep CLI args (string)
         :param container_mode: Run in Docker if True, else use local binary
