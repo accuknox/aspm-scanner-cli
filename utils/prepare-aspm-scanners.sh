@@ -144,7 +144,7 @@ git clone --branch test-1 "$CODEASSURE_REPO" "$TEMP_CODEASSURE"
 cd "$TEMP_CODEASSURE"
 
 pip install uv
-uv pip install -e ".[build]"
+uv pip install --system -e ".[build]"
 pyinstaller codeassure.spec --clean
 
 mkdir -p "../$CODEASSURE_FOLDER"
