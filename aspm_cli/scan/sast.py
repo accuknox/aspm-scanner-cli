@@ -44,30 +44,30 @@ class SASTScanner:
         try:
             Logger.get_logger().debug("Starting SAST scan...")
 
-            # if self.container_mode:
-            #     docker_pull(self.opengrep_image)
+            if self.container_mode:
+                docker_pull(self.opengrep_image)
 
-            # args = self._build_sast_args()
-            # cmd = self._build_sast_command(args)
+            args = self._build_sast_args()
+            cmd = self._build_sast_command(args)
 
-            # Logger.get_logger().debug(f"Running SAST scan: {' '.join(cmd)}")
-            # result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            Logger.get_logger().debug(f"Running SAST scan: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
 
-            # # Log outputs
-            # if result.stdout:
-            #     sanitized_stdout = re.sub(r"opengrep", "[scanner]", result.stdout, flags=re.IGNORECASE)
-            #     Logger.get_logger().debug(sanitized_stdout)
-            #     if "--help" in (self.command or ""):
-            #         Logger.log_with_color("INFO", sanitized_stdout, Fore.WHITE)
-            #         return config.PASS_RETURN_CODE, None
+            # Log outputs
+            if result.stdout:
+                sanitized_stdout = re.sub(r"opengrep", "[scanner]", result.stdout, flags=re.IGNORECASE)
+                Logger.get_logger().debug(sanitized_stdout)
+                if "--help" in (self.command or ""):
+                    Logger.log_with_color("INFO", sanitized_stdout, Fore.WHITE)
+                    return config.PASS_RETURN_CODE, None
 
-            # if result.stderr:
-            #     sanitized_stderr = re.sub(r"opengrep", "[scanner]", result.stderr, flags=re.IGNORECASE)
-            #     if "--help" in (self.command or "") and result.returncode == 0:
-            #         Logger.log_with_color("INFO", sanitized_stderr, Fore.WHITE)
-            #         return config.PASS_RETURN_CODE, None
-            #     else:
-            #         Logger.get_logger().error(sanitized_stderr)
+            if result.stderr:
+                sanitized_stderr = re.sub(r"opengrep", "[scanner]", result.stderr, flags=re.IGNORECASE)
+                if "--help" in (self.command or "") and result.returncode == 0:
+                    Logger.log_with_color("INFO", sanitized_stderr, Fore.WHITE)
+                    return config.PASS_RETURN_CODE, None
+                else:
+                    Logger.get_logger().error(sanitized_stderr)
 
 
             if os.path.exists(self.result_file) and os.stat(self.result_file).st_size > 0:
