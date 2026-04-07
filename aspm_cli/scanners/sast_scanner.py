@@ -26,7 +26,7 @@ class SASTScanner(BaseScanner):
         )
         parser.add_argument(
             "--aiscan-severity",
-            default="INFO,WARNING,LOW,MEDIUM,HIGH,CRITICAL,UNKNOWN,NOT_AVAILABLE,INFORMATIONAL",
+            default=None,
             help="Comma-separated list of severities to check for AI analysis. If any match, AI analysis will run on those findings."
         )
         parser.add_argument("--repo-url", default=GitInfo.get_repo_url(), help="Git repository URL")

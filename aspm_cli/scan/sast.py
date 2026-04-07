@@ -11,13 +11,13 @@ from urllib.parse import urlparse
 import re
 
 class SASTScanner:
-    opengrep_image = os.getenv("SCAN_IMAGE", "esh279/opengrepjob:0.1.0")
-    codeassure_image = os.getenv("CODEASSURE_IMAGE", "esh279/codeassure-cli-new:latest")
+    opengrep_image = os.getenv("SCAN_IMAGE", "public.ecr.aws/k9v9d5v2/accuknox/opengrepjob:0.1.0")
+    codeassure_image = os.getenv("CODEASSURE_IMAGE", "public.ecr.aws/k9v9d5v2/accuknox/ai-sast-codeassure-cli:0.1.0")
     result_file = "results.json"
 
     def __init__(self, command=None, container_mode=True, severity = None,
                  repo_url=None, commit_ref=None, commit_sha=None,
-                 pipeline_id=None, job_url=None, ai_analysis=False, codeassure_config=None,aiscan_severity=None):
+                 pipeline_id=None, job_url=None, ai_analysis=True, codeassure_config=None,aiscan_severity=None):
         """
         :param command: Raw OpenGrep CLI args (string)
         :param container_mode: Run in Docker if True, else use local binary
@@ -120,7 +120,7 @@ class SASTScanner:
 
 
             cmd = self._build_ai_analysis_command()
-            print(f"Running AI analysis with command: {' '.join(cmd)}")
+ 
             ai_result = subprocess.run(cmd, check=False)
 
             if ai_result.returncode != 0:
