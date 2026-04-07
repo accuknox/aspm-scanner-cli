@@ -11,13 +11,13 @@ from urllib.parse import urlparse
 import re
 
 class SASTScanner:
-    opengrep_image = os.getenv("SCAN_IMAGE", "public.ecr.aws/k9v9d5v2/accuknox/opengrepjob:0.1.0")
-    codeassure_image = os.getenv("CODEASSURE_IMAGE", "esh279/codeassure:1.0.0")
+    opengrep_image = os.getenv("SCAN_IMAGE", "esh279/opengrepjob:0.1.0")
+    codeassure_image = os.getenv("CODEASSURE_IMAGE", "esh279/codeassure-cli-new:latest")
     result_file = "results.json"
 
     def __init__(self, command=None, container_mode=True, severity = None,
                  repo_url=None, commit_ref=None, commit_sha=None,
-                 pipeline_id=None, job_url=None, anthropic_api_key=None, ai_analysis=False, codeassure_config=None,aiscan_severity="INFO,WARNING,LOW,MEDIUM,HIGH,CRITICAL,UNKNOWN,NOT_AVAILABLE,INFORMATIONAL"):
+                 pipeline_id=None, job_url=None, ai_analysis=False, codeassure_config=None,aiscan_severity=None):
         """
         :param command: Raw OpenGrep CLI args (string)
         :param container_mode: Run in Docker if True, else use local binary
@@ -26,7 +26,6 @@ class SASTScanner:
         :param commit_sha: Commit SHA
         :param pipeline_id: CI pipeline ID
         :param job_url: CI job URL
-        :param anthropic_api_key: Anthropic API key for AI analysis
         :param ai_analysis: Enable AI analysis of results
         """
         self.command = command
@@ -38,7 +37,6 @@ class SASTScanner:
         self.commit_sha = commit_sha
         self.pipeline_id = pipeline_id
         self.job_url = job_url
-        self.anthropic_api_key = anthropic_api_key or os.getenv("ANTHROPIC_API_KEY")
         self.ai_analysis = ai_analysis
         self.codeassure_config = codeassure_config
 
@@ -46,30 +44,30 @@ class SASTScanner:
         try:
             Logger.get_logger().debug("Starting SAST scan...")
 
-            if self.container_mode:
-                docker_pull(self.opengrep_image)
+            # if self.container_mode:
+            #     docker_pull(self.opengrep_image)
 
-            args = self._build_sast_args()
-            cmd = self._build_sast_command(args)
+            # args = self._build_sast_args()
+            # cmd = self._build_sast_command(args)
 
-            Logger.get_logger().debug(f"Running SAST scan: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            # Logger.get_logger().debug(f"Running SAST scan: {' '.join(cmd)}")
+            # result = subprocess.run(cmd, capture_output=True, text=True, check=False)
 
-            # Log outputs
-            if result.stdout:
-                sanitized_stdout = re.sub(r"opengrep", "[scanner]", result.stdout, flags=re.IGNORECASE)
-                Logger.get_logger().debug(sanitized_stdout)
-                if "--help" in (self.command or ""):
-                    Logger.log_with_color("INFO", sanitized_stdout, Fore.WHITE)
-                    return config.PASS_RETURN_CODE, None
+            # # Log outputs
+            # if result.stdout:
+            #     sanitized_stdout = re.sub(r"opengrep", "[scanner]", result.stdout, flags=re.IGNORECASE)
+            #     Logger.get_logger().debug(sanitized_stdout)
+            #     if "--help" in (self.command or ""):
+            #         Logger.log_with_color("INFO", sanitized_stdout, Fore.WHITE)
+            #         return config.PASS_RETURN_CODE, None
 
-            if result.stderr:
-                sanitized_stderr = re.sub(r"opengrep", "[scanner]", result.stderr, flags=re.IGNORECASE)
-                if "--help" in (self.command or "") and result.returncode == 0:
-                    Logger.log_with_color("INFO", sanitized_stderr, Fore.WHITE)
-                    return config.PASS_RETURN_CODE, None
-                else:
-                    Logger.get_logger().error(sanitized_stderr)
+            # if result.stderr:
+            #     sanitized_stderr = re.sub(r"opengrep", "[scanner]", result.stderr, flags=re.IGNORECASE)
+            #     if "--help" in (self.command or "") and result.returncode == 0:
+            #         Logger.log_with_color("INFO", sanitized_stderr, Fore.WHITE)
+            #         return config.PASS_RETURN_CODE, None
+            #     else:
+            #         Logger.get_logger().error(sanitized_stderr)
 
 
             if os.path.exists(self.result_file) and os.stat(self.result_file).st_size > 0:
@@ -122,22 +120,11 @@ class SASTScanner:
 
 
             cmd = self._build_ai_analysis_command()
-            ai_result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-
-            if ai_result.stderr:
-                Logger.get_logger().info(f"AI analysis stderr: {ai_result.stderr}")
+            print(f"Running AI analysis with command: {' '.join(cmd)}")
+            ai_result = subprocess.run(cmd, check=False)
 
             if ai_result.returncode != 0:
-                Logger.get_logger().info(f"AI analysis failed with exit code: {ai_result.returncode}.")
-                if ai_result.stderr:
-                    Logger.get_logger().warning(f"Error details: {ai_result.stderr[:500]}")
-                if ai_result.stdout:
-                    Logger.get_logger().info(f"AI Analysis stdout: {ai_result.stdout[:500]}")
-                Logger.get_logger().warning("Continuing with original results.")
-                return
-
-            if not ai_result.stdout:
-                Logger.get_logger().warning("AI analysis returned empty output. Continuing with original results.")
+                Logger.get_logger().warning(f"AI analysis failed with exit code: {ai_result.returncode}. Continuing with original results.")
                 return
 
         except Exception as e:
@@ -196,7 +183,6 @@ class SASTScanner:
             cmd = [
                 "docker", "run", "--rm",
                 "-v", f"{os.getcwd()}:/workspace",
-                "-e", f"ANTHROPIC_API_KEY={self.anthropic_api_key}",
             ]
             # if self.codeassure_config:
             #     config_path = os.path.abspath(self.codeassure_config)

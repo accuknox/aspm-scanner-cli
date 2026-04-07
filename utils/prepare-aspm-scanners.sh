@@ -134,13 +134,13 @@ echo "✅ OpenJDK ${JDK_VERSION} + ZAP ${ZAP_VERSION} packaged into '$DAST_TAR'"
 
 ### CodeAssure -> codeassure.tar.gz
 echo "=== [7/7] Building CodeAssure ==="
-CODEASSURE_REPO="https://github.com/Eshrath027/codeassure-cli.git"
+CODEASSURE_REPO="https://github.com/accuknox/codeassure-cli.git"
 CODEASSURE_FOLDER="codeassure"
 CODEASSURE_TAR="codeassure.tar.gz"
 TEMP_CODEASSURE="temp_codeassure_build"
 
 rm -rf "$CODEASSURE_FOLDER" "$TEMP_CODEASSURE"
-git clone --branch test-1 "$CODEASSURE_REPO" "$TEMP_CODEASSURE"
+git clone --branch main "$CODEASSURE_REPO" "$TEMP_CODEASSURE"
 cd "$TEMP_CODEASSURE"
 
 pip install uv
