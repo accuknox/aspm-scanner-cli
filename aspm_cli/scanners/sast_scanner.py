@@ -24,13 +24,18 @@ class SASTScanner(BaseScanner):
             default="INFO,WARNING,LOW,MEDIUM,HIGH,CRITICAL",
             help="Comma-separated list of severities to check. If any match, the scan will fail. Defaults to all severities."
         )
+        parser.add_argument(
+            "--aiscan-severity",
+            default=None,
+            help="Comma-separated list of severities to check for AI analysis. If any match, AI analysis will run on those findings."
+        )
         parser.add_argument("--repo-url", default=GitInfo.get_repo_url(), help="Git repository URL")
         parser.add_argument("--commit-ref", default=GitInfo.get_commit_ref(), help="Commit reference for scanning")
         parser.add_argument("--commit-sha", default=GitInfo.get_commit_sha(), help="Commit SHA for scanning")
         parser.add_argument("--pipeline-id", help="Pipeline ID for scanning")
         parser.add_argument("--job-url", help="Job URL for scanning")
         parser.add_argument("--ai-analysis", action="store_true", help="Enable AI analysis of results")
-        parser.add_argument("--anthropic-api-key", help="Anthropic API key for AI analysis")
+        parser.add_argument("--codeassure-config", help="Path to codeassure.json config file for AI analysis")
 
     def validate_config(self, args: argparse.Namespace, validator: ConfigValidator):
         validator.validate_sast_scan(
@@ -43,12 +48,13 @@ class SASTScanner(BaseScanner):
             command=args.command,
             container_mode=args.container_mode,
             severity=args.severity,
+            aiscan_severity=args.aiscan_severity if args.ai_analysis else [],
             repo_url=args.repo_url,
             commit_ref=args.commit_ref,
             commit_sha=args.commit_sha,
             pipeline_id=args.pipeline_id,
             job_url=args.job_url,
-            anthropic_api_key=getattr(args, 'anthropic_api_key', None),
-            ai_analysis=args.ai_analysis
+            ai_analysis=args.ai_analysis,
+            codeassure_config=getattr(args, 'codeassure_config', None)
         )
         return scanner.run()

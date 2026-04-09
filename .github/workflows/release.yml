@@ -117,7 +117,7 @@ jobs:
       contents: write
 
     env:
-      PYTHON_VERSION: "3.10"
+      PYTHON_VERSION: "3.12"
 
     steps:
       - name: Checkout code
@@ -151,6 +151,12 @@ jobs:
 
           ls -lahR ../../
           cd ../../
+
+      - name: Upload Scanner Tarballs to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            utils/*.tar.gz
 
       - name: Upload ASPM DEB and Scanners for Linux
         uses: softprops/action-gh-release@v1

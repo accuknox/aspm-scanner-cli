@@ -132,4 +132,28 @@ tar -czvf "$DAST_TAR" "$DAST_FOLDER"
 rm -rf "$TEMP_DIR" "$DAST_FOLDER"
 echo "✅ OpenJDK ${JDK_VERSION} + ZAP ${ZAP_VERSION} packaged into '$DAST_TAR'"
 
+### CodeAssure -> codeassure.tar.gz
+echo "=== [7/7] Building CodeAssure ==="
+CODEASSURE_REPO="https://github.com/accuknox/codeassure-cli.git"
+CODEASSURE_FOLDER="codeassure"
+CODEASSURE_TAR="codeassure.tar.gz"
+TEMP_CODEASSURE="temp_codeassure_build"
+
+rm -rf "$CODEASSURE_FOLDER" "$TEMP_CODEASSURE"
+git clone --branch main "$CODEASSURE_REPO" "$TEMP_CODEASSURE"
+cd "$TEMP_CODEASSURE"
+
+pip install uv
+uv pip install --system -e ".[build]"
+pyinstaller codeassure.spec --clean
+
+mkdir -p "../$CODEASSURE_FOLDER"
+cp dist/codeassure "../$CODEASSURE_FOLDER/codeassure"
+cd ..
+
+cp -r "$CODEASSURE_FOLDER" "$PACKAGE_BIN_DIR"
+tar -czvf "$CODEASSURE_TAR" "$CODEASSURE_FOLDER"
+rm -rf "$TEMP_CODEASSURE" "$CODEASSURE_FOLDER"
+echo "✅ CodeAssure binary packaged as $CODEASSURE_TAR"
+
 echo "🎉 All tools downloaded and prepared successfully."
