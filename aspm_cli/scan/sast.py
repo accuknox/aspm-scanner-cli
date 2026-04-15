@@ -147,6 +147,7 @@ class SASTScanner:
                 is_vuln = verification.get("is_security_vulnerability")
                 finding["is_false_positive"] = not bool(is_vuln) if is_vuln is not None else None
                 finding["validation_reason"] = verification.get("reason")
+                finding["severity_by_ai"] = verification.get("severity").upper() if verification.get("severity") else None
 
             with open(self.result_file, 'w') as f:
                 json.dump(data, f, indent=2)
