@@ -12,7 +12,7 @@ import re
 
 class SASTScanner:
     opengrep_image = os.getenv("SCAN_IMAGE", "public.ecr.aws/k9v9d5v2/accuknox/opengrepjob:0.1.0")
-    codeassure_image = os.getenv("CODEASSURE_IMAGE", "public.ecr.aws/k9v9d5v2/accuknox/ai-sast-codeassure-cli:0.1.0")
+    codeassure_image = os.getenv("CODEASSURE_IMAGE", "public.ecr.aws/k9v9d5v2/accuknox/ai-sast-codeassure-cli:0.1.1")
     result_file = "results.json"
 
     def __init__(self, command=None, container_mode=True, severity = None,
