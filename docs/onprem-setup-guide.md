@@ -1,10 +1,10 @@
-# On-Prem POC Runbook
+# On-Prem Setup Guide
 
-This runbook is for running `accuknox-aspm-scanner` in restricted, self-hosted, or air-gapped environments.
+This guide is for running `accuknox-aspm-scanner` in restricted, self-hosted, or air-gapped environments.
 
-It focuses on the current behavior of the CLI as implemented today, including limitations and practical workarounds for a POC.
+It focuses on the current behavior of the CLI as implemented today, including limitations and practical workarounds for on-prem setups.
 
-## Recommended POC Approach
+## Recommended Approach
 
 Use one of these operating models:
 
@@ -12,7 +12,7 @@ Use one of these operating models:
 - Container mode: run scans with `--container-mode` and provide scanner images from an internal registry when needed.
 - Offline artifact collection: use `--skip-upload --keep-results` so the scan runs locally and preserves the generated result files.
 
-For most on-prem POCs:
+For most on-prem setups:
 
 - Use `--skip-upload` unless the control plane endpoint is already reachable from the environment.
 - Use `--keep-results` so output artifacts remain available for review.
@@ -105,7 +105,7 @@ Supported tool types:
 
 Important: `SCAN_IMAGE` is shared across multiple scanner implementations. Set it only for the scan you are about to run, then unset or replace it before another scan type.
 
-## Copy-Paste POC Commands
+## Copy-Paste Commands
 
 ### IaC scan with mirrored Checkov image
 
@@ -153,7 +153,7 @@ accuknox-aspm-scanner scan --skip-upload --keep-results sq-sast --command "-Dson
 
 ```bash
 ACCUKNOX_ENDPOINT=cspm.accuknox.com \
-ACCUKNOX_LABEL=POC \
+ACCUKNOX_LABEL=onprem \
 ACCUKNOX_TOKEN=abcd1234 \
 accuknox-aspm-scanner scan --softfail sast --command "scan ."
 ```
@@ -174,7 +174,7 @@ Operational note:
 - If you use `--skip-upload`, files are still deleted unless `--keep-results` is set.
 - Some scanners normalize output-related flags inside `--command`, so do not rely on custom output filenames or report flags being preserved.
 
-For POC work, prefer:
+For on-prem validation, prefer:
 
 ```bash
 accuknox-aspm-scanner scan --skip-upload --keep-results <scan-name> --command "<scanner args>"
@@ -239,7 +239,7 @@ The current DAST implementation does not fully support local execution for `zap-
 
 Workaround:
 
-- Use `--container-mode` for DAST POC runs.
+- Use `--container-mode` for DAST runs.
 
 ### Local tool installation is not air-gap friendly by default
 
@@ -257,7 +257,7 @@ Windows local tool downloads are incomplete, and non-container local mode is exp
 
 Workaround:
 
-- Use Linux for local-mode POC testing.
+- Use Linux for local-mode testing.
 - Use container mode where possible.
 
 ### Upload TLS and enterprise network support are limited
@@ -267,7 +267,7 @@ The current upload path disables SSL verification and does not provide first-cla
 Workaround:
 
 - Prefer `--skip-upload` in isolated environments.
-- If upload is required, validate control-plane connectivity early in the POC.
+- If upload is required, validate control-plane connectivity early.
 - Document any proxy or CA requirements externally for the environment because the CLI does not currently expose dedicated knobs for them.
 
 ### `SCAN_IMAGE` is shared across scanner types
@@ -279,11 +279,11 @@ Workaround:
 - Export a scanner-specific `SCAN_IMAGE` immediately before each container-mode command.
 - Unset or replace it before switching scan types.
 
-## POC Checklist
+## Setup Checklist
 
 - Install the CLI using the wheel or Debian package.
 - Decide whether each scan will run in local mode or container mode.
 - Mirror required container images if the environment is restricted.
 - Use `--skip-upload --keep-results` for early validation.
-- Validate one scan from each required category before the demo.
-- Test upload separately if the control plane will be part of the POC.
+- Validate one scan from each required category before production use.
+- Test upload separately if the control plane will be part of the setup.

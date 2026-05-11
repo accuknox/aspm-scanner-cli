@@ -8,12 +8,12 @@ It can upload results to the **AccuKnox ASPM Platform**, but it can also run in 
 
 ## Features
 
-- One CLI for multiple scan types: IaC, SAST, SonarQube SAST, Secret, Container, and DAST
-- Supports both local tools and containerized execution
-- Optional upload to AccuKnox ASPM
-- Works in standalone and on-prem environments
-- Supports environment-variable and flag-based configuration
-- Supports pre-commit integration
+- 🚀 One CLI for multiple scan types: IaC, SAST, SonarQube SAST, Secret, Container, and DAST
+- 🔄 Supports both local tools and containerized execution
+- 🔐 Optional upload to AccuKnox ASPM
+- 🧰 Works in standalone and on-prem environments
+- 🧵 Supports environment-variable and flag-based configuration
+- 🧩 Supports pre-commit integration
 
 ## Installation
 
@@ -113,9 +113,9 @@ accuknox-aspm-scanner scan [flags-before-the-scan-name] <scan-name> --command "<
 Here is what each part means:
 
 - `scan`: tells the CLI you want to run a scan
-- `flags before the scan name`: these control the overall scan run, such as upload and result handling
+- `flags before the scan name`: these are common scan flags and work across all scan types
 - `<scan-name>`: one of `iac`, `sast`, `secret`, `container`, `dast`, or `sq-sast`
-- `flags after the scan name`: these belong only to that specific scanner
+- `flags after the scan name`: these are only for the selected scanner
 - `--command`: required for every scan and passed to the underlying scanner
 
 Simple rule:
@@ -488,7 +488,7 @@ accuknox-aspm-scanner scan --skip-upload --keep-results sq-sast --command "-Dson
 - Result files are deleted unless `--keep-results` is used
 - `tool install` downloads public artifacts, so fully restricted environments may need pre-staged local tools or mirrored images
 
-More detailed operational notes and workarounds are available in `docs/onprem-poc-runbook.md`.
+More detailed operational notes and workarounds are available in `docs/onprem-setup-guide.md`.
 
 ## Pre-Commit Integration
 
