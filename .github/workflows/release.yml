@@ -1,165 +1,169 @@
-name: Build and Release
-
-on:
-  push:
-    tags:
-      - 'v*'
-
-jobs:
-  release:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install build tool
-        run: pip install build
-
-      - name: Build source + wheel
-        run: python -m build
-
-      - name: Create GitHub Release and Upload Python Artifacts
-        id: create_release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: |
-            dist/*.whl
-          draft: false
-          prerelease: false
-
-  build-pyinstaller:
-    needs: release
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            name: linux
-            suffix: ''
-            ext: ''
-          - os: windows-latest
-            name: windows
-            suffix: '.exe'
-            ext: '.exe'
-    runs-on: ${{ matrix.os }}
-    permissions:
-      contents: write
-
-    env:
-      PYTHON_VERSION: "3.10"
-
-    continue-on-error: true
-
-    outputs:
-      ubuntu_done: ${{ steps.set-output-ubuntu.outputs.ready || '' }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install pipenv
-        run: |
-          python -m pip install pipenv
-
-      - name: Install deps and run pyinstaller
-        run: |
-          python3 -m pipenv install
-          python3 -m pipenv run pip install pyinstaller
-
-      - name: Build executable
-        run: python3 -m pipenv run pyinstaller accuknox-aspm-scanner.spec
-
-      - name: Test Binary
-        shell: bash
-        run: |
-          ./dist/accuknox-aspm-scanner${{ matrix.ext }} --help
-
-      - name: Upload Native Binary to the Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            dist/accuknox-aspm-scanner${{ matrix.ext }}
-
-      - name: Upload Ubuntu Native Binary Artifact
-        if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-binary-linux
-          retention-days: 1
-          path: dist/accuknox-aspm-scanner
-
-      - name: Flag Ubuntu completion
-        if: matrix.os == 'ubuntu-latest'
-        id: set-output-ubuntu
-        run: echo "ready=true" >> $GITHUB_OUTPUT
-
-  build-deb:
-    needs: [ release, build-pyinstaller ]
-    if: needs.build-pyinstaller.outputs.ubuntu_done == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    env:
-      PYTHON_VERSION: "3.12"
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Download Ubuntu Native Binary
-        uses: actions/download-artifact@v5
-        with:
-          name: native-binary-linux
-          path: utils/package/tools
-    
-      - name: Prepare ASPM DEB and Scanners for Linux
-        shell: bash
-        run: |
-          cd utils
-          chmod +x ./prepare-aspm-scanners.sh
-          ./prepare-aspm-scanners.sh
-          sudo apt-get update
-          sudo apt-get install -y build-essential devscripts debhelper
-
-          cd package
-          curl -sfL https://knoxctl-cli.s3.us-east-2.amazonaws.com/install.sh | sh -s -- -b $PWD/tools
-          export LC_ALL=C.UTF-8
-          export LANG=C.UTF-8
-          dpkg-buildpackage -us -uc -b
-
-          ls -lahR ../../
-          cd ../../
-
-      - name: Upload Scanner Tarballs to Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            utils/*.tar.gz
-
-      - name: Upload ASPM DEB and Scanners for Linux
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
+name: Build and Release  
+  
+on:  
+  push:  
+    tags:  
+      - 'v*'  
+  
+jobs:  
+  release:  
+    runs-on: ubuntu-latest  
+    permissions:  
+      contents: write  
+  
+    outputs:  
+      upload_url: ${{ steps.create_release.outputs.upload_url }}  
+  
+    steps:  
+      - name: Checkout code  
+        uses: actions/checkout@v4  
+  
+      - name: Set up Python  
+        uses: actions/setup-python@v5  
+        with:  
+          python-version: '3.12'  
+  
+      - name: Install build tool  
+        run: pip install build  
+  
+      - name: Build source + wheel  
+        run: python -m build  
+  
+      - name: Create GitHub Release and Upload Python Artifacts  
+        id: create_release  
+        uses: softprops/action-gh-release@v1  
+        with:  
+          tag_name: ${{ github.ref_name }}  
+          files: |  
+            dist/*.whl  
+          draft: false  
+          prerelease: false  
+  
+  build-pyinstaller:  
+    needs: release  
+    strategy:  
+      matrix:  
+        include:  
+          - os: ubuntu-latest  
+            name: linux  
+            suffix: ''  
+            ext: ''  
+          - os: ubuntu-22.04  
+            name: linux-legacy  
+            suffix: '-legacy'  
+            ext: ''  
+          - os: windows-latest  
+            name: windows  
+            suffix: '.exe'  
+            ext: '.exe'  
+    runs-on: ${{ matrix.os }}  
+    permissions:  
+      contents: write  
+  
+    env:  
+      PYTHON_VERSION: "3.10"  
+  
+    continue-on-error: true  
+  
+    outputs:  
+      ubuntu_done: ${{ steps.set-output-ubuntu.outputs.ready || '' }}  
+  
+    steps:  
+      - name: Checkout code  
+        uses: actions/checkout@v4  
+  
+      - name: Set up Python  
+        uses: actions/setup-python@v5  
+        with:  
+          python-version: ${{ env.PYTHON_VERSION }}  
+  
+      - name: Install pipenv  
+        run: |  
+          python -m pip install pipenv  
+  
+      - name: Install deps and run pyinstaller  
+        run: |  
+          python3 -m pipenv install  
+          python3 -m pipenv run pip install pyinstaller  
+  
+      - name: Build executable  
+        run: python3 -m pipenv run pyinstaller accuknox-aspm-scanner.spec  
+  
+      - name: Test Binary  
+        shell: bash  
+        run: |  
+          ./dist/accuknox-aspm-scanner${{ matrix.ext }} --help  
+  
+      - name: Upload Native Binary to the Release  
+        uses: softprops/action-gh-release@v1  
+        with:  
+          files: |  
+            dist/accuknox-aspm-scanner${{ matrix.ext }}  
+  
+      - name: Upload Ubuntu Native Binary Artifact  
+        if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-22.04'  
+        uses: actions/upload-artifact@v4  
+        with:  
+          name: native-binary-${{ matrix.name }}  
+          retention-days: 1  
+          path: dist/accuknox-aspm-scanner  
+  
+      - name: Flag Ubuntu completion  
+        if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-22.04'  
+        id: set-output-ubuntu  
+        run: echo "ready=true" >> $GITHUB_OUTPUT  
+  
+  build-deb:  
+    needs: [ release, build-pyinstaller ]  
+    if: needs.build-pyinstaller.outputs.ubuntu_done == 'true'  
+    runs-on: ubuntu-latest  
+    permissions:  
+      contents: write  
+  
+    env:  
+      PYTHON_VERSION: "3.12"  
+  
+    steps:  
+      - name: Checkout code  
+        uses: actions/checkout@v4  
+  
+      - name: Set up Python  
+        uses: actions/setup-python@v5  
+        with:  
+          python-version: ${{ env.PYTHON_VERSION }}  
+  
+      - name: Download Ubuntu Native Binary (Legacy for compatibility)  
+        uses: actions/download-artifact@v5  
+        with:  
+          name: native-binary-linux-legacy  
+          path: utils/package/tools  
+      
+      - name: Prepare ASPM DEB and Scanners for Linux  
+        shell: bash  
+        run: |  
+          cd utils  
+          chmod +x ./prepare-aspm-scanners.sh  
+          ./prepare-aspm-scanners.sh  
+          sudo apt-get update  
+          sudo apt-get install -y build-essential devscripts debhelper  
+  
+          cd package  
+          curl -sfL https://knoxctl-cli.s3.us-east-2.amazonaws.com/install.sh | sh -s -- -b $PWD/tools  
+          export LC_ALL=C.UTF-8  
+          export LANG=C.UTF-8  
+          dpkg-buildpackage -us -uc -b  
+  
+          ls -lahR ../../  
+          cd ../../  
+  
+      - name: Upload Scanner Tarballs to Release  
+        uses: softprops/action-gh-release@v1  
+        with:  
+          files: |  
+            utils/*.tar.gz  
+  
+      - name: Upload ASPM DEB and Scanners for Linux  
+        uses: softprops/action-gh-release@v1  
+        with:  
+          files: |  
             utils/*.deb
