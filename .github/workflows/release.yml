@@ -122,7 +122,7 @@ jobs:
         with:  
           name: native-binary-linux  
           path: utils/package/tools  
-      
+  
       - name: Prepare ASPM DEB and Scanners for Linux  
         shell: bash  
         run: |  
@@ -136,6 +136,8 @@ jobs:
           curl -sfL https://knoxctl-cli.s3.us-east-2.amazonaws.com/install.sh | sh -s -- -b $PWD/tools  
           export LC_ALL=C.UTF-8  
           export LANG=C.UTF-8  
+  
+          chmod +x tools/accuknox-aspm-scanner  
           dpkg-buildpackage -us -uc -b  
   
           ls -lahR ../../  
