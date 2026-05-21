@@ -10,6 +10,7 @@ from aspm_cli.utils.spinner import Spinner
 from aspm_cli.utils.config import ConfigValidator
 from aspm_cli.utils.common import upload_results, handle_failure, ALLOWED_SCAN_TYPES
 from aspm_cli.utils.git_info import GitInfo
+from aspm_cli.utils.sbom import derive_sbom_classifier, resolve_project_name
 
 class ScanCommand(BaseCommand):
     help_text = f"Run a security scan (e.g. {', '.join(ALLOWED_SCAN_TYPES)})"
@@ -48,8 +49,7 @@ class ScanCommand(BaseCommand):
                 "accuknox_label": args.label or os.getenv("ACCUKNOX_LABEL"),
                 "accuknox_token": args.token or os.getenv("ACCUKNOX_TOKEN"),
                 "accuknox_tenant": args.tenant or os.getenv("ACCUKNOX_TENANT"),
-                "accuknox_project_name": args.project_name
-                or os.getenv("ACCUKNOX_PROJECT"),
+                "accuknox_project_name": resolve_project_name(args.project_name),
             }
 
             # Get the correct scanner strategy from the registry
@@ -85,6 +85,9 @@ class ScanCommand(BaseCommand):
                 # If this is an SBOM upload, enrich the SBOM file with project_name and classifier
                 if is_sbom_upload:
                     project_name = accuknox_config.get("accuknox_project_name")
+                    project_classifier = derive_sbom_classifier(
+                        getattr(args, "command", "") or ""
+                    )
                     try:
                         with open(result_file, "r", encoding="utf-8") as f:
                             data = json.load(f)
@@ -92,7 +95,7 @@ class ScanCommand(BaseCommand):
                         if isinstance(data, dict):
                             if project_name:
                                 data["project_name"] = project_name
-                            data["project_classifier"] = "container"
+                            data["project_classifier"] = project_classifier
 
                             with open(result_file, "w", encoding="utf-8") as f:
                                 json.dump(data, f, indent=2)

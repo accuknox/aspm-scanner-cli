@@ -6,6 +6,7 @@ from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils import docker_pull
 from aspm_cli.utils import config
+from aspm_cli.utils.sbom import normalize_sbom_args_for_docker
 from colorama import Fore
 
 class ContainerScanner:
@@ -25,7 +26,12 @@ class ContainerScanner:
             severity_threshold, sanitized_args = self._build_container_scan_args()
             scan_cmd = self._build_scan_command(sanitized_args)
 
-            Logger.get_logger().debug(f"Scanning container image: {' '.join(scan_cmd)}")
+            log_msg = (
+                "Running Trivy SBOM scan"
+                if self.generate_sbom
+                else "Scanning container image"
+            )
+            Logger.get_logger().debug(f"{log_msg}: {' '.join(scan_cmd)}")
             result = subprocess.run(scan_cmd, capture_output=True, text=True)
 
             if result.stdout:
@@ -79,6 +85,10 @@ class ContainerScanner:
                 i += 1
             # Force cyclonedx format and JSON output
             sanitized_args.extend(["-f", "cyclonedx", "-o", self.result_file])
+            if self.container_mode:
+                sanitized_args = normalize_sbom_args_for_docker(
+                    self.command or "", sanitized_args
+                )
             return None, sanitized_args
 
         # Flags that take a value and should be removed.

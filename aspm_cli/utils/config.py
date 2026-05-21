@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator, model_v
 from typing import Optional, Literal
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils.common import ALLOWED_SCAN_TYPES
+from aspm_cli.utils.sbom import validate_sbom_command
 
 # Return code constants
 PASS_RETURN_CODE = 0
@@ -159,18 +160,33 @@ class ConfigValidator:
             Logger.get_logger().debug(f"Secret scan configuration error: {concise_msg}")
             raise ValueError(concise_msg)
 
-    def validate_container_scan(self, command: str, container_mode: bool):
+    def validate_container_scan(
+        self,
+        command: str,
+        container_mode: bool,
+        generate_sbom: bool = False,
+    ):
         class ContainerScanConfig(BaseModel):
             command: str = Field(..., min_length=1, description="Command arguments for Container scanner")
             container_mode: bool
 
         try:
             ContainerScanConfig(command=command, container_mode=container_mode)
-            self._log_validation_success("Container")
         except ValidationError as e:
             concise_msg = _format_validation_error(e)
             Logger.get_logger().debug(f"Container scan configuration error: {concise_msg}")
             raise ValueError(concise_msg)
+
+        if generate_sbom:
+            validate_sbom_command(command)
+            if not self.skip_upload and not self.accuknox_config.accuknox_project_name:
+                raise ValueError(
+                    "AccuKnox project name is required for SBOM uploads. "
+                    "Provide --project-name or set ACCUKNOX_PROJECT_NAME (or legacy ACCUKNOX_PROJECT), "
+                    "or use --skip-upload if you only need a local SBOM file."
+                )
+
+        self._log_validation_success("Container")
 
     def validate_sast_scan(self, command: str, container_mode: bool, severity: str, repo_url: Optional[str], commit_ref: Optional[str], commit_sha: Optional[str], pipeline_id: Optional[str], job_url: Optional[str]):
         class SASTScanConfig(BaseModel):
