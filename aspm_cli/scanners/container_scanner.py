@@ -4,7 +4,7 @@ from aspm_cli.utils.config import ConfigValidator
 from aspm_cli.scan.container import ContainerScanner as OriginalContainerScanner
 
 class ContainerScanner(BaseScanner):
-    help_text = "Run a container image scan using Trivy"
+    help_text = "Run a container image or filesystem SBOM scan"
     data_type_identifier = "TR"
 
     def add_arguments(self, parser: argparse.ArgumentParser):
@@ -12,7 +12,10 @@ class ContainerScanner(BaseScanner):
             "--command",
             type=str,
             required=True,
-            help="Arguments to pass to the container scanner (e.g., 'image nginx:latest')"
+            help=(
+                "Scanner arguments (e.g. 'image nginx:latest' for image SBOM/vuln scan; "
+                "'filesystem .' for repo SBOM with --generate-sbom)"
+            )
         )
         parser.add_argument(
             "--container-mode",
@@ -26,7 +29,11 @@ class ContainerScanner(BaseScanner):
         )
 
     def validate_config(self, args: argparse.Namespace, validator: ConfigValidator):
-        validator.validate_container_scan(args.command, args.container_mode)
+        validator.validate_container_scan(
+            args.command,
+            args.container_mode,
+            generate_sbom=getattr(args, "generate_sbom", False),
+        )
 
     def run_scan(self, args: argparse.Namespace) -> tuple[int, str]:
         # Instantiate and run the original scanner logic

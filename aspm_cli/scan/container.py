@@ -1,11 +1,13 @@
 import subprocess
 import json
 import os
+import re
 import shlex
 from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils import docker_pull
 from aspm_cli.utils import config
+from aspm_cli.utils.sbom import normalize_sbom_args_for_docker
 from colorama import Fore
 
 class ContainerScanner:
@@ -25,17 +27,32 @@ class ContainerScanner:
             severity_threshold, sanitized_args = self._build_container_scan_args()
             scan_cmd = self._build_scan_command(sanitized_args)
 
-            Logger.get_logger().debug(f"Scanning container image: {' '.join(scan_cmd)}")
+            log_msg = (
+                "Running container SBOM scan"
+                if self.generate_sbom
+                else "Scanning container image"
+            )
+            Logger.get_logger().debug(f"{log_msg}: {' '.join(scan_cmd)}")
             result = subprocess.run(scan_cmd, capture_output=True, text=True)
 
             if result.stdout:
-                sanitized_stdout = result.stdout.replace("trivy", "[scanner]")
+                sanitized_stdout = re.sub(
+                    r"trivy|aquasecurity|aqua security",
+                    "[scanner]",
+                    result.stdout,
+                    flags=re.IGNORECASE,
+                )
                 Logger.get_logger().debug(sanitized_stdout)
                 if("--help" in self.command):
                     Logger.log_with_color('INFO', sanitized_stdout, Fore.WHITE)
                     return config.PASS_RETURN_CODE, None
             if result.stderr:
-                sanitized_stderr = result.stderr.replace("trivy", "[scanner]")
+                sanitized_stderr = re.sub(
+                    r"trivy|aquasecurity|aqua security",
+                    "[scanner]",
+                    result.stderr,
+                    flags=re.IGNORECASE,
+                )
                 Logger.get_logger().error(sanitized_stderr)
 
             if self.generate_sbom:
@@ -79,6 +96,10 @@ class ContainerScanner:
                 i += 1
             # Force cyclonedx format and JSON output
             sanitized_args.extend(["-f", "cyclonedx", "-o", self.result_file])
+            if self.container_mode:
+                sanitized_args = normalize_sbom_args_for_docker(
+                    self.command or "", sanitized_args
+                )
             return None, sanitized_args
 
         # Flags that take a value and should be removed.
