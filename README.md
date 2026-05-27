@@ -22,7 +22,7 @@ It can upload results to the **AccuKnox ASPM Platform**, but it can also run in 
 Install from the GitHub release wheel:
 
 ```bash
-pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.14.2/accuknox_aspm_scanner-0.14.2-py3-none-any.whl
+pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.14.3/accuknox_aspm_scanner-0.14.3-py3-none-any.whl
 ```
 
 ### 2. Restricted or on-prem environment
@@ -295,7 +295,7 @@ accuknox-aspm-scanner scan secret --command "git file://." --container-mode
 
 ### Container Scan
 
-Use for Trivy-based container image scanning.
+Use for Trivy-based container image vulnerability scanning and SBOM generation (image or filesystem).
 
 Required:
 
@@ -306,23 +306,32 @@ Flags used after `container`:
 - `--container-mode`
 - `--generate-sbom`
 
-Typical `--command` value:
+Typical `--command` values:
 
 ```bash
-image nginx:latest
+image nginx:latest          # image vuln scan or container SBOM
+filesystem .                # repo/filesystem SBOM (--generate-sbom only)
 ```
 
-Example:
+Vulnerability scan example:
 
 ```bash
 accuknox-aspm-scanner scan --skip-upload --keep-results container --command "image nginx:latest" --container-mode
 ```
 
-SBOM example:
+Image SBOM (AccuKnox project classifier `container`):
 
 ```bash
 accuknox-aspm-scanner scan --skip-upload --keep-results --project-name demo-project container --command "image nginx:latest" --generate-sbom --container-mode
 ```
+
+Filesystem SBOM (AccuKnox project classifier `application`; run from repo root in container mode):
+
+```bash
+accuknox-aspm-scanner scan --skip-upload --keep-results --project-name demo-project container --command "filesystem ." --generate-sbom --container-mode
+```
+
+SBOM upload requires `--project-name` (or `ACCUKNOX_PROJECT_NAME`). `--project-name` is not required for vulnerability scans. Legacy env `ACCUKNOX_PROJECT` is also accepted.
 
 Container mode with AccuKnox upload:
 

@@ -1,7 +1,7 @@
-aspm-scanner-cli (0.14.2) unstable; urgency=medium
+aspm-scanner-cli (0.14.3) unstable; urgency=medium
 
-  * Align package and CLI version metadata for 0.14.2 release
-  * Update installation documentation to use v0.14.2 wheel
+  * Align package and CLI version metadata for 0.14.3 release
+  * Update installation documentation to use v0.14.3 wheel
 
  -- AccuKnox <accuknox@accuknox.com>  Wed, 15 Apr 2026 12:00:00 +0530
 
