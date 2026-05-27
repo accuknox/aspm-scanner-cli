@@ -45,7 +45,7 @@ These are only required when not using `--skip-upload`:
 - `ACCUKNOX_ENDPOINT`
 - `ACCUKNOX_LABEL`
 - `ACCUKNOX_TOKEN`
-- `ACCUKNOX_PROJECT_NAME` for SBOM uploads
+- `ACCUKNOX_PROJECT_NAME` for SBOM uploads (legacy `ACCUKNOX_PROJECT` also accepted). Not required for container vulnerability scans.
 
 ## Installation Patterns
 
@@ -133,6 +133,16 @@ accuknox-aspm-scanner scan --skip-upload --keep-results secret --command "git fi
 ```bash
 export SCAN_IMAGE=registry.local/accuknox/trivy:0.69.3
 accuknox-aspm-scanner scan --skip-upload --keep-results container --command "image nginx:latest" --container-mode
+```
+
+### Filesystem SBOM (application classifier)
+
+Run from the repository root so the checkout is mounted at `/workdir` inside the Trivy container. Use an AccuKnox SBOM project with classifier `application` (not `container`).
+
+```bash
+export SCAN_IMAGE=registry.local/accuknox/trivy:0.69.3
+accuknox-aspm-scanner scan --skip-upload --keep-results --project-name demo-project container \
+  --command "filesystem ." --generate-sbom --container-mode
 ```
 
 ### DAST scan with mirrored ZAP image
