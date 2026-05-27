@@ -44,7 +44,9 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
+          # Build on the oldest common target to avoid glibc mismatches on customer hosts.
+          # Customers reported GLIBC_2.38 is required by the binary, but Ubuntu 22.04 ships an older glibc.
+          - os: ubuntu-22.04
             name: linux
             suffix: ''
             ext: ''
@@ -97,7 +99,7 @@ jobs:
             dist/accuknox-aspm-scanner${{ matrix.ext }}
 
       - name: Upload Ubuntu Native Binary Artifact
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-22.04'
         uses: actions/upload-artifact@v4
         with:
           name: native-binary-linux
@@ -105,7 +107,7 @@ jobs:
           path: dist/accuknox-aspm-scanner
 
       - name: Flag Ubuntu completion
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-22.04'
         id: set-output-ubuntu
         run: echo "ready=true" >> $GITHUB_OUTPUT
 
