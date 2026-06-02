@@ -1,3 +1,10 @@
+aspm-scanner-cli (0.14.4) unstable; urgency=medium
+
+  * Fix SAST container-mode Docker workdir to persist results.json on mounted paths
+  * Add regression tests for SAST container-mode command construction
+
+ -- AccuKnox <accuknox@accuknox.com>  Tue, 02 Jun 2026 15:05:00 +0530
+
 aspm-scanner-cli (0.14.3) unstable; urgency=medium
 
   * Align package and CLI version metadata for 0.14.3 release

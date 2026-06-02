@@ -274,6 +274,7 @@ class SASTScanner:
                 chmod_cmd = [
                     "docker", "run", "--rm",
                     "-v", f"{os.getcwd()}:/app",
+                    "-w", "/app",
                     "--entrypoint", "bash",
                     self.opengrep_image,
                     "-c", f"chmod 777 {self.result_file}"
@@ -344,6 +345,7 @@ class SASTScanner:
             cmd = [
                 "docker", "run", "--rm",
                 "-v", f"{os.getcwd()}:/app",
+                "-w", "/app",
                 self.opengrep_image,
             ]
 
