@@ -14,15 +14,17 @@ class IaCScanner:
     output_file_path = '.'
     result_file = os.path.join(output_file_path, 'results_json.json')
 
-    def __init__(self, command, container_mode=False, repo_url=None, repo_branch=None):
+    def __init__(self, command, container_mode=False, repo_url=None, repo_branch=None, severity=None):
         """
         :param command: Raw command string passed by the user (e.g., "-d .")
         :param container_mode: If True, run ak_iac locally instead of in Docker
+        :param severity: Comma-separated severities that should fail the scan
         """
         self.command = command
         self.container_mode = container_mode
         self.repo_url = repo_url
         self.repo_branch = repo_branch
+        self.severity = [s.strip().upper() for s in (severity or "INFO,LOW,MEDIUM,HIGH,CRITICAL,UNKNOWN").split(',')]
 
     def run(self):
         try:
@@ -51,7 +53,11 @@ class IaCScanner:
                 return config.SOMETHING_WENT_WRONG_RETURN_CODE, None
 
             self.process_result_file()
-            return result.returncode, self.result_file
+
+            if self._severity_threshold_met():
+                Logger.get_logger().error(f"Vulnerabilities matching severities: {', '.join(self.severity)} found.")
+                return 1, self.result_file
+            return 0, self.result_file
 
         except Exception as e:
             Logger.get_logger().error(f"Error during IaC scan: {e}")
@@ -131,4 +137,30 @@ class IaCScanner:
         except Exception as e:
             Logger.get_logger().debug(f"Error processing result file: {e}")
             Logger.get_logger().error(f"Error during IaC scan: {e}")
+            raise
+
+    def _severity_threshold_met(self):
+        try:
+            with open(self.result_file, 'r') as f:
+                data = json.load(f)
+
+            # Checkov output may be a single dict or a list of per-framework
+            # results (and process_result_file appends a metadata entry).
+            if isinstance(data, dict):
+                data = [data]
+
+            for entry in data:
+                if not isinstance(entry, dict):
+                    continue
+                failed_checks = entry.get("results", {}).get("failed_checks", [])
+                for check in failed_checks:
+                    # Checkov severity is often null for built-in policies;
+                    # bucket those as UNKNOWN so the default still fails on them.
+                    severity = (check.get("severity") or "UNKNOWN").upper()
+                    if severity in self.severity:
+                        return True
+            return False
+
+        except Exception as e:
+            Logger.get_logger().error(f"Error reading scan results: {e}")
             raise

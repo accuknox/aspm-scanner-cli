@@ -357,12 +357,19 @@ class SASTScanner:
             with open(self.result_file, 'r') as f:
                 data = json.load(f)
 
-            # Ensure "results" exists
+            # OpenGrep reports severities as ERROR/WARNING/INFO; normalize them
+            # to the standard scale so user-supplied severities (e.g. HIGH) match.
+            severity_map = {
+                "ERROR": "HIGH",
+                "WARNING": "MEDIUM",
+                "INFO": "LOW",
+            }
+
             results = data.get("results", [])
             for result in results:
-                # Extract severity from extra
                 severity = result.get("extra", {}).get("severity", "").upper()
-                if severity in self.severity:
+                normalized_severity = severity_map.get(severity, severity)
+                if normalized_severity in self.severity:
                     return True
             return False
 
