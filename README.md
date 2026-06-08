@@ -188,6 +188,7 @@ Required:
 Flags used after `iac`:
 
 - `--container-mode`
+- `--severity`
 - `--repo-url`
 - `--repo-branch`
 
