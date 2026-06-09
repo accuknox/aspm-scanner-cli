@@ -188,6 +188,7 @@ Required:
 Flags used after `iac`:
 
 - `--container-mode`
+- `--severity` — Comma-separated severities that fail the scan. Allowed: `INFO,LOW,MEDIUM,HIGH,CRITICAL`. Defaults to all.
 - `--repo-url`
 - `--repo-branch`
 
@@ -223,7 +224,7 @@ Required:
 Flags used after `sast`:
 
 - `--container-mode`
-- `--severity`
+- `--severity` — Comma-separated severities that fail the scan (matched on finding impact). Allowed: `LOW,MEDIUM,HIGH,CRITICAL,UNKNOWN`. Defaults to all.
 - `--aiscan-severity`
 - `--repo-url`
 - `--commit-ref`

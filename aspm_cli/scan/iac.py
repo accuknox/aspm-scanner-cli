@@ -14,15 +14,17 @@ class IaCScanner:
     output_file_path = '.'
     result_file = os.path.join(output_file_path, 'results_json.json')
 
-    def __init__(self, command, container_mode=False, repo_url=None, repo_branch=None):
+    def __init__(self, command, container_mode=False, repo_url=None, repo_branch=None, severity=None):
         """
         :param command: Raw command string passed by the user (e.g., "-d .")
         :param container_mode: If True, run ak_iac locally instead of in Docker
+        :param severity: Comma-separated severities that should fail the scan
         """
         self.command = command
         self.container_mode = container_mode
         self.repo_url = repo_url
         self.repo_branch = repo_branch
+        self.severity = [s.strip().upper() for s in (severity or "INFO,LOW,MEDIUM,HIGH,CRITICAL").split(',')]
 
     def run(self):
         try:
@@ -50,8 +52,20 @@ class IaCScanner:
             if not os.path.exists(self.result_file):
                 return config.SOMETHING_WENT_WRONG_RETURN_CODE, None
 
+            # Checkov exits 0 (no failed checks) or 1 (failed checks found).
+            # Any other code is a runtime error even if a (partial) result
+            # file was written, so surface it instead of letting the severity
+            # check below silently pass the pipeline.
+            if result.returncode not in (0, 1):
+                Logger.get_logger().error(f"IaC scanner exited with error code {result.returncode}.")
+                return config.SOMETHING_WENT_WRONG_RETURN_CODE, self.result_file
+
             self.process_result_file()
-            return result.returncode, self.result_file
+
+            if self._severity_threshold_met():
+                Logger.get_logger().error(f"Vulnerabilities matching severities: {', '.join(self.severity)} found.")
+                return 1, self.result_file
+            return 0, self.result_file
 
         except Exception as e:
             Logger.get_logger().error(f"Error during IaC scan: {e}")
@@ -131,4 +145,31 @@ class IaCScanner:
         except Exception as e:
             Logger.get_logger().debug(f"Error processing result file: {e}")
             Logger.get_logger().error(f"Error during IaC scan: {e}")
+            raise
+
+    def _severity_threshold_met(self):
+        try:
+            with open(self.result_file, 'r') as f:
+                data = json.load(f)
+
+            # Checkov output may be a single dict or a list of per-framework
+            # results (and process_result_file appends a metadata entry).
+            if isinstance(data, dict):
+                data = [data]
+
+            for entry in data:
+                if not isinstance(entry, dict):
+                    continue
+                failed_checks = entry.get("results", {}).get("failed_checks", [])
+                for check in failed_checks:
+                    # OSS Checkov emits null severity for its built-in policies.
+                    # The platform renders those findings as LOW, so bucket them
+                    # as LOW here too, keeping --severity consistent with the UI.
+                    severity = (check.get("severity") or "LOW").upper()
+                    if severity in self.severity:
+                        return True
+            return False
+
+        except Exception as e:
+            Logger.get_logger().error(f"Error reading scan results: {e}")
             raise

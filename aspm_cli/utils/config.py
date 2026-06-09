@@ -100,15 +100,36 @@ class ConfigValidator:
     # These methods encapsulate the validation rules for each scan type.
     # They leverage Pydantic models internally for strong validation.
 
-    def validate_iac_scan(self, command: str, container_mode: bool, repo_url: Optional[str], repo_branch: Optional[str]):
+    def validate_iac_scan(self, command: str, container_mode: bool, repo_url: Optional[str], repo_branch: Optional[str], severity: str):
         class IaCScanConfig(BaseModel):
             command: str = Field(..., min_length=1, description="Command arguments for IAC scanner")
             container_mode: bool
             repo_url: Optional[str]
             repo_branch: Optional[str]
+            severity: str = Field(..., description="Comma-separated list of severities")
+
+            @field_validator("severity", mode="before")
+            @classmethod
+            def validate_severity(cls, v: str, info: FieldValidationInfo):
+                allowed_severities = {"INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"}
+                if not isinstance(v, str):
+                    raise ValueError("Severity must be a comma-separated string.")
+
+                provided_severities = {s.strip().upper() for s in v.split(",") if s.strip()}
+
+                if not provided_severities:
+                    raise ValueError("At least one severity must be provided.")
+
+                invalid = provided_severities - allowed_severities
+                if invalid:
+                    raise ValueError(
+                        f"Invalid severity values: {', '.join(sorted(invalid))}. "
+                        f"Allowed values: {', '.join(sorted(allowed_severities))}."
+                    )
+                return ",".join(sorted(provided_severities))
 
         try:
-            IaCScanConfig(command=command, container_mode=container_mode, repo_url=repo_url, repo_branch=repo_branch)
+            IaCScanConfig(command=command, container_mode=container_mode, repo_url=repo_url, repo_branch=repo_branch, severity=severity)
             self._log_validation_success("IAC")
         except ValidationError as e:
             concise_msg = _format_validation_error(e)
@@ -202,7 +223,7 @@ class ConfigValidator:
             @field_validator("severity", mode="before")
             @classmethod
             def validate_severity(cls, v: str, info: FieldValidationInfo):
-                allowed_severities = {"INFO", "WARNING", "LOW", "MEDIUM", "HIGH", "CRITICAL"}
+                allowed_severities = {"LOW", "MEDIUM", "HIGH", "CRITICAL", "UNKNOWN"}
                 if not isinstance(v, str):
                     raise ValueError("Severity must be a comma-separated string.")
 
