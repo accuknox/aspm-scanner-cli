@@ -223,7 +223,7 @@ class ConfigValidator:
             @field_validator("severity", mode="before")
             @classmethod
             def validate_severity(cls, v: str, info: FieldValidationInfo):
-                allowed_severities = {"INFO", "WARNING", "LOW", "MEDIUM", "HIGH", "CRITICAL", "ERROR"}
+                allowed_severities = {"INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL", "UNKNOWN"}
                 if not isinstance(v, str):
                     raise ValueError("Severity must be a comma-separated string.")
 

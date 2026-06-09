@@ -21,7 +21,7 @@ class SASTScanner(BaseScanner):
         )
         parser.add_argument(
             "--severity",
-            default="INFO,WARNING,LOW,MEDIUM,HIGH,CRITICAL",
+            default="INFO,LOW,MEDIUM,HIGH,CRITICAL,UNKNOWN",
             help="Comma-separated list of severities to check. If any match, the scan will fail. Defaults to all severities."
         )
         parser.add_argument(

@@ -357,19 +357,17 @@ class SASTScanner:
             with open(self.result_file, 'r') as f:
                 data = json.load(f)
 
-            # OpenGrep reports severities as ERROR/WARNING/INFO; normalize them
-            # to the standard scale so user-supplied severities (e.g. HIGH) match.
-            severity_map = {
-                "ERROR": "HIGH",
-                "WARNING": "MEDIUM",
-                "INFO": "LOW",
-            }
-
+            # OpenGrep already rates each finding on the standard scale via
+            # extra.metadata.impact (LOW/MEDIUM/HIGH), which lines up with the
+            # user-supplied --severity values directly. The rule-level
+            # extra.severity (ERROR/WARNING/INFO) is a different axis, so we
+            # filter on impact instead of remapping severity.
             results = data.get("results", [])
             for result in results:
-                severity = result.get("extra", {}).get("severity", "").upper()
-                normalized_severity = severity_map.get(severity, severity)
-                if normalized_severity in self.severity:
+                # impact can be absent for some rules; bucket those as UNKNOWN
+                # so the default still fails on them.
+                impact = (result.get("extra", {}).get("metadata", {}).get("impact") or "UNKNOWN").upper()
+                if impact in self.severity:
                     return True
             return False
 
