@@ -1,3 +1,11 @@
+aspm-scanner-cli (0.14.6) unstable; urgency=medium
+
+  * Add --severity filtering for IaC scans
+  * SAST severity filtering uses metadata.impact
+  * Align CLI, wheel, and package version metadata to 0.14.6
+
+ -- AccuKnox <accuknox@accuknox.com>  Mon, 09 Jun 2026 12:00:00 +0530
+
 aspm-scanner-cli (0.14.4) unstable; urgency=medium
 
   * Fix SAST container-mode Docker workdir to persist results.json on mounted paths
