@@ -52,6 +52,14 @@ class IaCScanner:
             if not os.path.exists(self.result_file):
                 return config.SOMETHING_WENT_WRONG_RETURN_CODE, None
 
+            # Checkov exits 0 (no failed checks) or 1 (failed checks found).
+            # Any other code is a runtime error even if a (partial) result
+            # file was written, so surface it instead of letting the severity
+            # check below silently pass the pipeline.
+            if result.returncode not in (0, 1):
+                Logger.get_logger().error(f"IaC scanner exited with error code {result.returncode}.")
+                return config.SOMETHING_WENT_WRONG_RETURN_CODE, self.result_file
+
             self.process_result_file()
 
             if self._severity_threshold_met():
