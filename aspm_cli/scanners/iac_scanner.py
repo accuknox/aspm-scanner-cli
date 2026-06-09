@@ -21,7 +21,7 @@ class IACScanner(BaseScanner):
         )
         parser.add_argument(
             "--severity",
-            default="INFO,LOW,MEDIUM,HIGH,CRITICAL,UNKNOWN",
+            default="INFO,LOW,MEDIUM,HIGH,CRITICAL",
             help="Comma-separated list of severities to check. If any match, the scan will fail. Defaults to all severities."
         )
         parser.add_argument("--repo-url", default=GitInfo.get_repo_url(), help="Git repository URL")

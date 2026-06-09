@@ -24,7 +24,7 @@ class IaCScanner:
         self.container_mode = container_mode
         self.repo_url = repo_url
         self.repo_branch = repo_branch
-        self.severity = [s.strip().upper() for s in (severity or "INFO,LOW,MEDIUM,HIGH,CRITICAL,UNKNOWN").split(',')]
+        self.severity = [s.strip().upper() for s in (severity or "INFO,LOW,MEDIUM,HIGH,CRITICAL").split(',')]
 
     def run(self):
         try:
@@ -162,9 +162,10 @@ class IaCScanner:
                     continue
                 failed_checks = entry.get("results", {}).get("failed_checks", [])
                 for check in failed_checks:
-                    # Checkov severity is often null for built-in policies;
-                    # bucket those as UNKNOWN so the default still fails on them.
-                    severity = (check.get("severity") or "UNKNOWN").upper()
+                    # OSS Checkov emits null severity for its built-in policies.
+                    # The platform renders those findings as LOW, so bucket them
+                    # as LOW here too, keeping --severity consistent with the UI.
+                    severity = (check.get("severity") or "LOW").upper()
                     if severity in self.severity:
                         return True
             return False
