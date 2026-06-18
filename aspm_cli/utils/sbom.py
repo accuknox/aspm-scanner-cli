@@ -70,7 +70,10 @@ def derive_filesystem_component_display_name(
     """
     Human-readable BOM root name from host cwd and --command target (e.g. repo or repo/utils).
     """
-    cwd = cwd or os.getcwd()
+    try:
+        cwd = cwd or os.getcwd()
+    except OSError:
+        cwd = "."
     repo = os.path.basename(os.path.abspath(cwd))
     target = scan_target_from_command(command)
     if not target or target in (".", ""):
@@ -224,3 +227,25 @@ def normalize_sbom_args_for_docker(command: str, sanitized_args: List[str]) -> L
     if subcommand in FILESYSTEM_SUBCOMMANDS:
         return normalize_filesystem_args_for_docker(sanitized_args)
     return sanitized_args
+
+
+def is_sbom_payload_empty(data: Any) -> bool:
+    """Return True when CycloneDX payload has no meaningful BOM content."""
+    if not isinstance(data, dict) or not data:
+        return True
+    components = data.get("components")
+    if isinstance(components, list) and len(components) > 0:
+        return False
+    metadata = data.get("metadata")
+    if isinstance(metadata, dict) and metadata.get("component"):
+        return False
+    return True
+
+
+def append_sbom_scanner_flags(sanitized_args: List[str]) -> List[str]:
+    """Ensure SBOM scans request package + license analysis for richer CycloneDX output."""
+    if "--scanners" in sanitized_args:
+        return sanitized_args
+    result = list(sanitized_args)
+    result.extend(["--scanners", "vuln,license"])
+    return result

@@ -1,7 +1,16 @@
 from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Literal, Optional
 
-ALLOWED_TOOL_TYPES = ["iac", "sast", "secret", "container", "dast", "sq-sast", "codeassure"]
+ALLOWED_TOOL_TYPES = [
+    "iac",
+    "sast",
+    "secret",
+    "container",
+    "dast",
+    "sq-sast",
+    "codeassure",
+    "gitleaks",
+]
 
 class ToolDownloadConfig(BaseModel):
     tooltype: Optional[str] = Field(default=None)

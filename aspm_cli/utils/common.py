@@ -12,7 +12,17 @@ from aspm_cli.utils.logger import Logger
 from aspm_cli.utils.spinner import Spinner
 
 # Moved from original main.py
-ALLOWED_SCAN_TYPES = ["iac", "sq-sast", "secret", "container", "sast", "dast"]
+ALLOWED_SCAN_TYPES = [
+    "iac",
+    "sq-sast",
+    "secret",
+    "container",
+    "sast",
+    "dast",
+    "sca",
+    "ml-scan",
+    "api-discovery",
+]
 
 def _build_endpoint_url(endpoint, api_path):
     """
