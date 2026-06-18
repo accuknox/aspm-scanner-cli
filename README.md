@@ -393,7 +393,7 @@ accuknox-aspm-scanner scan container --command "image nginx:latest" --container-
 
 ### ML Scan
 
-Use for static ML model scanning with **ModelScan** (`modelscan==0.8.1` inside the platform **`ondemand_modelscan`** job image). The CLI discovers model files under the `-p` path (`.pkl`, `.pt`, `.pth`, `.h5`, `.keras`, `.pb`, `.ckpt`, `.npy`), runs `modelscan scan -p <file> -r json` per file, wraps results as `ondemand_modelscan`, and uploads as **`MLCHECKS`**.
+Use for static ML model scanning with **ModelScan** (`modelscan==0.8.1` inside the platform **`ondemand_modelscan`** job image). The CLI discovers model files under the `-p` path (`.pkl`, `.pt`, `.pth`, `.h5`, `.keras`, `.pb`, `.ckpt`, `.npy`), runs `modelscan scan -p <file> -r json` per file, wraps results as `ondemand_modelscan`, and uploads with artifact **`data_type=MLC`** (routes to `ModelscanParser`; findings appear in the UI as **MLChecks**).
 
 **Pre-release:** use `--container-mode` (recommended for CI and platform parity). Local `modelscan` on `PATH` is optional for development only; release tarballs ship in a later GA.
 

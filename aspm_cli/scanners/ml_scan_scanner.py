@@ -8,7 +8,7 @@ from aspm_cli.utils.git_info import GitInfo
 
 class MLScanScanner(BaseScanner):
     help_text = "Run ML static model scan using ModelScan"
-    data_type_identifier = "MLCHECKS"
+    data_type_identifier = "MLC"
 
     def add_arguments(self, parser: argparse.ArgumentParser):
         parser.add_argument(
