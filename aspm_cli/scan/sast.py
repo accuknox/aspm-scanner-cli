@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import subprocess
 import json
 import os
@@ -32,10 +30,7 @@ class SASTScanner:
         """
         self.command = command
         self.container_mode = container_mode
-        self.severity = [
-            s.strip().upper()
-            for s in (severity or "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL").split(",")
-        ]
+        self.severity = [s.strip().upper() for s in (severity).split(',')]
         self.aiscan_severity = [s.strip().upper() for s in aiscan_severity.split(',')] if ai_analysis and isinstance(aiscan_severity, str) else []
         self.repo_url = repo_url
         self.commit_ref = commit_ref
@@ -228,59 +223,49 @@ class SASTScanner:
         Sanitize raw OpenGrep args:
         - Remove conflicting --json / --output flags
         - Ensure -f (rules directory) is set, defaulting to /rules/default-rules/
-        - Append enforced output flags before scan targets
+        - Append enforced output flags
         """
         args = shlex.split(self.command or "")
         forbidden_flags = {"--json", "--output"}
-        sanitized_options = []
-        targets = []
+        sanitized_args = []
         i = 0
         saw_rules_flag = False
 
-        if args and args[0] == "scan":
-            i = 1
-
         while i < len(args):
-            arg = args[i]
-            if arg in forbidden_flags:
-                if arg == "--output":
+            if args[i] in forbidden_flags:
+                # skip the flag and its value if it requires one
+                if args[i] == "--output":
                     i += 2
+                    continue
                 else:
                     i += 1
-                continue
+                    continue
 
-            if arg == "-f":
+            if args[i] == "-f":
                 saw_rules_flag = True
-                sanitized_options.append(arg)
+                sanitized_args.append(args[i])
                 if i + 1 < len(args):
-                    sanitized_options.append(args[i + 1])
+                    sanitized_args.append(args[i + 1])
                     i += 2
                     continue
 
-            if arg.startswith("-"):
-                sanitized_options.append(arg)
-                if (
-                    "=" not in arg
-                    and i + 1 < len(args)
-                    and not args[i + 1].startswith("-")
-                ):
-                    sanitized_options.append(args[i + 1])
-                    i += 2
-                    continue
-            else:
-                targets.append(arg)
+            sanitized_args.append(args[i])
             i += 1
 
-        default_rules = (
-            "/rules/default-rules/"
-            if self.container_mode
-            else ToolManager.get_path("sast-rules")
-        )
+        # Ensure rules path (-f) is set
+        if not self.container_mode:
+            sast_binary = ToolManager.get_path("sast")
+        default_rules = "/rules/default-rules/" if self.container_mode else ToolManager.get_path("sast-rules")
         if not saw_rules_flag:
-            sanitized_options.extend(["-f", default_rules])
+            sanitized_args.extend(["-f", default_rules])
 
-        output_path = "/app/results.json" if self.container_mode else self.result_file
-        return ["scan", *sanitized_options, "--json", "--output", output_path, *targets]
+        # Enforce output format
+        sanitized_args.extend([
+            "--json",
+            "--output", self.result_file,
+        ])
+
+        return sanitized_args
         
         
     def _fix_file_permissions_if_docker(self):

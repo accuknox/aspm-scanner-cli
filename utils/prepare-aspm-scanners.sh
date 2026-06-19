@@ -156,23 +156,4 @@ tar -czvf "$CODEASSURE_TAR" "$CODEASSURE_FOLDER"
 rm -rf "$TEMP_CODEASSURE" "$CODEASSURE_FOLDER"
 echo "✅ CodeAssure binary packaged as $CODEASSURE_TAR"
 
-### Gitleaks -> gitleaks.tar.gz
-echo "=== [8/8] Downloading Gitleaks ==="
-GITLEAKS_VERSION="8.24.2"
-GITLEAKS_TAR="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-GITLEAKS_URL="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${GITLEAKS_TAR}"
-GITLEAKS_BIN="gitleaks"
-GITLEAKS_ARCHIVE="gitleaks.tar.gz"
-
-mkdir -p temp_gitleaks_download
-cd temp_gitleaks_download
-curl -LO "$GITLEAKS_URL"
-tar -xzf "$GITLEAKS_TAR"
-cp gitleaks "../$GITLEAKS_BIN"
-cd ..
-tar -czvf "$GITLEAKS_ARCHIVE" "$GITLEAKS_BIN"
-cp temp_gitleaks_download/gitleaks $PACKAGE_BIN_DIR/$GITLEAKS_BIN
-rm -rf temp_gitleaks_download "$GITLEAKS_BIN"
-echo "✅ Packaged as $GITLEAKS_ARCHIVE"
-
 echo "🎉 All tools downloaded and prepared successfully."

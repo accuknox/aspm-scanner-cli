@@ -7,7 +7,7 @@ from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils import docker_pull
 from aspm_cli.utils import config
-from aspm_cli.utils.sbom import append_sbom_scanner_flags, normalize_sbom_args_for_docker
+from aspm_cli.utils.sbom import normalize_sbom_args_for_docker
 from colorama import Fore
 
 class ContainerScanner:
@@ -96,7 +96,6 @@ class ContainerScanner:
                 i += 1
             # Force cyclonedx format and JSON output
             sanitized_args.extend(["-f", "cyclonedx", "-o", self.result_file])
-            sanitized_args = append_sbom_scanner_flags(sanitized_args)
             if self.container_mode:
                 sanitized_args = normalize_sbom_args_for_docker(
                     self.command or "", sanitized_args

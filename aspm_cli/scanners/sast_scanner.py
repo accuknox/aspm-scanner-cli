@@ -1,12 +1,11 @@
 import argparse
-import os
 from aspm_cli.scanners.base_scanner import BaseScanner
 from aspm_cli.utils.config import ConfigValidator
 from aspm_cli.utils.git_info import GitInfo
 from aspm_cli.scan.sast import SASTScanner as OriginalSASTScanner 
 
 class SASTScanner(BaseScanner):
-    help_text = "Run Static Application Security Testing (SAST) scan using OpenGrep"
+    help_text = "Run Static Application Security Testing (SAST) scan using Semgrep"
     data_type_identifier = "SG"
 
     def add_arguments(self, parser: argparse.ArgumentParser):
@@ -45,19 +44,17 @@ class SASTScanner(BaseScanner):
         )
 
     def run_scan(self, args: argparse.Namespace) -> tuple[int, str]:
-        env_ai = os.getenv("ACCUKNOX_ENABLE_AI_SAST", "").upper()
-        ai_analysis = args.ai_analysis or env_ai in ("TRUE", "1", "YES")
         scanner = OriginalSASTScanner(
             command=args.command,
             container_mode=args.container_mode,
             severity=args.severity,
-            aiscan_severity=args.aiscan_severity if ai_analysis else [],
+            aiscan_severity=args.aiscan_severity if args.ai_analysis else [],
             repo_url=args.repo_url,
             commit_ref=args.commit_ref,
             commit_sha=args.commit_sha,
             pipeline_id=args.pipeline_id,
             job_url=args.job_url,
-            ai_analysis=ai_analysis,
+            ai_analysis=args.ai_analysis,
             codeassure_config=getattr(args, 'codeassure_config', None)
         )
         return scanner.run()

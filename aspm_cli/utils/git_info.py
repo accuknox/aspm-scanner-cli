@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import subprocess
 from aspm_cli.utils.logger import Logger
 

@@ -39,8 +39,6 @@ class ToolManager:
         "sast": Path("sast") / "sast",
         "sast-rules": Path("sast") / "rules",
         "codeassure": Path("codeassure") / "codeassure",
-        "gitleaks": Path("gitleaks"),
-        "api-discovery": Path("code2api"),
     }
 
 

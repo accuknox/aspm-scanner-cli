@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
 import argparse
 
@@ -17,9 +15,6 @@ class BaseScanner(ABC):
     def __init__(self):
         # Placeholder for common scanner initialization if needed
         pass
-
-    def get_data_type_identifier(self) -> str:
-        return self.data_type_identifier
 
     @abstractmethod
     def add_arguments(self, parser: argparse.ArgumentParser):

@@ -10,12 +10,7 @@ from aspm_cli.utils.spinner import Spinner
 from aspm_cli.utils.config import ConfigValidator
 from aspm_cli.utils.common import upload_results, handle_failure, ALLOWED_SCAN_TYPES
 from aspm_cli.utils.git_info import GitInfo
-from aspm_cli.utils.sbom import (
-    derive_sbom_classifier,
-    enrich_sbom_payload,
-    is_sbom_payload_empty,
-    resolve_project_name,
-)
+from aspm_cli.utils.sbom import derive_sbom_classifier, enrich_sbom_payload, resolve_project_name
 
 class ScanCommand(BaseCommand):
     help_text = f"Run a security scan (e.g. {', '.join(ALLOWED_SCAN_TYPES)})"
@@ -113,32 +108,8 @@ class ScanCommand(BaseCommand):
 
                 # Upload if not skipping
                 if not skip_upload:
-                    if is_sbom_upload:
-                        try:
-                            with open(result_file, "r", encoding="utf-8") as f:
-                                sbom_data = json.load(f)
-                            if is_sbom_payload_empty(sbom_data):
-                                Logger.get_logger().warning(
-                                    "SBOM output is empty or missing components; skipping upload."
-                                )
-                                if not keep_results:
-                                    os.remove(result_file)
-                                else:
-                                    Logger.get_logger().info(f"Results file kept at: {result_file}")
-                                upload_exit_code = 0
-                                Logger.get_logger().debug(
-                                    f"Scan exit_code={exit_code}, upload_exit_code={upload_exit_code}, "
-                                    f"softfail={softfail}, skip_upload={skip_upload}, keep_results={keep_results}"
-                                )
-                                handle_failure(exit_code, softfail, allow_softfail=True)
-                                return
-                        except (json.JSONDecodeError, OSError) as e:
-                            Logger.get_logger().warning(
-                                f"Could not read SBOM file for upload validation: {e}"
-                            )
-
                     # Determine data_type: SBOM for SBOM uploads, otherwise use scanner's identifier
-                    data_type = "SBOM" if is_sbom_upload else scanner.get_data_type_identifier()
+                    data_type = "SBOM" if is_sbom_upload else scanner.data_type_identifier
                     upload_exit_code = upload_results(
                         result_file,
                         accuknox_config["accuknox_endpoint"],

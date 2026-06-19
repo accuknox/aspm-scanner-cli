@@ -2,13 +2,13 @@
 
 ![AccuKnox Logo](https://accuknox.com/wp-content/uploads/accuknox-logo-2.png)
 
-**`accuknox-aspm-scanner`** is a unified CLI for Phase-1 ASPM scans: IaC, SAST, SCA, Secret, SBOM, Container, ML model scan, API discovery, SonarQube SAST, and DAST — in CI/CD pipelines or local developer workflows.
+**`accuknox-aspm-scanner`** is a unified CLI for running IaC, SAST, SonarQube SAST, Secret, Container, and DAST scans in CI/CD pipelines or local developer workflows.
 
 It can upload results to the **AccuKnox ASPM Platform**, but it can also run in standalone mode for restricted or on-prem environments.
 
 ## Features
 
-- 🚀 One CLI for Phase-1 scan types: IaC, SAST, SCA, Secret (TruffleHog/Gitleaks), SBOM, Container, ML Scan, API Discovery, SonarQube SAST, and DAST
+- 🚀 One CLI for multiple scan types: IaC, SAST, SonarQube SAST, Secret, Container, and DAST
 - 🔄 Supports both local tools and containerized execution
 - 🔐 Optional upload to AccuKnox ASPM
 - 🧰 Works in standalone and on-prem environments
@@ -43,10 +43,7 @@ accuknox-aspm-scanner scan --help
 accuknox-aspm-scanner scan iac --help
 accuknox-aspm-scanner scan sast --help
 accuknox-aspm-scanner scan secret --help
-accuknox-aspm-scanner scan sca --help
 accuknox-aspm-scanner scan container --help
-accuknox-aspm-scanner scan ml-scan --help
-accuknox-aspm-scanner scan api-discovery --help
 accuknox-aspm-scanner scan dast --help
 accuknox-aspm-scanner scan sq-sast --help
 accuknox-aspm-scanner tool --help
@@ -73,14 +70,6 @@ AccuKnox upload variables are optional when `--skip-upload` is used.
 - `KEEP_RESULTS`: Set to `TRUE` to keep result files after scan completion
 - `SCAN_IMAGE`: Override the scanner image used in container mode
 - `CODEASSURE_IMAGE`: Override the AI analysis image used by SAST AI analysis
-- `ACCUKNOX_ENABLE_AI_SAST`: Set to `TRUE` to enable AI-SAST per repo (alternative to `--ai-analysis`)
-- `GITLEAKS_IMAGE`: Override the Gitleaks image when `--engine gitleaks`
-- `ML_SCAN_IMAGE`: Override the full ModelScan image for `ml-scan` (default: `public.ecr.aws/k9v9d5v2/accuknox/ondemand_modelscan:1.0.21`)
-- `ML_SCAN_IMAGE_REGISTRY` / `IMAGE_REGISTRY`: On-prem registry host; builds `{registry}/ondemand_modelscan:{tag}` when set
-- `ML_SCAN_IMAGE_TAG`: Tag for ondemand_modelscan (default `1.0.21`, from platform `k8s_jobs/modelscan/release.txt`)
-- `ML_SCAN_DOCKER_PLATFORM`: Docker platform for container mode (default `linux/amd64`)
-- `API_DISCOVERY_IMAGE`: Override the code2api image for `api-discovery` (alias of `SCAN_IMAGE` when set)
-- `CODE2API_IMAGE`: Default code2api scanner image when `SCAN_IMAGE` is unset
 
 ## Tool Management
 
@@ -106,7 +95,6 @@ Supported tool types:
 - `container`
 - `dast`
 - `codeassure`
-- `gitleaks`
 
 User-level tool installs are placed under:
 
@@ -126,7 +114,7 @@ Here is what each part means:
 
 - `scan`: tells the CLI you want to run a scan
 - `flags before the scan name`: these are common scan flags and work across all scan types
-- `<scan-name>`: one of `iac`, `sast`, `sca`, `secret`, `container`, `ml-scan`, `api-discovery`, `dast`, or `sq-sast`
+- `<scan-name>`: one of `iac`, `sast`, `secret`, `container`, `dast`, or `sq-sast`
 - `flags after the scan name`: these are only for the selected scanner
 - `--command`: required for every scan and passed to the underlying scanner
 
@@ -258,16 +246,10 @@ Basic example:
 accuknox-aspm-scanner scan --skip-upload --keep-results sast --command "scan ."
 ```
 
-With AI analysis (CLI flag or per-repo env var):
+With AI analysis:
 
 ```bash
 accuknox-aspm-scanner scan --skip-upload --keep-results sast --command "scan ." --ai-analysis --aiscan-severity "HIGH,CRITICAL"
-```
-
-Per-repo AI-SAST via environment variable (e.g. GitLab CI variable):
-
-```bash
-ACCUKNOX_ENABLE_AI_SAST=TRUE accuknox-aspm-scanner scan --skip-upload sast --command "scan ." --container-mode
 ```
 
 Container mode with AccuKnox upload:
@@ -281,7 +263,7 @@ accuknox-aspm-scanner scan sast --command "scan ." --container-mode
 
 ### Secret Scan
 
-Use for TruffleHog or Gitleaks secret scanning.
+Use for TruffleHog-based secret scanning.
 
 Required:
 
@@ -290,46 +272,26 @@ Required:
 Flags used after `secret`:
 
 - `--container-mode`
-- `--engine` — `trufflehog` (default) or `gitleaks`
-
-TruffleHog example:
-
-```bash
-accuknox-aspm-scanner scan --skip-upload --keep-results secret --command "filesystem ." --container-mode
-```
-
-Gitleaks example (SARIF output; upload uses `data_type=DS` → `DroopescanParser`; findings appear as **droopescan**, not in TruffleHog secret-scan filters):
-
-```bash
-accuknox-aspm-scanner scan --skip-upload --keep-results secret \
-  --engine gitleaks \
-  --command "detect --source . --report-format sarif --report-path results.json --no-banner" \
-  --container-mode
-```
-
-### SCA Scan
-
-Use for Trivy filesystem dependency vulnerability scanning (Software Composition Analysis).
-
-Required:
-
-- `--command`
-
-Flags used after `sca`:
-
-- `--container-mode`
-- `--severity`
 
 Typical `--command` value:
 
 ```bash
-fs .
+git file://.
 ```
 
 Example:
 
 ```bash
-accuknox-aspm-scanner scan --skip-upload --keep-results sca --command "fs ." --container-mode
+accuknox-aspm-scanner scan --skip-upload --keep-results secret --command "git file://." --container-mode
+```
+
+Container mode with AccuKnox upload:
+
+```bash
+ACCUKNOX_ENDPOINT=cspm.accuknox.com \
+ACCUKNOX_LABEL=POC \
+ACCUKNOX_TOKEN=abcd1234 \
+accuknox-aspm-scanner scan secret --command "git file://." --container-mode
 ```
 
 ### Container Scan
@@ -372,16 +334,6 @@ accuknox-aspm-scanner scan --skip-upload --keep-results --project-name demo-proj
 
 SBOM upload requires `--project-name` (or `ACCUKNOX_PROJECT_NAME`). `--project-name` is not required for vulnerability scans. Legacy env `ACCUKNOX_PROJECT` is also accepted.
 
-SBOM Phase-1 capabilities:
-
-| Capability | CLI command | Upload `data_type` |
-|---|---|---|
-| Generate BOM | `container --generate-sbom` | `SBOM` |
-| Upload BOM | same + AccuKnox creds | `SBOM` |
-| Dependency vulnerabilities | `sca --command "fs ."` | `TR` (Trivy JSON; parser classifies as SCA via `ArtifactType: filesystem`) |
-
-SBOM generation includes vulnerability and license metadata in CycloneDX output (`--scanners vuln,license`).
-
 Container mode with AccuKnox upload:
 
 ```bash
@@ -390,86 +342,6 @@ ACCUKNOX_LABEL=POC \
 ACCUKNOX_TOKEN=abcd1234 \
 accuknox-aspm-scanner scan container --command "image nginx:latest" --container-mode
 ```
-
-### ML Scan
-
-Use for static ML model scanning with **ModelScan** (`modelscan==0.8.1` inside the platform **`ondemand_modelscan`** job image). The CLI discovers model files under the `-p` path (`.pkl`, `.pt`, `.pth`, `.h5`, `.keras`, `.pb`, `.ckpt`, `.npy`), runs `modelscan scan -p <file> -r json` per file, wraps results as `ondemand_modelscan`, and uploads with artifact **`data_type=MLC`** (routes to `ModelscanParser`; findings appear in the UI as **MLChecks**).
-
-**Pre-release:** use `--container-mode` (recommended for CI and platform parity). Local `modelscan` on `PATH` is optional for development only; release tarballs ship in a later GA.
-
-Default container image (public mirror of platform **Modelscan Ondemand** `ondemand_modelscan:1.0.21`, `linux/amd64`):
-
-```text
-public.ecr.aws/k9v9d5v2/accuknox/ondemand_modelscan:1.0.21
-```
-
-Override with `ML_SCAN_IMAGE`, or set `IMAGE_REGISTRY` / `ML_SCAN_IMAGE_TAG` for on-prem mirrors. On Apple Silicon Macs, container mode uses `--platform linux/amd64` by default (override with `ML_SCAN_DOCKER_PLATFORM`).
-
-Flags used after `ml-scan`:
-
-- `--container-mode`
-- `--repo-url` — used for `model_id` / `model_path` metadata
-- `--commit-ref` — branch/ref in `model_path`
-- `--model-name` — optional collector name in upload payload
-- `--source-type` — default `github`
-
-Default `--command`:
-
-```bash
-scan -p . -r json
-```
-
-Example (CI — scan all models in repo checkout):
-
-```bash
-accuknox-aspm-scanner scan --skip-upload --keep-results ml-scan \
-  --repo-url "${CI_PROJECT_PATH}" \
-  --commit-ref "${CI_COMMIT_REF_NAME}" \
-  --command "scan -p . -r json" \
-  --container-mode
-```
-
-Example (single model path):
-
-```bash
-accuknox-aspm-scanner scan ml-scan \
-  --command "scan -p ./models/model.pkl -r json" \
-  --container-mode
-```
-
-### API Discovery Scan
-
-Use **code2api** for static API discovery from source (internal routes, external HTTP calls, auth hints).
-
-**Pre-release:** use `--container-mode` with the published image below. Local binary packaging (`tool install --type api-discovery`) ships in a later GA.
-
-Default container image:
-
-```text
-public.ecr.aws/k9v9d5v2/accuknox/code2api:0.1.0
-```
-
-Default `--command`:
-
-```bash
--path . -output results.json
-```
-
-Flags used after `api-discovery`:
-
-- `--container-mode` (required for pre-release)
-- `--repo-url` (optional metadata; defaults from git)
-
-Example:
-
-```bash
-export SCAN_IMAGE=public.ecr.aws/k9v9d5v2/accuknox/code2api:0.1.0
-accuknox-aspm-scanner scan --skip-upload --keep-results api-discovery \
-  --command "-path . -output results.json" \
-  --container-mode
-```
-
-Upload uses `data_type=API`. Output is code2api JSON (`internal_apis`, `external_apis`, `summary`).
 
 ### DAST Scan
 

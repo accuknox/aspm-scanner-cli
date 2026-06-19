@@ -168,97 +168,17 @@ class ConfigValidator:
             Logger.get_logger().debug(f"SQ SAST scan configuration error: {concise_msg}")
             raise ValueError(concise_msg)
 
-    def validate_secret_scan(self, command: str, container_mode: bool, engine: str = "trufflehog"):
+    def validate_secret_scan(self, command: str, container_mode: bool):
         class SecretScanConfig(BaseModel):
             command: str = Field(..., min_length=1, description="Command arguments for Secret scanner")
             container_mode: bool
-            engine: Literal["trufflehog", "gitleaks"] = "trufflehog"
 
         try:
-            SecretScanConfig(command=command, container_mode=container_mode, engine=engine)
+            SecretScanConfig(command=command, container_mode=container_mode)
             self._log_validation_success("Secret")
         except ValidationError as e:
             concise_msg = _format_validation_error(e)
             Logger.get_logger().debug(f"Secret scan configuration error: {concise_msg}")
-            raise ValueError(concise_msg)
-
-    def validate_sca_scan(self, command: str, container_mode: bool, severity: str):
-        from aspm_cli.scan.trivy_runner import validate_sca_command
-
-        class SCAScanConfig(BaseModel):
-            command: str = Field(..., min_length=1, description="Command arguments for SCA scanner")
-            container_mode: bool
-            severity: str = Field(..., description="Comma-separated list of severities")
-
-            @field_validator("severity", mode="before")
-            @classmethod
-            def validate_severity(cls, v: str, info: FieldValidationInfo):
-                allowed_severities = {"UNKNOWN", "LOW", "MEDIUM", "HIGH", "CRITICAL"}
-                if not isinstance(v, str):
-                    raise ValueError("Severity must be a comma-separated string.")
-                provided_severities = {s.strip().upper() for s in v.split(",") if s.strip()}
-                if not provided_severities:
-                    raise ValueError("At least one severity must be provided.")
-                invalid = provided_severities - allowed_severities
-                if invalid:
-                    raise ValueError(
-                        f"Invalid severity values: {', '.join(sorted(invalid))}. "
-                        f"Allowed values: {', '.join(sorted(allowed_severities))}."
-                    )
-                return ",".join(sorted(provided_severities))
-
-        try:
-            SCAScanConfig(command=command, container_mode=container_mode, severity=severity)
-            validate_sca_command(command)
-            self._log_validation_success("SCA")
-        except ValidationError as e:
-            concise_msg = _format_validation_error(e)
-            Logger.get_logger().debug(f"SCA scan configuration error: {concise_msg}")
-            raise ValueError(concise_msg)
-
-    def validate_ml_scan(
-        self,
-        command: str,
-        container_mode: bool,
-        repo_url: Optional[str] = None,
-        commit_ref: Optional[str] = None,
-        model_name: Optional[str] = None,
-        source_type: Optional[str] = None,
-    ):
-        class MLScanConfig(BaseModel):
-            command: str = Field(..., min_length=1, description="Command arguments for ML scan")
-            container_mode: bool
-            repo_url: Optional[str] = None
-            commit_ref: Optional[str] = None
-            model_name: Optional[str] = None
-            source_type: Optional[str] = "github"
-
-        try:
-            MLScanConfig(
-                command=command,
-                container_mode=container_mode,
-                repo_url=repo_url,
-                commit_ref=commit_ref,
-                model_name=model_name,
-                source_type=source_type,
-            )
-            self._log_validation_success("ML Scan")
-        except ValidationError as e:
-            concise_msg = _format_validation_error(e)
-            Logger.get_logger().debug(f"ML scan configuration error: {concise_msg}")
-            raise ValueError(concise_msg)
-
-    def validate_api_discovery_scan(self, command: str, container_mode: bool):
-        class APIDiscoveryScanConfig(BaseModel):
-            command: str = Field(..., min_length=1, description="Command arguments for API discovery scan")
-            container_mode: bool
-
-        try:
-            APIDiscoveryScanConfig(command=command, container_mode=container_mode)
-            self._log_validation_success("API Discovery")
-        except ValidationError as e:
-            concise_msg = _format_validation_error(e)
-            Logger.get_logger().debug(f"API discovery scan configuration error: {concise_msg}")
             raise ValueError(concise_msg)
 
     def validate_container_scan(
