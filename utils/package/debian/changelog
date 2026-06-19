@@ -1,3 +1,11 @@
+aspm-scanner-cli (0.14.7-rc.1) unstable; urgency=medium
+
+  * Add Gitleaks secret scan with SARIF upload (data_type=DS)
+  * Phase-1 scan types: ML scan, API discovery, SCA/SBOM improvements
+  * Align CLI, wheel, and package version metadata to 0.14.7-rc.1
+
+ -- AccuKnox <accuknox@accuknox.com>  Fri, 19 Jun 2026 12:00:00 +0530
+
 aspm-scanner-cli (0.14.6) unstable; urgency=medium
 
   * Add --severity filtering for IaC scans
