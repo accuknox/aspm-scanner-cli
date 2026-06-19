@@ -12,7 +12,7 @@ class SecretScanner(BaseScanner):
     def __init__(self, engine: str = "trufflehog"):
         super().__init__()
         self.engine = engine.lower()
-        self.data_type_identifier = "Gitleaks" if self.engine == "gitleaks" else "TruffleHog"
+        self.data_type_identifier = "DS" if self.engine == "gitleaks" else "TruffleHog"
 
     def add_arguments(self, parser: argparse.ArgumentParser):
         parser.add_argument(
@@ -39,6 +39,6 @@ class SecretScanner(BaseScanner):
     def run_scan(self, args: argparse.Namespace) -> tuple[int, str]:
         engine = args.engine.lower()
         self.engine = engine
-        self.data_type_identifier = "Gitleaks" if engine == "gitleaks" else "TruffleHog"
+        self.data_type_identifier = "DS" if engine == "gitleaks" else "TruffleHog"
         scanner = OriginalSecretScanner(args.command, args.container_mode, engine=engine)
         return scanner.run()

@@ -92,7 +92,7 @@ class SecretScanner:
         return [
             "detect",
             "--source", ".",
-            "--report-format", "json",
+            "--report-format", "sarif",
             "--report-path", self.result_file,
             "--no-banner",
         ]

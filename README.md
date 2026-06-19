@@ -298,12 +298,12 @@ TruffleHog example:
 accuknox-aspm-scanner scan --skip-upload --keep-results secret --command "filesystem ." --container-mode
 ```
 
-Gitleaks example:
+Gitleaks example (SARIF output; upload uses `data_type=DS` → `DroopescanParser`; findings appear as **droopescan**, not in TruffleHog secret-scan filters):
 
 ```bash
 accuknox-aspm-scanner scan --skip-upload --keep-results secret \
   --engine gitleaks \
-  --command "detect --source . --report-format json --report-path results.json --no-banner" \
+  --command "detect --source . --report-format sarif --report-path results.json --no-banner" \
   --container-mode
 ```
 
