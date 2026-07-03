@@ -9,7 +9,7 @@ from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import config, docker_pull
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils.subprocess_utils import run_scan_subprocess
-from aspm_cli.utils.sca_prepare import append_skip_git_dir, normalize_sca_trivy_report
+from aspm_cli.utils.sca_prepare import append_skip_git_dir, prepare_sca_report
 from aspm_cli.utils.sbom import (
     FILESYSTEM_SUBCOMMANDS,
     normalize_filesystem_args_for_docker,
@@ -88,6 +88,31 @@ def build_trivy_scan_command(
     ]
 
 
+def _fix_result_file_permissions_if_docker(container_mode: bool, result_file: str) -> None:
+    """chmod the root-owned Trivy output so the host can rewrite it in place.
+
+    In container mode Trivy runs as root; without this the in-place report
+    normalization fails with PermissionError. Mirrors the SAST/IaC scanners.
+    """
+    if not container_mode:
+        return
+    try:
+        subprocess.run(
+            [
+                "docker", "run", "--rm",
+                "-v", f"{os.getcwd()}:/workdir",
+                "-w", "/workdir",
+                "--entrypoint", "sh",
+                get_trivy_image(),
+                "-c", f"chmod 666 {os.path.basename(result_file)}",
+            ],
+            capture_output=True,
+            text=True,
+        )
+    except Exception as exc:
+        Logger.get_logger().debug(f"Could not fix SCA result file permissions: {exc}")
+
+
 def sanitize_trivy_log(text: str) -> str:
     return re.sub(r"trivy|aquasecurity|aqua security", "[scanner]", text, flags=re.IGNORECASE)
 
@@ -145,9 +170,11 @@ def run_trivy_vuln_scan(
     if not os.path.exists(result_file):
         return config.SOMETHING_WENT_WRONG_RETURN_CODE, None
 
-    if sca_mode and normalize_sca_trivy_report(result_file):
+    if sca_mode:
+        _fix_result_file_permissions_if_docker(container_mode, result_file)
+        prepare_sca_report(result_file)
         Logger.get_logger().debug(
-            "SCA: normalized Trivy ArtifactType repository -> filesystem for platform parsing"
+            "SCA: finalized report identity (ArtifactName/type) for platform parsing"
         )
 
     thresholds = [
