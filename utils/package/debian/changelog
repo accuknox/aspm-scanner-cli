@@ -1,3 +1,10 @@
+aspm-scanner-cli (0.14.7-rc.2) unstable; urgency=medium
+
+  * Fix SCA container-mode Trivy args and report identity for platform parsing (#51)
+  * Align CLI, wheel, and package version metadata to 0.14.7-rc.2
+
+ -- AccuKnox <accuknox@accuknox.com>  Tue, 07 Jul 2026 12:00:00 +0530
+
 aspm-scanner-cli (0.14.7-rc.1) unstable; urgency=medium
 
   * Add Gitleaks secret scan with SARIF upload (data_type=DS)
