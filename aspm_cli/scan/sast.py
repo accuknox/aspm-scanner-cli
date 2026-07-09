@@ -6,6 +6,7 @@ import os
 import shlex
 from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import docker_pull
+from aspm_cli.utils.docker_runtime import build_docker_run_prefix, docker_volume_mount
 from aspm_cli.utils.logger import Logger
 from colorama import Fore
 from aspm_cli.utils import config
@@ -186,10 +187,7 @@ class SASTScanner:
                 cmd.extend(["--severity", ",".join(self.aiscan_severity)])
 
         else:
-            cmd = [
-                "docker", "run", "--rm",
-                "-v", f"{os.getcwd()}:/workspace",
-            ]
+            cmd = build_docker_run_prefix(workdir="/workspace")
             if self.codeassure_config:
                 config_path = os.path.abspath(self.codeassure_config)
             elif os.path.exists(os.path.join(os.getcwd(), "codeassure.json")):
@@ -197,7 +195,7 @@ class SASTScanner:
             else:
                 config_path = None
             if config_path:
-                cmd.extend(["-v", f"{config_path}:/app/codeassure.json"])
+                cmd.extend(docker_volume_mount(config_path, "/app/codeassure.json"))
                 try:
                     with open(config_path) as _f:
                         _cfg = json.load(_f)
@@ -287,9 +285,7 @@ class SASTScanner:
         if self.container_mode:
             try:
                 chmod_cmd = [
-                    "docker", "run", "--rm",
-                    "-v", f"{os.getcwd()}:/app",
-                    "-w", "/app",
+                    *build_docker_run_prefix(workdir="/app"),
                     "--entrypoint", "bash",
                     self.opengrep_image,
                     "-c", f"chmod 777 {self.result_file}"
@@ -357,12 +353,8 @@ class SASTScanner:
         if not self.container_mode:
             cmd = [ToolManager.get_path("sast")]
         else:
-            cmd = [
-                "docker", "run", "--rm",
-                "-v", f"{os.getcwd()}:/app",
-                "-w", "/app",
-                self.opengrep_image,
-            ]
+            cmd = build_docker_run_prefix(workdir="/app")
+            cmd.append(self.opengrep_image)
 
         cmd.extend(args)
         return cmd

@@ -5,13 +5,14 @@ import tarfile
 import tempfile
 from pathlib import Path
 from aspm_cli.utils.logger import Logger
+from aspm_cli.utils.docker_runtime import local_tool_install_supported, platform_name
 import shutil
 
 
 class ToolDownloader:
     TOOL_URLS = {
         "Windows": {
-            # TODO: add Windows tarballs if supported later
+            # TODO: add Windows tarballs when release pipeline publishes them.
         },
         "Linux": {
             "iac": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.10.1/iac.tar.gz",
@@ -36,8 +37,20 @@ class ToolDownloader:
 
         self.install_dir.mkdir(parents=True, exist_ok=True)
 
+    def _tool_urls_for_platform(self):
+        if not local_tool_install_supported():
+            return {}
+        return self.TOOL_URLS.get("Linux", {})
+
     def download_tool(self, tool_type, overwrite=False):
-        download_url = self.TOOL_URLS[self.system].get(tool_type)
+        if not local_tool_install_supported():
+            Logger.get_logger().error(
+                f"Local scanner tool install is only supported on Linux. "
+                f"On {platform_name()}, install Docker and run scans with --container-mode."
+            )
+            return False
+
+        download_url = self._tool_urls_for_platform().get(tool_type)
         if not download_url:
             Logger.get_logger().error(f"No download URL found for {tool_type} on {self.system}")
             return False

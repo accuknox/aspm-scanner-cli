@@ -2,6 +2,8 @@ import platform
 from pathlib import Path
 import os
 
+from aspm_cli.utils.docker_runtime import local_tool_install_supported, platform_name
+
 
 class ToolManager:
     """
@@ -46,8 +48,12 @@ class ToolManager:
 
     @staticmethod
     def get_path(name: str) -> str:
-        if ToolManager._is_windows:
-            raise ValueError("Non-container mode is not supported currently on Windows")
+        if not local_tool_install_supported():
+            raise ValueError(
+                f"Local (non-container) scan mode is not supported on {platform_name()}. "
+                "Install Docker and pass --container-mode, or run scans on Linux after "
+                "`accuknox-aspm-scanner tool install --type <scanner>`."
+            )
 
         """
         Returns the full OS-aware path under the AccuKnox install directory

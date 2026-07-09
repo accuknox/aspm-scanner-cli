@@ -19,6 +19,8 @@ It can upload results to the **AccuKnox ASPM Platform**, but it can also run in 
 
 ### 1. Connected environment
 
+**Requires Python 3.9+** (3.10+ recommended; matches project `Pipfile`).
+
 Install from the GitHub release wheel:
 
 ```bash
@@ -32,6 +34,21 @@ Install from the release `.deb` package:
 ```bash
 sudo dpkg -i accuknox-aspm-scanner_<version>.deb
 ```
+
+### 3. macOS and Windows
+
+Install the cross-platform Python wheel (same as connected environment above), or use the release native binary when available:
+
+- **Windows:** `accuknox-aspm-scanner.exe` from GitHub Releases
+- **macOS:** PyInstaller binary from GitHub Releases (when published)
+
+On macOS and Windows, **use `--container-mode`** with Docker Desktop installed. Local `tool install` bundles Linux ELF binaries and is only supported on Linux.
+
+| Platform | Install | Local scan (`tool install`) | Container scan (`--container-mode`) |
+|---|---|---|---|
+| Linux | `pip` wheel, `.deb` | Supported | Supported |
+| macOS | `pip` wheel | Not supported (use Docker) | Supported |
+| Windows | `pip` wheel, `.exe` | Not supported (use Docker) | Supported |
 
 ## Get Help
 

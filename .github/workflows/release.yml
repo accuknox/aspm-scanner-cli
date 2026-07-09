@@ -54,6 +54,10 @@ jobs:
             name: windows
             suffix: '.exe'
             ext: '.exe'
+          - os: macos-14
+            name: macos
+            suffix: ''
+            ext: ''
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
