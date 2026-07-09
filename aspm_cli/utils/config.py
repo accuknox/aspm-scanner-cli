@@ -136,7 +136,7 @@ class ConfigValidator:
             Logger.get_logger().debug(f"IAC scan configuration error: {concise_msg}")
             raise ValueError(concise_msg)
 
-    def validate_sq_sast_scan(self, skip_sonar_scan: bool, command: str, container_mode: bool, repo_url: Optional[str], branch: Optional[str], commit_sha: Optional[str], pipeline_url: Optional[str]):
+    def validate_sq_sast_scan(self, skip_sonar_scan: bool, command: str, container_mode: bool, repo_url: Optional[str], branch: Optional[str], commit_sha: Optional[str], pipeline_url: Optional[str], severity: str):
         class SQSAScanConfig(BaseModel):
             skip_sonar_scan: bool
             command: str = Field(..., min_length=1, description="Command arguments for SQ SAST scanner")
@@ -145,6 +145,28 @@ class ConfigValidator:
             branch: Optional[str]
             commit_sha: Optional[str]
             pipeline_url: Optional[str]
+            severity: str = Field(..., description="Comma-separated list of severities")
+
+            @field_validator("severity", mode="before")
+            @classmethod
+            def validate_severity(cls, v: str, info: FieldValidationInfo):
+                # Issue severity + hotspot vulnerabilityProbability
+                allowed_severities = {
+                    "INFO", "MINOR", "MAJOR", "CRITICAL", "BLOCKER",
+                    "LOW", "MEDIUM", "HIGH",
+                }
+                if not isinstance(v, str):
+                    raise ValueError("Severity must be a comma-separated string.")
+                provided_severities = {s.strip().upper() for s in v.split(",") if s.strip()}
+                if not provided_severities:
+                    raise ValueError("At least one severity must be provided.")
+                invalid = provided_severities - allowed_severities
+                if invalid:
+                    raise ValueError(
+                        f"Invalid severity values: {', '.join(sorted(invalid))}. "
+                        f"Allowed values: {', '.join(sorted(allowed_severities))}."
+                    )
+                return ",".join(sorted(provided_severities))
 
             @model_validator(mode='after')
             def check_sonar_command_if_not_skipped(self) -> 'SQSAScanConfig':
@@ -160,7 +182,8 @@ class ConfigValidator:
                 repo_url=repo_url,
                 branch=branch,
                 commit_sha=commit_sha,
-                pipeline_url=pipeline_url
+                pipeline_url=pipeline_url,
+                severity=severity,
             )
             self._log_validation_success("SQ SAST")
         except ValidationError as e:

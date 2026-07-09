@@ -21,6 +21,15 @@ class SQSASTScanner(BaseScanner):
             action="store_true",
             help="Run in container mode"
         )
+        parser.add_argument(
+            "--severity",
+            default="INFO,MINOR,MAJOR,CRITICAL,BLOCKER,LOW,MEDIUM,HIGH",
+            help=(
+                "Comma-separated severities that fail the scan. "
+                "Matches SonarQube issue severity (INFO,MINOR,MAJOR,CRITICAL,BLOCKER) "
+                "and hotspot vulnerabilityProbability (LOW,MEDIUM,HIGH). Defaults to all."
+            ),
+        )
         parser.add_argument("--repo-url", default=GitInfo.get_repo_url(), help="Git repository URL")
         parser.add_argument("--branch", default=GitInfo.get_branch_name(), help="Git repository branch")
         parser.add_argument("--commit-sha", default=GitInfo.get_commit_sha(), help="Commit SHA for scanning")
@@ -29,12 +38,14 @@ class SQSASTScanner(BaseScanner):
     def validate_config(self, args: argparse.Namespace, validator: ConfigValidator):
         validator.validate_sq_sast_scan(
             args.skip_sonar_scan, args.command, args.container_mode,
-            args.repo_url, args.branch, args.commit_sha, args.pipeline_url
+            args.repo_url, args.branch, args.commit_sha, args.pipeline_url,
+            args.severity,
         )
 
     def run_scan(self, args: argparse.Namespace) -> tuple[int, str]:
         scanner = OriginalSQSASTScanner(
             args.skip_sonar_scan, args.command, args.container_mode,
-            args.repo_url, args.branch, args.commit_sha, args.pipeline_url
+            args.repo_url, args.branch, args.commit_sha, args.pipeline_url,
+            severity=args.severity,
         )
         return scanner.run()
