@@ -194,3 +194,28 @@ jobs:
         with:
           files: |
             utils/*-darwin-*.tar.gz
+
+  build-windows-scanners:
+    needs: [ release ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Package Windows scanner tarballs (amd64)
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip
+          cd utils
+          chmod +x ./prepare-aspm-scanners-windows.sh
+          ./prepare-aspm-scanners-windows.sh
+
+      - name: Upload Windows Scanner Tarballs to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            utils/*-windows-*.tar.gz

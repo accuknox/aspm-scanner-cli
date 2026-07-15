@@ -32,11 +32,21 @@ DARWIN_SUPPORTED_TOOLS = frozenset({
     "sq-sast",
 })
 
+# Tools with native Windows installers (x86_64 / amd64).
+WINDOWS_SUPPORTED_TOOLS = frozenset({
+    "iac",
+    "sast",
+    "secret",
+    "container",
+    "gitleaks",
+    "sq-sast",
+})
+
 
 class ToolDownloader:
     TOOL_URLS = {
         "Windows": {
-            # TODO: add Windows tarballs when release pipeline publishes them.
+            # Windows local install uses upstream vendor binaries (see _install_windows_*).
         },
         "Linux": {
             "iac": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.10.1/iac.tar.gz",
@@ -63,19 +73,15 @@ class ToolDownloader:
         self.install_dir.mkdir(parents=True, exist_ok=True)
 
     def download_tool(self, tool_type, overwrite=False):
-        if self.is_windows:
-            Logger.get_logger().error(
-                "Local scanner tool install is not supported on Windows yet. "
-                "Install Docker Desktop and run scans with --container-mode."
-            )
-            return False
-
         if not local_tool_install_supported():
             Logger.get_logger().error(
                 f"Local scanner tool install is not supported on {platform_name()}. "
                 "Install Docker and run scans with --container-mode."
             )
             return False
+
+        if self.is_windows:
+            return self._download_windows_tool(tool_type, overwrite=overwrite)
 
         if self.is_darwin:
             return self._download_darwin_tool(tool_type, overwrite=overwrite)
@@ -327,4 +333,165 @@ class ToolDownloader:
                     for helper in folder.iterdir():
                         if helper.is_file():
                             self._chmod_x(helper)
+        return True
+
+    def _download_windows_tool(self, tool_type, overwrite=False):
+        if tool_type not in WINDOWS_SUPPORTED_TOOLS:
+            Logger.get_logger().error(
+                f"Local install for '{tool_type}' is not available on Windows yet. "
+                f"Supported local tools: {', '.join(sorted(WINDOWS_SUPPORTED_TOOLS))}. "
+                "Use --container-mode for this scanner, or install Docker Desktop."
+            )
+            return False
+
+        # Prefer checking both extensionless and .exe destinations for overwrite.
+        dest_candidates = {
+            "iac": [self.install_dir / "iac.exe", self.install_dir / "iac"],
+            "secret": [self.install_dir / "secret.exe", self.install_dir / "secret"],
+            "container": [self.install_dir / "container.exe", self.install_dir / "container"],
+            "gitleaks": [self.install_dir / "gitleaks.exe", self.install_dir / "gitleaks"],
+            "sast": [self.install_dir / "sast"],
+            "sq-sast": [self.install_dir / "sq-sast"],
+        }
+        for destination in dest_candidates[tool_type]:
+            if destination.exists() and not self._prepare_destination(destination, tool_type, overwrite):
+                return False
+
+        installers = {
+            "iac": self._install_windows_iac,
+            "sast": self._install_windows_sast,
+            "secret": self._install_windows_secret,
+            "container": self._install_windows_container,
+            "gitleaks": self._install_windows_gitleaks,
+            "sq-sast": self._install_windows_sq_sast,
+        }
+        try:
+            return installers[tool_type]()
+        except Exception as e:
+            Logger.get_logger().error(f"Failed to install {tool_type} for Windows: {e}")
+            return False
+
+    def _find_extracted_file(self, root: Path, names) -> Path:
+        for name in names:
+            direct = root / name
+            if direct.exists():
+                return direct
+            matches = list(root.rglob(name))
+            if matches:
+                return matches[0]
+        raise FileNotFoundError(f"Could not find any of {names} under {root}")
+
+    def _install_windows_iac(self) -> bool:
+        zip_name = "checkov_windows_X86_64.zip"
+        url = (
+            f"https://github.com/bridgecrewio/checkov/releases/download/"
+            f"{CHECKOV_VERSION}/{zip_name}"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            zip_path = Path(tmp) / zip_name
+            self._download_file(url, zip_path)
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                zf.extractall(tmp)
+            src = self._find_extracted_file(Path(tmp), ["checkov.exe", "checkov"])
+            dest = self.install_dir / "iac.exe"
+            shutil.copy2(src, dest)
+        return True
+
+    def _install_windows_sast(self) -> bool:
+        url = (
+            f"https://github.com/opengrep/opengrep/releases/download/"
+            f"{OPENGREP_VERSION_DARWIN}/opengrep_windows_x86.exe"
+        )
+        sast_dir = self.install_dir / "sast"
+        sast_dir.mkdir(parents=True, exist_ok=True)
+        dest = sast_dir / "sast.exe"
+        self._download_file(url, dest)
+
+        rules_url = (
+            f"https://api.github.com/repos/opengrep/opengrep-rules/tarball/{OPENGREP_RULES_COMMIT}"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            tar_path = Path(tmp) / "rules.tar.gz"
+            self._download_file(rules_url, tar_path)
+            extract_dir = Path(tmp) / "rules_extract"
+            extract_dir.mkdir()
+            with tarfile.open(tar_path, "r:gz") as tar:
+                tar.extractall(path=extract_dir)
+            children = [p for p in extract_dir.iterdir() if p.is_dir()]
+            rules_src = children[0] if children else extract_dir
+            for noise in (".pre-commit-config.yaml", "stats", ".github"):
+                noise_path = rules_src / noise
+                if noise_path.is_dir():
+                    shutil.rmtree(noise_path)
+                elif noise_path.exists():
+                    noise_path.unlink()
+            rules_dest = sast_dir / "rules"
+            if rules_dest.exists():
+                shutil.rmtree(rules_dest)
+            shutil.copytree(rules_src, rules_dest)
+        return True
+
+    def _install_windows_secret(self) -> bool:
+        tar_name = f"trufflehog_{TRUFFLEHOG_VERSION}_windows_amd64.tar.gz"
+        url = (
+            f"https://github.com/trufflesecurity/trufflehog/releases/download/"
+            f"v{TRUFFLEHOG_VERSION}/{tar_name}"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            tar_path = Path(tmp) / tar_name
+            self._download_file(url, tar_path)
+            with tarfile.open(tar_path, "r:gz") as tar:
+                tar.extractall(path=tmp)
+            src = self._find_extracted_file(Path(tmp), ["trufflehog.exe", "trufflehog"])
+            dest = self.install_dir / "secret.exe"
+            shutil.copy2(src, dest)
+        return True
+
+    def _install_windows_container(self) -> bool:
+        zip_name = f"trivy_{TRIVY_VERSION}_windows-64bit.zip"
+        url = f"https://github.com/aquasecurity/trivy/releases/download/v{TRIVY_VERSION}/{zip_name}"
+        with tempfile.TemporaryDirectory() as tmp:
+            zip_path = Path(tmp) / zip_name
+            self._download_file(url, zip_path)
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                zf.extractall(tmp)
+            src = self._find_extracted_file(Path(tmp), ["trivy.exe", "trivy"])
+            dest = self.install_dir / "container.exe"
+            shutil.copy2(src, dest)
+        return True
+
+    def _install_windows_gitleaks(self) -> bool:
+        zip_name = f"gitleaks_{GITLEAKS_VERSION}_windows_x64.zip"
+        url = (
+            f"https://github.com/gitleaks/gitleaks/releases/download/"
+            f"v{GITLEAKS_VERSION}/{zip_name}"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            zip_path = Path(tmp) / zip_name
+            self._download_file(url, zip_path)
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                zf.extractall(tmp)
+            src = self._find_extracted_file(Path(tmp), ["gitleaks.exe", "gitleaks"])
+            dest = self.install_dir / "gitleaks.exe"
+            shutil.copy2(src, dest)
+        return True
+
+    def _install_windows_sq_sast(self) -> bool:
+        zip_name = f"sonar-scanner-cli-{SONAR_SCANNER_VERSION}-windows-x64.zip"
+        url = f"https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/{zip_name}"
+        with tempfile.TemporaryDirectory() as tmp:
+            zip_path = Path(tmp) / zip_name
+            self._download_file(url, zip_path)
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                zf.extractall(tmp)
+            extracted = next(
+                (p for p in Path(tmp).iterdir() if p.is_dir() and p.name.startswith("sonar-scanner")),
+                None,
+            )
+            if extracted is None:
+                raise FileNotFoundError("sonar-scanner directory not found in archive")
+            dest = self.install_dir / "sq-sast"
+            if dest.exists():
+                shutil.rmtree(dest)
+            shutil.copytree(extracted, dest)
         return True
