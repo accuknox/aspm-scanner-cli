@@ -310,14 +310,21 @@ class ToolDownloader:
             self._download_file(url, zip_path)
             with zipfile.ZipFile(zip_path, "r") as zf:
                 zf.extractall(tmp)
-            extracted = next(Path(tmp).glob("sonar-scanner*"), None)
-            if extracted is None or not extracted.is_dir():
+            # Prefer extracted dirs only (the zip filename also matches sonar-scanner*).
+            extracted = next(
+                (p for p in Path(tmp).iterdir() if p.is_dir() and p.name.startswith("sonar-scanner")),
+                None,
+            )
+            if extracted is None:
                 raise FileNotFoundError("sonar-scanner directory not found in archive")
             dest = self.install_dir / "sq-sast"
             if dest.exists():
                 shutil.rmtree(dest)
             shutil.copytree(extracted, dest)
-            scanner = dest / "bin" / "sonar-scanner"
-            if scanner.exists():
-                self._chmod_x(scanner)
+            # Zip extractions often lose +x; restore execute bits on launcher + JRE.
+            for folder in (dest / "bin", dest / "jre" / "bin"):
+                if folder.is_dir():
+                    for helper in folder.iterdir():
+                        if helper.is_file():
+                            self._chmod_x(helper)
         return True
