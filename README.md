@@ -572,6 +572,7 @@ Flags used after `sq-sast`:
 
 - `--skip-sonar-scan`
 - `--container-mode`
+- `--severity` — Comma-separated severities that fail the scan. Matches SonarQube issue severity (`INFO,MINOR,MAJOR,CRITICAL,BLOCKER`) and hotspot `vulnerabilityProbability` (`LOW,MEDIUM,HIGH`). Defaults to all.
 - `--repo-url`
 - `--branch`
 - `--commit-sha`
@@ -587,6 +588,14 @@ Example:
 
 ```bash
 accuknox-aspm-scanner scan --skip-upload --keep-results sq-sast --command "-Dsonar.projectKey=<PROJECT_KEY> -Dsonar.host.url=<HOST_URL> -Dsonar.token=<TOKEN> -Dsonar.organization=<ORG_ID>"
+```
+
+Fail the pipeline when Critical/Blocker issues (or High hotspots) are found:
+
+```bash
+accuknox-aspm-scanner scan --skip-upload --keep-results sq-sast \
+  --command "-Dsonar.projectKey=<PROJECT_KEY> -Dsonar.host.url=<HOST_URL> -Dsonar.token=<TOKEN> -Dsonar.organization=<ORG_ID>" \
+  --severity "CRITICAL,BLOCKER,HIGH"
 ```
 
 Important note:

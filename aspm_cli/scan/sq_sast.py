@@ -11,9 +11,10 @@ from accuknox_sq_sast.sonarqube_fetcher import SonarQubeFetcher
 
 class SQSASTScanner:
     sast_image = os.getenv("SCAN_IMAGE", "public.ecr.aws/k9v9d5v2/sonarsource/sonar-scanner-cli:11.4")
+    DEFAULT_SEVERITY = "INFO,MINOR,MAJOR,CRITICAL,BLOCKER,LOW,MEDIUM,HIGH"
 
     def __init__(self, skip_sonar_scan, command, container_mode=False, repo_url=None, branch=None,
-                 commit_sha=None, pipeline_url=None):
+                 commit_sha=None, pipeline_url=None, severity=None):
         """
         :param command: Raw command string (e.g., "-Dsonar.projectKey=... -Dsonar.token=...")
         :param container_mode: If True, run sonar-scanner natively instead of Docker
@@ -21,6 +22,7 @@ class SQSASTScanner:
         :param branch: Branch name
         :param commit_sha: Git commit SHA
         :param pipeline_url: CI/CD pipeline URL
+        :param severity: Comma-separated severities that fail the scan
         """
         self.skip_sonar_scan = skip_sonar_scan
         self.command = command
@@ -29,6 +31,11 @@ class SQSASTScanner:
         self.branch = branch
         self.commit_sha = commit_sha
         self.pipeline_url = pipeline_url
+        self.severity = [
+            s.strip().upper()
+            for s in (severity or self.DEFAULT_SEVERITY).split(",")
+            if s.strip()
+        ]
 
         # Extract needed values from command (for fetcher)
         self.sonar_project_key = self._extract_arg("-Dsonar.projectKey")
@@ -45,7 +52,15 @@ class SQSASTScanner:
                 Logger.get_logger().info("SQ SAST scan skipped.")
             result_file = self._run_ak_scan()
             self._process_result_file(result_file)
-            return returncode, result_file
+            if self._severity_threshold_met(result_file):
+                Logger.get_logger().error(
+                    f"Vulnerabilities matching severities: {', '.join(self.severity)} found."
+                )
+                return 1, result_file
+            # Prefer severity gating for findings; still surface scanner hard failures.
+            if returncode != 0:
+                return returncode, result_file
+            return 0, result_file
         except subprocess.CalledProcessError as e:
             Logger.get_logger().error(f"SonarQube-based AccuKnox SAST scan failed: {e}")
             raise
@@ -115,6 +130,30 @@ class SQSASTScanner:
         except Exception as e:
             Logger.get_logger().debug(f"Error processing result file: {e}")
             Logger.get_logger().error(f"Error during SQ SAST scan: {e}")
+            raise
+
+    def _severity_threshold_met(self, file_path):
+        """
+        Return True if any SonarQube issue severity or hotspot vulnerability
+        probability matches the configured --severity list.
+        """
+        try:
+            with open(file_path, "r") as f:
+                data = json.load(f)
+
+            for issue in data.get("issues") or []:
+                severity = (issue.get("severity") or "").upper()
+                if severity in self.severity:
+                    return True
+
+            for hotspot in data.get("hotspots") or []:
+                probability = (hotspot.get("vulnerabilityProbability") or "").upper()
+                if probability in self.severity:
+                    return True
+
+            return False
+        except Exception as e:
+            Logger.get_logger().error(f"Error evaluating SQ SAST severity threshold: {e}")
             raise
 
     def _extract_arg(self, key):
