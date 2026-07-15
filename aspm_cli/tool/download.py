@@ -160,7 +160,7 @@ class ToolDownloader:
                     return False
             else:
                 Logger.get_logger().warning(f"{tool_type} already exists. Skipping download.")
-                return False
+                return True
         return True
 
     def _download_file(self, url: str, dest: Path):
