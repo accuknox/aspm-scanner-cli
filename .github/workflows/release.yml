@@ -169,3 +169,28 @@ jobs:
         with:
           files: |
             utils/*.deb
+
+  build-darwin-scanners:
+    needs: [ release ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Package Darwin scanner tarballs (arm64 + x86_64)
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip
+          cd utils
+          chmod +x ./prepare-aspm-scanners-darwin.sh
+          ./prepare-aspm-scanners-darwin.sh
+
+      - name: Upload Darwin Scanner Tarballs to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            utils/*-darwin-*.tar.gz

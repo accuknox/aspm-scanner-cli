@@ -16,9 +16,25 @@ def platform_name() -> str:
     return "Linux"
 
 
+def cpu_arch() -> str:
+    """
+    Normalize CPU architecture for tool downloads.
+    Returns ``arm64`` (Apple Silicon / aarch64) or ``x86_64`` (Intel / amd64).
+    """
+    machine = os.uname().machine.lower() if hasattr(os, "uname") else ""
+    if not machine:
+        import platform as py_platform
+        machine = py_platform.machine().lower()
+    if machine in ("arm64", "aarch64"):
+        return "arm64"
+    if machine in ("x86_64", "amd64"):
+        return "x86_64"
+    raise ValueError(f"Unsupported CPU architecture: {machine}")
+
+
 def local_tool_install_supported() -> bool:
-    """Release tarballs ship Linux ELF binaries only."""
-    return sys.platform.startswith("linux")
+    """Native local scanner tools are supported on Linux and macOS (Intel + Apple Silicon)."""
+    return sys.platform.startswith("linux") or sys.platform == "darwin"
 
 
 def host_path_for_docker_volume(path: str) -> str:

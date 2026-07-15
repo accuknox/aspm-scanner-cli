@@ -48,17 +48,22 @@ class ToolManager:
 
     @staticmethod
     def get_path(name: str) -> str:
-        if not local_tool_install_supported():
-            raise ValueError(
-                f"Local (non-container) scan mode is not supported on {platform_name()}. "
-                "Install Docker and pass --container-mode, or run scans on Linux after "
-                "`accuknox-aspm-scanner tool install --type <scanner>`."
-            )
-
         """
         Returns the full OS-aware path under the AccuKnox install directory
         for the given tool/directory name. Raises an error if the path does not exist.
         """
+        if ToolManager._is_windows:
+            raise ValueError(
+                f"Local (non-container) scan mode is not supported on {platform_name()}. "
+                "Install Docker Desktop and pass --container-mode."
+            )
+        if not local_tool_install_supported():
+            raise ValueError(
+                f"Local (non-container) scan mode is not supported on {platform_name()}. "
+                "Install Docker and pass --container-mode, or run "
+                "`accuknox-aspm-scanner tool install --type <scanner>` on Linux or macOS."
+            )
+
         subpath = ToolManager.TOOL_PATHS.get(name)
         if not subpath:
             raise ValueError(f"Unknown tool or directory name: {name}")

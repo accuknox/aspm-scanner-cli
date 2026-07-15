@@ -42,13 +42,35 @@ Install the cross-platform Python wheel (same as connected environment above), o
 - **Windows:** `accuknox-aspm-scanner.exe` from GitHub Releases
 - **macOS:** PyInstaller binary from GitHub Releases (when published)
 
-On macOS and Windows, **use `--container-mode`** with Docker Desktop installed. Local `tool install` bundles Linux ELF binaries and is only supported on Linux.
+#### macOS — both local and container modes
+
+On macOS you can run scans either way:
+
+1. **Local (no Docker):** install native scanner tools, then scan without `--container-mode`
+2. **Container:** Docker Desktop + `--container-mode`
+
+```bash
+# Local — works on Apple Silicon (M-series) and Intel Macs
+accuknox-aspm-scanner tool install --type sast
+accuknox-aspm-scanner scan --skip-upload --keep-results sast --command "scan ."
+
+# Or container mode
+accuknox-aspm-scanner scan --skip-upload --keep-results sast --command "scan ." --container-mode
+```
+
+Local macOS tools supported today: `iac`, `sast`, `secret`, `container` (Trivy), `gitleaks`, `sq-sast`.  
+For `dast` / `codeassure`, use `--container-mode` for now.
 
 | Platform | Install | Local scan (`tool install`) | Container scan (`--container-mode`) |
 |---|---|---|---|
 | Linux | `pip` wheel, `.deb` | Supported | Supported |
-| macOS | `pip` wheel | Not supported (use Docker) | Supported |
-| Windows | `pip` wheel, `.exe` | Not supported (use Docker) | Supported |
+| macOS (Intel + Apple Silicon) | `pip` wheel | Supported (see tools above) | Supported |
+| Windows | `pip` wheel, `.exe` | Not supported yet (use Docker) | Supported |
+
+Notes:
+
+- **Apple Silicon** = `arm64` / M-series; **Intel Mac** = `x86_64`. The CLI detects the CPU and installs the matching binary.
+- **IaC (Checkov)** on Apple Silicon currently uses Checkov’s Intel build (needs [Rosetta 2](https://support.apple.com/en-us/102527)). Other Phase-1 tools use native arm64 or x86_64 builds.
 
 ## Get Help
 
