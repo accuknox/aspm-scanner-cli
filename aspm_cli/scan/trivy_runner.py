@@ -136,6 +136,8 @@ def run_trivy_vuln_scan(
     validate_command=None,
     cli_severity: Optional[str] = None,
     sca_mode: bool = False,
+    repo_url: Optional[str] = None,
+    repo_branch: Optional[str] = None,
 ) -> Tuple[int, Optional[str]]:
     if validate_command:
         validate_command(command)
@@ -176,7 +178,11 @@ def run_trivy_vuln_scan(
 
     if sca_mode:
         _fix_result_file_permissions_if_docker(container_mode, result_file)
-        prepare_sca_report(result_file)
+        prepare_sca_report(
+            result_file,
+            repo_url=repo_url,
+            repo_branch=repo_branch,
+        )
         Logger.get_logger().debug(
             "SCA: finalized report identity (ArtifactName/type) for platform parsing"
         )

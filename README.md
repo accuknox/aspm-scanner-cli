@@ -374,6 +374,8 @@ Flags used after `sca`:
 
 - `--container-mode`
 - `--severity`
+- `--repo-url` — used for SCA asset identity (`ArtifactName`); defaults from git
+- `--repo-branch` — branch used with `--repo-url`; defaults from git
 
 Typical `--command` value:
 
@@ -385,6 +387,16 @@ Example:
 
 ```bash
 accuknox-aspm-scanner scan --skip-upload --keep-results sca --command "fs ." --container-mode
+```
+
+CI example with explicit repo identity:
+
+```bash
+accuknox-aspm-scanner scan --skip-upload --keep-results sca \
+  --command "fs ." \
+  --repo-url "${CI_PROJECT_PATH}" \
+  --repo-branch "${CI_COMMIT_REF_NAME}" \
+  --container-mode
 ```
 
 ### Container Scan
