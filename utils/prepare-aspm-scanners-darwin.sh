@@ -25,14 +25,19 @@ package_for_arch() {
   echo "=== Packaging Darwin ${ARCH} ==="
 
   # --- iac (Checkov) ---
-  # Upstream only ships darwin_X86_64; Apple Silicon uses Rosetta.
-  curl -fsSL -o checkov.zip \
-    "https://github.com/bridgecrewio/checkov/releases/download/${CHECKOV_VERSION}/checkov_darwin_X86_64.zip"
-  unzip -o -q checkov.zip
-  cp dist/checkov iac
-  chmod +x iac
-  tar -czf "${OUT_DIR}/iac-darwin-${ARCH}.tar.gz" iac
-  echo "✅ iac-darwin-${ARCH}.tar.gz"
+  # Upstream asset checkov_darwin_X86_64.zip is mislabeled and contains an arm64 Mach-O.
+  # Only package it for arm64. Intel Mac local install uses pip (see ToolDownloader).
+  if [[ "$ARCH" == "arm64" ]]; then
+    curl -fsSL -o checkov.zip \
+      "https://github.com/bridgecrewio/checkov/releases/download/${CHECKOV_VERSION}/checkov_darwin_X86_64.zip"
+    unzip -o -q checkov.zip
+    cp dist/checkov iac
+    chmod +x iac
+    tar -czf "${OUT_DIR}/iac-darwin-${ARCH}.tar.gz" iac
+    echo "✅ iac-darwin-${ARCH}.tar.gz"
+  else
+    echo "⚠️  Skipping iac-darwin-${ARCH}.tar.gz (no usable Checkov standalone for Intel; CLI uses pip)"
+  fi
 
   # --- secret (TruffleHog) ---
   local HOG_ARCH="arm64"

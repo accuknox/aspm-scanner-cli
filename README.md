@@ -86,7 +86,7 @@ Notes:
 
 - **Apple Silicon** = `arm64` / M-series; **Intel Mac** = `x86_64`. The CLI detects the CPU and installs the matching binary.
 - **Windows** local install currently targets **x64** upstream binaries (standard for these scanners).
-- **IaC (Checkov)** on Apple Silicon currently uses Checkov’s Intel build (needs [Rosetta 2](https://support.apple.com/en-us/102527)). Other Phase-1 tools use native arm64 or x86_64 builds.
+- **IaC (Checkov):** Apple Silicon uses Checkov’s Darwin standalone zip (the asset is named `X86_64` but the binary is arm64). Intel Mac installs Checkov via a dedicated pip venv (no usable x86_64 standalone zip). Other Phase-1 tools use native arm64 or x86_64 builds.
 
 ## Get Help
 

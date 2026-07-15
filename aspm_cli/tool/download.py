@@ -1,6 +1,8 @@
 import os
 import platform
 import shutil
+import subprocess
+import sys
 import tarfile
 import tempfile
 import urllib.request
@@ -189,13 +191,51 @@ class ToolDownloader:
         path.chmod(path.stat().st_mode | 0o111)
 
     def _install_darwin_iac(self, arch: str) -> bool:
-        # Checkov currently publishes only darwin_X86_64; Apple Silicon runs it via Rosetta.
-        zip_name = "checkov_darwin_X86_64.zip"
-        if arch == "arm64":
+        """
+        Install Checkov as ``iac``.
+
+        Bridgecrew's published ``checkov_darwin_X86_64.zip`` is mislabeled — the binary
+        inside is arm64. Use that zip on Apple Silicon. On Intel macOS, install Checkov
+        into a dedicated venv via pip (no usable x86_64 standalone zip).
+        """
+        dest = self.install_dir / "iac"
+        venv_dir = self.install_dir / "iac-venv"
+
+        if arch == "x86_64":
             Logger.get_logger().info(
-                "Checkov has no native Apple Silicon binary; installing the Intel (x86_64) "
-                "build (requires Rosetta 2 on M-series Macs)."
+                "Checkov's published Darwin standalone zip is arm64-only; "
+                f"installing Checkov {CHECKOV_VERSION} via pip for Intel Mac."
             )
+            if venv_dir.exists():
+                shutil.rmtree(venv_dir)
+            subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
+            pip = venv_dir / "bin" / "pip"
+            subprocess.run(
+                [str(pip), "install", "--upgrade", "pip"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                [str(pip), "install", f"checkov=={CHECKOV_VERSION}"],
+                check=True,
+            )
+            checkov_bin = venv_dir / "bin" / "checkov"
+            if not checkov_bin.exists():
+                raise FileNotFoundError(f"checkov not found after pip install at {checkov_bin}")
+            dest.write_text(
+                "#!/bin/sh\n"
+                f'exec "{checkov_bin}" "$@"\n',
+                encoding="utf-8",
+            )
+            self._chmod_x(dest)
+            return True
+
+        # Apple Silicon: use the mislabeled standalone zip (contains arm64 Mach-O).
+        zip_name = "checkov_darwin_X86_64.zip"
+        Logger.get_logger().info(
+            "Installing Checkov Darwin standalone build "
+            f"(asset name {zip_name}; binary is arm64)."
+        )
         url = (
             f"https://github.com/bridgecrewio/checkov/releases/download/"
             f"{CHECKOV_VERSION}/{zip_name}"
@@ -205,15 +245,12 @@ class ToolDownloader:
             self._download_file(url, zip_path)
             with zipfile.ZipFile(zip_path, "r") as zf:
                 zf.extractall(tmp)
-            # Official zip lays out dist/checkov
             src = Path(tmp) / "dist" / "checkov"
             if not src.exists():
-                # fallback: find any executable named checkov
                 candidates = list(Path(tmp).rglob("checkov"))
                 if not candidates:
                     raise FileNotFoundError("checkov binary not found in archive")
                 src = candidates[0]
-            dest = self.install_dir / "iac"
             shutil.copy2(src, dest)
             self._chmod_x(dest)
         return True
