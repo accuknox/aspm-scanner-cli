@@ -205,13 +205,22 @@ class ConfigValidator:
             Logger.get_logger().debug(f"Secret scan configuration error: {concise_msg}")
             raise ValueError(concise_msg)
 
-    def validate_sca_scan(self, command: str, container_mode: bool, severity: str):
+    def validate_sca_scan(
+        self,
+        command: str,
+        container_mode: bool,
+        severity: str,
+        repo_url: Optional[str] = None,
+        repo_branch: Optional[str] = None,
+    ):
         from aspm_cli.scan.trivy_runner import validate_sca_command
 
         class SCAScanConfig(BaseModel):
             command: str = Field(..., min_length=1, description="Command arguments for SCA scanner")
             container_mode: bool
             severity: str = Field(..., description="Comma-separated list of severities")
+            repo_url: Optional[str]
+            repo_branch: Optional[str]
 
             @field_validator("severity", mode="before")
             @classmethod
@@ -231,7 +240,13 @@ class ConfigValidator:
                 return ",".join(sorted(provided_severities))
 
         try:
-            SCAScanConfig(command=command, container_mode=container_mode, severity=severity)
+            SCAScanConfig(
+                command=command,
+                container_mode=container_mode,
+                severity=severity,
+                repo_url=repo_url,
+                repo_branch=repo_branch,
+            )
             validate_sca_command(command)
             self._log_validation_success("SCA")
         except ValidationError as e:
