@@ -3,6 +3,7 @@ import subprocess
 
 from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import config, docker_pull
+from aspm_cli.utils.docker_runtime import build_docker_run_prefix
 from aspm_cli.utils.api_discovery import (
     DEFAULT_RESULT_FILE,
     DOCKER_WORKDIR,
@@ -93,9 +94,7 @@ class APIDiscoveryScanner:
             return [self._resolve_local_binary(), *args]
 
         return [
-            "docker", "run", "--rm",
-            "-v", f"{self.cwd}:{DOCKER_WORKDIR}",
-            "--workdir", DOCKER_WORKDIR,
+            *build_docker_run_prefix(workdir=DOCKER_WORKDIR, host_path=self.cwd),
             self.scan_image,
             *args,
         ]

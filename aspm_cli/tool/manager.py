@@ -2,6 +2,8 @@ import platform
 from pathlib import Path
 import os
 
+from aspm_cli.utils.docker_runtime import local_tool_install_supported, platform_name
+
 
 class ToolManager:
     """
@@ -28,7 +30,7 @@ class ToolManager:
     # Backward compatibility alias
     _install_dir = _root_dir
 
-
+    # Unix layout (no extension). Windows resolves .exe / .bat in get_path().
     TOOL_PATHS = {
         "iac": Path("iac"),
         "container": Path("container"),
@@ -43,21 +45,41 @@ class ToolManager:
         "api-discovery": Path("code2api"),
     }
 
+    @staticmethod
+    def _resolve_windows_path(full_path: Path) -> Path:
+        """Prefer .exe / .bat companions for Windows scanner binaries."""
+        if full_path.exists():
+            return full_path
+        for suffix in (".exe", ".bat", ".cmd"):
+            candidate = full_path.with_suffix(suffix)
+            if candidate.exists():
+                return candidate
+        # sonar-scanner lives as sonar-scanner.bat on Windows
+        bat = Path(str(full_path) + ".bat")
+        if bat.exists():
+            return bat
+        return full_path
 
     @staticmethod
     def get_path(name: str) -> str:
-        if ToolManager._is_windows:
-            raise ValueError("Non-container mode is not supported currently on Windows")
-
         """
         Returns the full OS-aware path under the AccuKnox install directory
         for the given tool/directory name. Raises an error if the path does not exist.
         """
+        if not local_tool_install_supported():
+            raise ValueError(
+                f"Local (non-container) scan mode is not supported on {platform_name()}. "
+                "Install Docker and pass --container-mode, or run "
+                "`accuknox-aspm-scanner tool install --type <scanner>` on Linux, macOS, or Windows."
+            )
+
         subpath = ToolManager.TOOL_PATHS.get(name)
         if not subpath:
             raise ValueError(f"Unknown tool or directory name: {name}")
 
         full_path = ToolManager._install_dir / subpath
+        if ToolManager._is_windows:
+            full_path = ToolManager._resolve_windows_path(full_path)
 
         if not full_path.exists():
             raise FileNotFoundError(f"Tool not found. Please run `scanner tool install --type {name}`")

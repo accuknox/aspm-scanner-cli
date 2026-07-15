@@ -10,6 +10,10 @@ from aspm_cli.utils import config, docker_pull
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils.subprocess_utils import run_scan_subprocess
 from aspm_cli.utils.sca_prepare import append_skip_git_dir, prepare_sca_report
+from aspm_cli.utils.docker_runtime import (
+    build_docker_run_prefix,
+    trivy_scan_needs_docker_socket,
+)
 from aspm_cli.utils.sbom import (
     FILESYSTEM_SUBCOMMANDS,
     normalize_filesystem_args_for_docker,
@@ -78,14 +82,13 @@ def build_trivy_scan_command(
     if not container_mode:
         return [ToolManager.get_path("container"), *scan_args]
 
-    return [
-        "docker", "run", "--rm",
-        "-v", "/var/run/docker.sock:/var/run/docker.sock",
-        "-v", f"{os.getcwd()}:/workdir",
-        "--workdir", "/workdir",
-        image,
-        *scan_args,
-    ]
+    cmd = build_docker_run_prefix(
+        workdir="/workdir",
+        mount_docker_socket=trivy_scan_needs_docker_socket(scan_args),
+    )
+    cmd.append(image)
+    cmd.extend(scan_args)
+    return cmd
 
 
 def _fix_result_file_permissions_if_docker(container_mode: bool, result_file: str) -> None:
@@ -99,9 +102,7 @@ def _fix_result_file_permissions_if_docker(container_mode: bool, result_file: st
     try:
         subprocess.run(
             [
-                "docker", "run", "--rm",
-                "-v", f"{os.getcwd()}:/workdir",
-                "-w", "/workdir",
+                *build_docker_run_prefix(workdir="/workdir"),
                 "--entrypoint", "sh",
                 get_trivy_image(),
                 "-c", f"chmod 666 {os.path.basename(result_file)}",
@@ -149,6 +150,9 @@ def run_trivy_vuln_scan(
         sanitized_args = append_skip_git_dir(sanitized_args)
     if container_mode:
         sanitized_args = normalize_sca_args_for_docker(command, sanitized_args)
+
+    if os.path.exists(result_file):
+        os.remove(result_file)
 
     scan_cmd = build_trivy_scan_command(container_mode, sanitized_args)
     Logger.get_logger().debug(f"Running Trivy vuln scan: {' '.join(scan_cmd)}")

@@ -19,6 +19,8 @@ It can upload results to the **AccuKnox ASPM Platform**, but it can also run in 
 
 ### 1. Connected environment
 
+**Requires Python 3.9+** (3.10+ recommended; matches project `Pipfile`).
+
 Install from the GitHub release wheel:
 
 ```bash
@@ -32,6 +34,59 @@ Install from the release `.deb` package:
 ```bash
 sudo dpkg -i accuknox-aspm-scanner_<version>.deb
 ```
+
+### 3. macOS and Windows
+
+Install the cross-platform Python wheel (same as connected environment above), or use the release native binary when available:
+
+- **Windows:** `accuknox-aspm-scanner.exe` from GitHub Releases
+- **macOS:** PyInstaller binary from GitHub Releases (when published)
+
+#### macOS — both local and container modes
+
+On macOS you can run scans either way:
+
+1. **Local (no Docker):** install native scanner tools, then scan without `--container-mode`
+2. **Container:** Docker Desktop + `--container-mode`
+
+```bash
+# Local — works on Apple Silicon (M-series) and Intel Macs
+accuknox-aspm-scanner tool install --type sast
+accuknox-aspm-scanner scan --skip-upload --keep-results sast --command "scan ."
+
+# Or container mode
+accuknox-aspm-scanner scan --skip-upload --keep-results sast --command "scan ." --container-mode
+```
+
+Local macOS tools supported today: `iac`, `sast`, `secret`, `container` (Trivy), `gitleaks`, `sq-sast`.  
+For `dast` / `codeassure`, use `--container-mode` for now.
+
+#### Windows — both local and container modes
+
+1. **Local (no Docker):** install native Windows scanner tools (x64), then scan without `--container-mode`
+2. **Container:** Docker Desktop + `--container-mode`
+
+```bash
+accuknox-aspm-scanner tool install --type sast
+accuknox-aspm-scanner scan --skip-upload --keep-results sast --command "scan ."
+
+accuknox-aspm-scanner scan --skip-upload --keep-results sast --command "scan ." --container-mode
+```
+
+Local Windows tools supported today: `iac`, `sast`, `secret`, `container` (Trivy), `gitleaks`, `sq-sast` (x64).  
+For `dast` / `codeassure`, use `--container-mode` for now. Tools install under `%USERPROFILE%\AppData\Local\Programs\AccuKnox\`.
+
+| Platform | Install | Local scan (`tool install`) | Container scan (`--container-mode`) |
+|---|---|---|---|
+| Linux | `pip` wheel, `.deb` | Supported | Supported |
+| macOS (Intel + Apple Silicon) | `pip` wheel | Supported (see tools above) | Supported |
+| Windows (x64) | `pip` wheel, `.exe` | Supported (see tools above) | Supported |
+
+Notes:
+
+- **Apple Silicon** = `arm64` / M-series; **Intel Mac** = `x86_64`. The CLI detects the CPU and installs the matching binary.
+- **Windows** local install currently targets **x64** upstream binaries (standard for these scanners).
+- **IaC (Checkov):** Apple Silicon uses Checkov’s Darwin standalone zip (the asset is named `X86_64` but the binary is arm64). Intel Mac installs Checkov via a dedicated pip venv (no usable x86_64 standalone zip). Other Phase-1 tools use native arm64 or x86_64 builds.
 
 ## Get Help
 
