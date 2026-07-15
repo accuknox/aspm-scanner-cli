@@ -236,6 +236,7 @@ class SASTScanner:
         targets = []
         i = 0
         saw_rules_flag = False
+        saw_max_bytes_flag = False
 
         if args and args[0] == "scan":
             i = 1
@@ -248,6 +249,9 @@ class SASTScanner:
                 else:
                     i += 1
                 continue
+
+            if arg == "--max-target-bytes" or arg.startswith("--max-target-bytes="):
+                saw_max_bytes_flag = True
 
             if arg == "-f":
                 saw_rules_flag = True
@@ -278,6 +282,10 @@ class SASTScanner:
         )
         if not saw_rules_flag:
             sanitized_options.extend(["-f", default_rules])
+
+        # Skip files larger than 5 MB
+        if not saw_max_bytes_flag:
+            sanitized_options.extend(["--max-target-bytes", "5000000"])
 
         output_path = "/app/results.json" if self.container_mode else self.result_file
         return ["scan", *sanitized_options, "--json", "--output", output_path, *targets]
