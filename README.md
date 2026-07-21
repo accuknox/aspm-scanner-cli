@@ -24,7 +24,7 @@ It can upload results to the **AccuKnox ASPM Platform**, but it can also run in 
 Install from the GitHub release wheel:
 
 ```bash
-pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.14.7-rc.2/accuknox_aspm_scanner-0.14.7rc2-py3-none-any.whl
+pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.14.7-rc.3/accuknox_aspm_scanner-0.14.7rc3-py3-none-any.whl
 ```
 
 ### 2. Restricted or on-prem environment
