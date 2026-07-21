@@ -56,7 +56,6 @@ echo "✅ container-windows-amd64.tar.gz"
 curl -fsSL -O \
   "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_windows_x64.zip"
 unzip -o -q "gitleaks_${GITLEAKS_VERSION}_windows_x64.zip"
-cp gitleaks.exe .
 tar -czf "${OUT_DIR}/gitleaks-windows-amd64.tar.gz" gitleaks.exe
 echo "✅ gitleaks-windows-amd64.tar.gz"
 
