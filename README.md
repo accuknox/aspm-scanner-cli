@@ -106,6 +106,7 @@ accuknox-aspm-scanner scan dast --help
 accuknox-aspm-scanner scan sq-sast --help
 accuknox-aspm-scanner tool --help
 accuknox-aspm-scanner pre-commit --help
+accuknox-aspm-scanner gate --help
 ```
 
 If you are running directly from local source code:
@@ -121,6 +122,7 @@ AccuKnox upload variables are optional when `--skip-upload` is used.
 - `ACCUKNOX_ENDPOINT`: Control plane URL for result upload
 - `ACCUKNOX_LABEL`: Label used to associate uploaded results
 - `ACCUKNOX_TOKEN`: Bearer token for upload
+- `ACCUKNOX_CLI_ID`: CI/CD quality-gate run id (uuid) shared by every scanner and the `gate` step in one pipeline run. Falls back for `--cli-id`. See [CI/CD Quality Gate](#cicd-quality-gate).
 - `ACCUKNOX_PROJECT_NAME`: Project name used for SBOM uploads
 - `ACCUKNOX_PROJECT`: Legacy fallback for project name
 - `DEBUG`: Set to `TRUE` for verbose debug logs
@@ -218,6 +220,10 @@ Common flags used before the scan name:
 - `--skip-upload`
 - `--keep-results`
 - `--softfail`
+- `--cli-id` — CI/CD quality-gate run id (see [CI/CD Quality Gate](#cicd-quality-gate))
+- `--repository` — CI/CD gate scope repository (e.g. `org/repo`)
+- `--branch` — CI/CD gate scope branch
+- `--commit-sha` — CI/CD gate scope commit SHA
 
 If you do not use `--skip-upload`, you must provide:
 
@@ -622,6 +628,104 @@ ACCUKNOX_LABEL=POC \
 ACCUKNOX_TOKEN=abcd1234 \
 accuknox-aspm-scanner scan sq-sast --command "-Dsonar.projectKey=<PROJECT_KEY> -Dsonar.host.url=<HOST_URL> -Dsonar.token=<TOKEN> -Dsonar.organization=<ORG_ID>" --container-mode
 ```
+
+## CI/CD Quality Gate
+
+Evaluate a pipeline run's scan findings against AccuKnox gate policies and **fail the
+build** when a policy is breached. Two pieces work together:
+
+1. Each `scan` upload is **stamped** with a shared run id (`cli_id`) plus the gate
+   scope (`repository` / `branch` / `commit_sha`), so the backend can group the run's
+   scanners and evaluate them.
+2. After the scanners finish, the `gate` command **polls** the verdict for that
+   `cli_id` and exits non-zero when the gate is blocking.
+
+The pipeline supplies every value — the CLI does **no** detection. Generate one
+`cli_id` at the start of the run and pass the same scope to every scan.
+
+### What participates in the gate
+
+The gate is implemented for a fixed set of artifact **prefixes** only. `cli_id` and
+the gate-scope params (`repository` / `branch` / `commit_sha`) are attached to the
+artifact upload **only when the scan's upload prefix is gate-supported** — every
+other scan uploads exactly as before, with no gate params. You do not need to gate
+this yourself; the CLI skips the params for unsupported prefixes automatically.
+
+| Scan command | Upload prefix | In the gate? |
+|---|---|---|
+| `sast` | `SG` | ✅ |
+| `sq-sast` | `SQ` | ✅ |
+| `sca` | `TR` | ✅ |
+| `container` (vuln) | `TR` | ✅ |
+| `iac` | `IAC` | ✅ |
+| `secret` (TruffleHog, default) | `TruffleHog` | ✅ |
+| `secret --engine gitleaks` | `DS` | ✅ |
+| `container --generate-sbom` | `SBOM` | ❌ |
+| `ml-scan` | `MLC` | ❌ |
+| `api-discovery` | `API` | ❌ |
+| `dast` | `ZAP` | ❌ |
+
+Gate-supported prefixes: **`SG`, `SQ`, `TR`, `IAC`, `TruffleHog`, `DS`**.
+
+### Stamping scans for the gate
+
+Pass `--cli-id` (or `ACCUKNOX_CLI_ID`) plus `--repository` / `--branch` /
+`--commit-sha` **before** the scan name. `repository` and `branch` are required for
+a scan to be gated — the backend rejects a `cli_id` without them, so the CLI drops
+the gate params if either is missing.
+
+```bash
+export ACCUKNOX_ENDPOINT=cspm.accuknox.com
+export ACCUKNOX_TOKEN=abcd1234   # must be a tenant-scoped token
+export ACCUKNOX_LABEL=POC
+
+# 1. one id for the whole run, generated before any scan and reused by all steps
+export ACCUKNOX_CLI_ID=$(uuidgen)
+
+# 2. run the scanners; gate scope is passed in by the pipeline
+accuknox-aspm-scanner scan --softfail \
+  --repository "org/repo" --branch "main" --commit-sha "$GIT_SHA" \
+  sast --command "scan ." --container-mode
+
+accuknox-aspm-scanner scan --softfail \
+  --repository "org/repo" --branch "main" --commit-sha "$GIT_SHA" \
+  iac --command "-d ." --container-mode
+```
+
+A gated upload logs the prefix it stamped, e.g.
+`CI/CD gate: stamped cli_id=... for prefix 'SG'. Pass 'SG' to gate --scanner-prefixes`.
+An unsupported scan logs `Prefix 'ZAP' has no quality-gate support; uploading without
+gate correlation` and is unaffected.
+
+### Polling the gate
+
+After the scans, run `gate` with the **same** `cli_id` and the list of prefixes you
+uploaded. It waits for evaluation, prints the per-scanner verdict, and sets the exit
+code.
+
+```bash
+accuknox-aspm-scanner gate --scanner-prefixes SG,IAC,TruffleHog
+```
+
+Key `gate` flags:
+
+- `--scanner-prefixes` (alias `--scanners`): comma-separated prefixes uploaded this run (`SG,SQ,TR,IAC,TruffleHog,DS`). Also reads `ACCUKNOX_SCANNER_PREFIXES`.
+- `--cli-id` (or `ACCUKNOX_CLI_ID`): the shared run id used by the scans.
+- `--endpoint` / `--token` / `--tenant`: same as scans (env: `ACCUKNOX_ENDPOINT` / `ACCUKNOX_TOKEN` / `ACCUKNOX_TENANT`). `--tenant` is optional.
+- `--gate-timeout` (default `300`) / `--gate-interval` (default `5`): how long to wait for evaluation and how often to poll.
+- `--gate-on-timeout` (`fail` | `pass`, default `fail`): verdict when evaluation does not finish in time (fail-closed).
+- `--softfail` (or `SOFT_FAIL=TRUE`): report a gate **breach** but exit `0`. Does **not** mask a timeout or an auth error.
+
+Exit codes: `0` = gate passed (or breach soft-failed), `1` = gate blocked, timed out fail-closed, or auth failed.
+
+Notes:
+
+- **Always pass `--scanner-prefixes` explicitly** with the prefixes you uploaded. Omitting it lets the backend evaluate only the scanners that happen to have finished, which can pass the gate prematurely while others are still uploading.
+- **Every prefix you list must actually upload** for this `cli_id`. A scanner that produces no artifact never reaches the backend, so the gate waits for it until `--gate-timeout` and then fails fail-closed.
+- The `gate` token must be **tenant-scoped** and should target the same tenant the scanners uploaded to.
+
+A ready-to-use pipeline template is in
+[`examples/github-actions-quality-gate.yml`](examples/github-actions-quality-gate.yml).
 
 ## Quickstart
 
