@@ -1,2 +1,2 @@
 def get_version():
-    return '0.14.7-rc.2'
+    return '0.14.7-rc.3'

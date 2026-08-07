@@ -1,3 +1,13 @@
+aspm-scanner-cli (0.14.7-rc.3) unstable; urgency=medium
+
+  * Native macOS (Intel + Apple Silicon) and Windows local tool install (#54)
+  * SonarQube SAST --severity threshold gating (#53)
+  * SCA --repo-url/--repo-branch for asset identity (#56)
+  * SAST: skip files larger than 5 MB in OpenGrep scan (#55)
+  * Align CLI, wheel, and package version metadata to 0.14.7-rc.3
+
+ -- AccuKnox <accuknox@accuknox.com>  Tue, 21 Jul 2026 12:00:00 +0530
+
 aspm-scanner-cli (0.14.7-rc.2) unstable; urgency=medium
 
   * Fix SCA container-mode Trivy args and report identity for platform parsing (#51)

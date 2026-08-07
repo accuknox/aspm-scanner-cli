@@ -6,6 +6,7 @@ import os
 import shlex
 from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import docker_pull
+from aspm_cli.utils.docker_runtime import build_docker_run_prefix, docker_volume_mount
 from aspm_cli.utils.logger import Logger
 from colorama import Fore
 from aspm_cli.utils import config
@@ -186,10 +187,7 @@ class SASTScanner:
                 cmd.extend(["--severity", ",".join(self.aiscan_severity)])
 
         else:
-            cmd = [
-                "docker", "run", "--rm",
-                "-v", f"{os.getcwd()}:/workspace",
-            ]
+            cmd = build_docker_run_prefix(workdir="/workspace")
             if self.codeassure_config:
                 config_path = os.path.abspath(self.codeassure_config)
             elif os.path.exists(os.path.join(os.getcwd(), "codeassure.json")):
@@ -197,7 +195,7 @@ class SASTScanner:
             else:
                 config_path = None
             if config_path:
-                cmd.extend(["-v", f"{config_path}:/app/codeassure.json"])
+                cmd.extend(docker_volume_mount(config_path, "/app/codeassure.json"))
                 try:
                     with open(config_path) as _f:
                         _cfg = json.load(_f)
@@ -236,6 +234,7 @@ class SASTScanner:
         targets = []
         i = 0
         saw_rules_flag = False
+        saw_max_bytes_flag = False
 
         if args and args[0] == "scan":
             i = 1
@@ -248,6 +247,9 @@ class SASTScanner:
                 else:
                     i += 1
                 continue
+
+            if arg == "--max-target-bytes" or arg.startswith("--max-target-bytes="):
+                saw_max_bytes_flag = True
 
             if arg == "-f":
                 saw_rules_flag = True
@@ -279,6 +281,10 @@ class SASTScanner:
         if not saw_rules_flag:
             sanitized_options.extend(["-f", default_rules])
 
+        # Skip files larger than 5 MB
+        if not saw_max_bytes_flag:
+            sanitized_options.extend(["--max-target-bytes", "5000000"])
+
         output_path = "/app/results.json" if self.container_mode else self.result_file
         return ["scan", *sanitized_options, "--json", "--output", output_path, *targets]
         
@@ -287,9 +293,7 @@ class SASTScanner:
         if self.container_mode:
             try:
                 chmod_cmd = [
-                    "docker", "run", "--rm",
-                    "-v", f"{os.getcwd()}:/app",
-                    "-w", "/app",
+                    *build_docker_run_prefix(workdir="/app"),
                     "--entrypoint", "bash",
                     self.opengrep_image,
                     "-c", f"chmod 777 {self.result_file}"
@@ -357,12 +361,8 @@ class SASTScanner:
         if not self.container_mode:
             cmd = [ToolManager.get_path("sast")]
         else:
-            cmd = [
-                "docker", "run", "--rm",
-                "-v", f"{os.getcwd()}:/app",
-                "-w", "/app",
-                self.opengrep_image,
-            ]
+            cmd = build_docker_run_prefix(workdir="/app")
+            cmd.append(self.opengrep_image)
 
         cmd.extend(args)
         return cmd

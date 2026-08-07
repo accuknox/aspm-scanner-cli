@@ -8,6 +8,7 @@ from aspm_cli.utils.logger import Logger
 from aspm_cli.utils import docker_pull
 from aspm_cli.utils import config
 from aspm_cli.utils.sbom import append_sbom_scanner_flags, normalize_sbom_args_for_docker
+from aspm_cli.utils.docker_runtime import build_docker_run_prefix, trivy_scan_needs_docker_socket
 from colorama import Fore
 
 class ContainerScanner:
@@ -132,13 +133,11 @@ class ContainerScanner:
         if not self.container_mode:
             cmd = ([ToolManager.get_path("container")])
         else:
-            cmd = [
-                "docker", "run", "--rm",
-                "-v", "/var/run/docker.sock:/var/run/docker.sock",
-                "-v", f"{os.getcwd()}:/workdir",
-                "--workdir", "/workdir",
-                self.ak_container_image,
-            ]
+            cmd = build_docker_run_prefix(
+                workdir="/workdir",
+                mount_docker_socket=trivy_scan_needs_docker_socket(container_scan_args),
+            )
+            cmd.append(self.ak_container_image)
         
         cmd.extend(container_scan_args)
         return cmd

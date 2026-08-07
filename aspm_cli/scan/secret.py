@@ -4,6 +4,7 @@ import subprocess
 
 from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import config, docker_pull
+from aspm_cli.utils.docker_runtime import build_docker_run_prefix
 from aspm_cli.utils.logger import Logger
 from colorama import Fore
 
@@ -101,11 +102,7 @@ class SecretScanner:
         if not self.container_mode:
             return [ToolManager.get_path(tool_name), *args]
 
-        cmd = [
-            "docker", "run", "--rm",
-            "-v", f"{os.getcwd()}:/app",
-            "--workdir", "/app",
-        ]
+        cmd = build_docker_run_prefix(workdir="/app")
         if entrypoint_gitleaks:
             cmd.extend(["--entrypoint", "gitleaks"])
         cmd.append(self.scan_image)
