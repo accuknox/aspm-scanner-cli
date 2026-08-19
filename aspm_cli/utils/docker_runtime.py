@@ -3,6 +3,8 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
+from aspm_cli.utils.container_runtime import get_container_runtime
+
 # Subcommands that inspect container images or rootfs archives via the Docker API.
 _TRIVY_IMAGE_SUBCOMMANDS = frozenset({"image", "rootfs", "container", "i", "vm"})
 
@@ -80,7 +82,10 @@ def build_docker_run_prefix(
     host_path: Optional[str] = None,
     mount_docker_socket: bool = False,
 ) -> List[str]:
-    cmd = ["docker", "run", "--rm"]
+    # get_container_runtime() picks docker/nerdctl/podman by actual usability
+    # (not mere PATH presence), so this keeps working on a containerd-only
+    # node (EKS/k3s) with no dockerd -- see aspm_cli.utils.container_runtime.
+    cmd = [get_container_runtime(), "run", "--rm"]
     if mount_docker_socket:
         cmd.extend(docker_socket_mount_args())
     cmd.extend(docker_workdir_mount(workdir, host_path))
