@@ -6,6 +6,7 @@ import shlex
 from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils import docker_pull
+from aspm_cli.utils.container_runtime import get_container_runtime
 from aspm_cli.utils import config
 from aspm_cli.utils.sbom import append_sbom_scanner_flags, normalize_sbom_args_for_docker
 from colorama import Fore
@@ -133,7 +134,7 @@ class ContainerScanner:
             cmd = ([ToolManager.get_path("container")])
         else:
             cmd = [
-                "docker", "run", "--rm",
+                get_container_runtime(), "run", "--rm",
                 "-v", "/var/run/docker.sock:/var/run/docker.sock",
                 "-v", f"{os.getcwd()}:/workdir",
                 "--workdir", "/workdir",

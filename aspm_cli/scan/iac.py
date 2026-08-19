@@ -4,6 +4,7 @@ import os
 import shlex
 from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import docker_pull
+from aspm_cli.utils.container_runtime import get_container_runtime
 from aspm_cli.utils.logger import Logger
 from colorama import Fore
 from aspm_cli.utils import config
@@ -100,7 +101,7 @@ class IaCScanner:
             return [ToolManager.get_path("iac")] + args
 
         cmd = [
-            "docker", "run", "--rm",
+            get_container_runtime(), "run", "--rm",
             "-v", f"{os.getcwd()}:/workdir",
             "--workdir", "/workdir",
             self.ak_iac_image
@@ -112,7 +113,7 @@ class IaCScanner:
         if self.container_mode:
             try:
                 chmod_cmd = [
-                    "docker", "run", "--rm",
+                    get_container_runtime(), "run", "--rm",
                     "-v", f"{os.getcwd()}:/workdir",
                     "--workdir", "/workdir",
                     "--entrypoint", "bash",

@@ -6,6 +6,7 @@ import uuid
 
 from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import config, docker_pull
+from aspm_cli.utils.container_runtime import get_container_runtime
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils.ml_scan import (
     build_model_path,
@@ -243,7 +244,7 @@ class MLScanScanner:
             docker_args.append(arg)
             i += 1
 
-        cmd = ["docker", "run", "--rm"]
+        cmd = [get_container_runtime(), "run", "--rm"]
         platform = default_ml_scan_docker_platform()
         if platform:
             cmd.extend(["--platform", platform])

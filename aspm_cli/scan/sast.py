@@ -6,6 +6,7 @@ import os
 import shlex
 from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import docker_pull
+from aspm_cli.utils.container_runtime import get_container_runtime
 from aspm_cli.utils.logger import Logger
 from colorama import Fore
 from aspm_cli.utils import config
@@ -187,7 +188,7 @@ class SASTScanner:
 
         else:
             cmd = [
-                "docker", "run", "--rm",
+                get_container_runtime(), "run", "--rm",
                 "-v", f"{os.getcwd()}:/workspace",
             ]
             if self.codeassure_config:
@@ -295,7 +296,7 @@ class SASTScanner:
         if self.container_mode:
             try:
                 chmod_cmd = [
-                    "docker", "run", "--rm",
+                    get_container_runtime(), "run", "--rm",
                     "-v", f"{os.getcwd()}:/app",
                     "-w", "/app",
                     "--entrypoint", "bash",
@@ -366,7 +367,7 @@ class SASTScanner:
             cmd = [ToolManager.get_path("sast")]
         else:
             cmd = [
-                "docker", "run", "--rm",
+                get_container_runtime(), "run", "--rm",
                 "-v", f"{os.getcwd()}:/app",
                 "-w", "/app",
                 self.opengrep_image,

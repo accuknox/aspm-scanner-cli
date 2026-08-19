@@ -7,6 +7,7 @@ from typing import List, Optional, Tuple
 
 from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import config, docker_pull
+from aspm_cli.utils.container_runtime import get_container_runtime
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils.subprocess_utils import run_scan_subprocess
 from aspm_cli.utils.sca_prepare import append_skip_git_dir, prepare_sca_report
@@ -79,7 +80,7 @@ def build_trivy_scan_command(
         return [ToolManager.get_path("container"), *scan_args]
 
     return [
-        "docker", "run", "--rm",
+        get_container_runtime(), "run", "--rm",
         "-v", "/var/run/docker.sock:/var/run/docker.sock",
         "-v", f"{os.getcwd()}:/workdir",
         "--workdir", "/workdir",
@@ -99,7 +100,7 @@ def _fix_result_file_permissions_if_docker(container_mode: bool, result_file: st
     try:
         subprocess.run(
             [
-                "docker", "run", "--rm",
+                get_container_runtime(), "run", "--rm",
                 "-v", f"{os.getcwd()}:/workdir",
                 "-w", "/workdir",
                 "--entrypoint", "sh",

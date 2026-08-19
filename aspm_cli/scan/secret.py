@@ -4,6 +4,7 @@ import subprocess
 
 from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import config, docker_pull
+from aspm_cli.utils.container_runtime import get_container_runtime
 from aspm_cli.utils.logger import Logger
 from colorama import Fore
 
@@ -102,7 +103,7 @@ class SecretScanner:
             return [ToolManager.get_path(tool_name), *args]
 
         cmd = [
-            "docker", "run", "--rm",
+            get_container_runtime(), "run", "--rm",
             "-v", f"{os.getcwd()}:/app",
             "--workdir", "/app",
         ]

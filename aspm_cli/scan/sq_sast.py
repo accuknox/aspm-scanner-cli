@@ -5,6 +5,7 @@ import shlex
 import asyncio
 from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import docker_pull
+from aspm_cli.utils.container_runtime import get_container_runtime
 from aspm_cli.utils.logger import Logger
 from accuknox_sq_sast.sonarqube_fetcher import SonarQubeFetcher
 
@@ -58,7 +59,7 @@ class SQSASTScanner:
             if self.container_mode:
                 docker_pull(self.sast_image)
                 cmd = [
-                    "docker", "run", "--rm",
+                    get_container_runtime(), "run", "--rm",
                     "-v", f"{os.getcwd()}:/usr/src/",
                     "--workdir", "/usr/src/",
                     self.sast_image
