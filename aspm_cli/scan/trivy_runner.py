@@ -7,10 +7,13 @@ from typing import List, Optional, Tuple
 
 from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import config, docker_pull
-from aspm_cli.utils.container_runtime import get_container_runtime
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils.subprocess_utils import run_scan_subprocess
 from aspm_cli.utils.sca_prepare import append_skip_git_dir, prepare_sca_report
+from aspm_cli.utils.docker_runtime import (
+    build_docker_run_prefix,
+    trivy_scan_needs_docker_socket,
+)
 from aspm_cli.utils.sbom import (
     FILESYSTEM_SUBCOMMANDS,
     normalize_filesystem_args_for_docker,
@@ -79,14 +82,13 @@ def build_trivy_scan_command(
     if not container_mode:
         return [ToolManager.get_path("container"), *scan_args]
 
-    return [
-        get_container_runtime(), "run", "--rm",
-        "-v", "/var/run/docker.sock:/var/run/docker.sock",
-        "-v", f"{os.getcwd()}:/workdir",
-        "--workdir", "/workdir",
-        image,
-        *scan_args,
-    ]
+    cmd = build_docker_run_prefix(
+        workdir="/workdir",
+        mount_docker_socket=trivy_scan_needs_docker_socket(scan_args),
+    )
+    cmd.append(image)
+    cmd.extend(scan_args)
+    return cmd
 
 
 def _fix_result_file_permissions_if_docker(container_mode: bool, result_file: str) -> None:
@@ -100,9 +102,7 @@ def _fix_result_file_permissions_if_docker(container_mode: bool, result_file: st
     try:
         subprocess.run(
             [
-                get_container_runtime(), "run", "--rm",
-                "-v", f"{os.getcwd()}:/workdir",
-                "-w", "/workdir",
+                *build_docker_run_prefix(workdir="/workdir"),
                 "--entrypoint", "sh",
                 get_trivy_image(),
                 "-c", f"chmod 666 {os.path.basename(result_file)}",
@@ -136,6 +136,8 @@ def run_trivy_vuln_scan(
     validate_command=None,
     cli_severity: Optional[str] = None,
     sca_mode: bool = False,
+    repo_url: Optional[str] = None,
+    repo_branch: Optional[str] = None,
 ) -> Tuple[int, Optional[str]]:
     if validate_command:
         validate_command(command)
@@ -150,6 +152,9 @@ def run_trivy_vuln_scan(
         sanitized_args = append_skip_git_dir(sanitized_args)
     if container_mode:
         sanitized_args = normalize_sca_args_for_docker(command, sanitized_args)
+
+    if os.path.exists(result_file):
+        os.remove(result_file)
 
     scan_cmd = build_trivy_scan_command(container_mode, sanitized_args)
     Logger.get_logger().debug(f"Running Trivy vuln scan: {' '.join(scan_cmd)}")
@@ -173,7 +178,11 @@ def run_trivy_vuln_scan(
 
     if sca_mode:
         _fix_result_file_permissions_if_docker(container_mode, result_file)
-        prepare_sca_report(result_file)
+        prepare_sca_report(
+            result_file,
+            repo_url=repo_url,
+            repo_branch=repo_branch,
+        )
         Logger.get_logger().debug(
             "SCA: finalized report identity (ArtifactName/type) for platform parsing"
         )

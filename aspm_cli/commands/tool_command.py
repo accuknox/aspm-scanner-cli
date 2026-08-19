@@ -49,12 +49,13 @@ class ToolCommand(BaseCommand):
         overwrite = args.mode == "update"
         action_message = {"install": "installed", "update": "updated"}
         action_message_present = {"install": "Installing", "update": "Updating"}
+        failures = []
 
         if validated.all:
             for tool in ALLOWED_TOOL_TYPES:
                 spinner = Spinner(message=f"{action_message_present[args.mode]} tool for: {tool}")
                 spinner.start()
-                downloaded = downloader.download_tool(tool, overwrite)  # <-- FIXED HERE
+                downloaded = downloader.download_tool(tool, overwrite)
                 spinner.stop()
                 if downloaded:
                     Logger.log_with_color(
@@ -62,6 +63,8 @@ class ToolCommand(BaseCommand):
                         f"{tool} {action_message[args.mode]} successfully.",
                         Fore.GREEN
                     )
+                else:
+                    failures.append(tool)
         else:
             spinner = Spinner(message=f"{action_message_present[args.mode]} tool for: {validated.tooltype}")
             spinner.start()
@@ -73,3 +76,8 @@ class ToolCommand(BaseCommand):
                     f"{validated.tooltype} {action_message[args.mode]} successfully.",
                     Fore.GREEN
                 )
+            else:
+                failures.append(validated.tooltype)
+
+        if failures:
+            sys.exit(1)

@@ -19,10 +19,12 @@ It can upload results to the **AccuKnox ASPM Platform**, but it can also run in 
 
 ### 1. Connected environment
 
+**Requires Python 3.9+** (3.10+ recommended; matches project `Pipfile`).
+
 Install from the GitHub release wheel:
 
 ```bash
-pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.14.7-rc.2/accuknox_aspm_scanner-0.14.7rc2-py3-none-any.whl
+pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.14.7-rc.3/accuknox_aspm_scanner-0.14.7rc3-py3-none-any.whl
 ```
 
 ### 2. Restricted or on-prem environment
@@ -32,6 +34,59 @@ Install from the release `.deb` package:
 ```bash
 sudo dpkg -i accuknox-aspm-scanner_<version>.deb
 ```
+
+### 3. macOS and Windows
+
+Install the cross-platform Python wheel (same as connected environment above), or use the release native binary when available:
+
+- **Windows:** `accuknox-aspm-scanner.exe` from GitHub Releases
+- **macOS:** PyInstaller binary from GitHub Releases (when published)
+
+#### macOS — both local and container modes
+
+On macOS you can run scans either way:
+
+1. **Local (no Docker):** install native scanner tools, then scan without `--container-mode`
+2. **Container:** Docker Desktop + `--container-mode`
+
+```bash
+# Local — works on Apple Silicon (M-series) and Intel Macs
+accuknox-aspm-scanner tool install --type sast
+accuknox-aspm-scanner scan --skip-upload --keep-results sast --command "scan ."
+
+# Or container mode
+accuknox-aspm-scanner scan --skip-upload --keep-results sast --command "scan ." --container-mode
+```
+
+Local macOS tools supported today: `iac`, `sast`, `secret`, `container` (Trivy), `gitleaks`, `sq-sast`.  
+For `dast` / `codeassure`, use `--container-mode` for now.
+
+#### Windows — both local and container modes
+
+1. **Local (no Docker):** install native Windows scanner tools (x64), then scan without `--container-mode`
+2. **Container:** Docker Desktop + `--container-mode`
+
+```bash
+accuknox-aspm-scanner tool install --type sast
+accuknox-aspm-scanner scan --skip-upload --keep-results sast --command "scan ."
+
+accuknox-aspm-scanner scan --skip-upload --keep-results sast --command "scan ." --container-mode
+```
+
+Local Windows tools supported today: `iac`, `sast`, `secret`, `container` (Trivy), `gitleaks`, `sq-sast` (x64).  
+For `dast` / `codeassure`, use `--container-mode` for now. Tools install under `%USERPROFILE%\AppData\Local\Programs\AccuKnox\`.
+
+| Platform | Install | Local scan (`tool install`) | Container scan (`--container-mode`) |
+|---|---|---|---|
+| Linux | `pip` wheel, `.deb` | Supported | Supported |
+| macOS (Intel + Apple Silicon) | `pip` wheel | Supported (see tools above) | Supported |
+| Windows (x64) | `pip` wheel, `.exe` | Supported (see tools above) | Supported |
+
+Notes:
+
+- **Apple Silicon** = `arm64` / M-series; **Intel Mac** = `x86_64`. The CLI detects the CPU and installs the matching binary.
+- **Windows** local install currently targets **x64** upstream binaries (standard for these scanners).
+- **IaC (Checkov):** Apple Silicon uses Checkov’s Darwin standalone zip (the asset is named `X86_64` but the binary is arm64). Intel Mac installs Checkov via a dedicated pip venv (no usable x86_64 standalone zip). Other Phase-1 tools use native arm64 or x86_64 builds.
 
 ## Get Help
 
@@ -319,6 +374,8 @@ Flags used after `sca`:
 
 - `--container-mode`
 - `--severity`
+- `--repo-url` — used for SCA asset identity (`ArtifactName`); defaults from git
+- `--repo-branch` — branch used with `--repo-url`; defaults from git
 
 Typical `--command` value:
 
@@ -330,6 +387,16 @@ Example:
 
 ```bash
 accuknox-aspm-scanner scan --skip-upload --keep-results sca --command "fs ." --container-mode
+```
+
+CI example with explicit repo identity:
+
+```bash
+accuknox-aspm-scanner scan --skip-upload --keep-results sca \
+  --command "fs ." \
+  --repo-url "${CI_PROJECT_PATH}" \
+  --repo-branch "${CI_COMMIT_REF_NAME}" \
+  --container-mode
 ```
 
 ### Container Scan
@@ -517,6 +584,7 @@ Flags used after `sq-sast`:
 
 - `--skip-sonar-scan`
 - `--container-mode`
+- `--severity` — Comma-separated severities that fail the scan. Matches SonarQube issue severity (`INFO,MINOR,MAJOR,CRITICAL,BLOCKER`) and hotspot `vulnerabilityProbability` (`LOW,MEDIUM,HIGH`). Defaults to all.
 - `--repo-url`
 - `--branch`
 - `--commit-sha`
@@ -532,6 +600,14 @@ Example:
 
 ```bash
 accuknox-aspm-scanner scan --skip-upload --keep-results sq-sast --command "-Dsonar.projectKey=<PROJECT_KEY> -Dsonar.host.url=<HOST_URL> -Dsonar.token=<TOKEN> -Dsonar.organization=<ORG_ID>"
+```
+
+Fail the pipeline when Critical/Blocker issues (or High hotspots) are found:
+
+```bash
+accuknox-aspm-scanner scan --skip-upload --keep-results sq-sast \
+  --command "-Dsonar.projectKey=<PROJECT_KEY> -Dsonar.host.url=<HOST_URL> -Dsonar.token=<TOKEN> -Dsonar.organization=<ORG_ID>" \
+  --severity "CRITICAL,BLOCKER,HIGH"
 ```
 
 Important note:

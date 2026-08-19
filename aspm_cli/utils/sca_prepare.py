@@ -1,5 +1,5 @@
 import json
-from typing import List
+from typing import List, Optional
 
 GIT_SUFFIX = ".git"
 
@@ -23,14 +23,20 @@ def _clean_repo_url(url) -> str:
     return url
 
 
-def prepare_sca_report(result_file: str) -> None:
+def prepare_sca_report(
+    result_file: str,
+    repo_url: Optional[str] = None,
+    repo_branch: Optional[str] = None,
+) -> None:
     """Normalize a Trivy filesystem report in place for AccuKnox SCA ingestion.
 
     Sets ArtifactName to "<RepoURL>:<Branch>" (the asset identity AccuKnox
     expects) instead of the in-container scan path, forces ArtifactType to
     "filesystem" (Trivy 0.69+ tags git checkouts as "repository"), strips the
-    ".git" suffix, and drops the scanner version banner. No-ops for non-git
-    targets (no RepoURL).
+    ".git" suffix, and drops the scanner version banner.
+
+    Repo identity preference: CLI ``repo_url`` / ``repo_branch`` (when non-empty),
+    otherwise Trivy Metadata. No-ops when neither source provides a RepoURL.
     """
     with open(result_file, "r", encoding="utf-8") as handle:
         data = json.load(handle)
@@ -38,11 +44,13 @@ def prepare_sca_report(result_file: str) -> None:
         return
 
     metadata = data.get("Metadata") or {}
-    repo = _clean_repo_url(metadata.get("RepoURL"))
-    branch = (metadata.get("Branch") or "").strip()
+    repo = _clean_repo_url(repo_url) or _clean_repo_url(metadata.get("RepoURL"))
+    branch = (repo_branch or "").strip() or (metadata.get("Branch") or "").strip()
     if repo:
         data["ArtifactName"] = f"{repo}:{branch}" if branch else repo
         metadata["RepoURL"] = repo
+        if branch:
+            metadata["Branch"] = branch
         data["Metadata"] = metadata
 
     if data.get("ArtifactType") == "repository":

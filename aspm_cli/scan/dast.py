@@ -5,7 +5,7 @@ import shlex
 
 from colorama import Fore
 from aspm_cli.utils import config, docker_pull
-from aspm_cli.utils.container_runtime import get_container_runtime
+from aspm_cli.utils.docker_runtime import build_docker_run_prefix
 from aspm_cli.utils.logger import Logger
 from aspm_cli.tool.manager import ToolManager
 
@@ -109,12 +109,8 @@ class DASTScanner:
             env["JAVA_HOME"] = java_home
             env["PATH"] = java_home + os.pathsep + env.get("PATH", "")
         else:
-            cmd = [
-                get_container_runtime(), "run", "--rm",
-                "-v", f"{os.getcwd()}:/zap/wrk",
-                "-w", "/zap/wrk",
-                "-t", self.zap_image
-            ]
+            cmd = build_docker_run_prefix(workdir="/zap/wrk")
+            cmd.extend(["-t", self.zap_image])
             cmd.extend(args)
         return cmd, env
 

@@ -6,7 +6,6 @@ import uuid
 
 from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import config, docker_pull
-from aspm_cli.utils.container_runtime import get_container_runtime
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils.ml_scan import (
     build_model_path,
@@ -19,6 +18,7 @@ from aspm_cli.utils.ml_scan import (
     normalize_modelscan_cli_args,
     parse_scan_path_from_command,
 )
+from aspm_cli.utils.docker_runtime import build_docker_run_prefix
 from aspm_cli.utils.path_safety import resolve_path_within_root
 from aspm_cli.utils.subprocess_utils import run_scan_subprocess
 from colorama import Fore
@@ -244,13 +244,11 @@ class MLScanScanner:
             docker_args.append(arg)
             i += 1
 
-        cmd = [get_container_runtime(), "run", "--rm"]
+        cmd = build_docker_run_prefix(workdir=WORK_DIR, host_path=self.cwd)
         platform = default_ml_scan_docker_platform()
         if platform:
-            cmd.extend(["--platform", platform])
+            cmd[3:3] = ["--platform", platform]
         cmd.extend([
-            "-v", f"{self.cwd}:{WORK_DIR}",
-            "--workdir", WORK_DIR,
             "--entrypoint", "modelscan",
             self.scan_image,
             *docker_args,
