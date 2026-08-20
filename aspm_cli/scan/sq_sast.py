@@ -7,7 +7,6 @@ from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import docker_pull
 from aspm_cli.utils.docker_runtime import build_docker_run_prefix
 from aspm_cli.utils.logger import Logger
-from accuknox_sq_sast.sonarqube_fetcher import SonarQubeFetcher
 
 class SQSASTScanner:
     sast_image = os.getenv("SCAN_IMAGE", "public.ecr.aws/k9v9d5v2/sonarsource/sonar-scanner-cli:11.4")
@@ -95,6 +94,17 @@ class SQSASTScanner:
     def _run_ak_scan(self):
         try:
             Logger.get_logger().debug("Starting AccuKnox SQ Fetcher...")
+            try:
+                from accuknox_sq_sast.sonarqube_fetcher import SonarQubeFetcher
+            except ImportError as e:
+                raise RuntimeError(
+                    "accuknox-sq-sast is not installed. Install it with "
+                    "`pip install accuknox-aspm-scanner[sq-sast]` "
+                    "(note: as of this release, that extra cannot install on "
+                    "Python 3.14 -- it pins aiohttp==3.11.18, which has no "
+                    "cp314 wheel; use Python <=3.13 for the sq-sast scan type "
+                    "until that's fixed upstream)."
+                ) from e
             fetcher = SonarQubeFetcher(
                 sq_url=self.sonar_host_url,
                 auth_token=self.sonar_token,
