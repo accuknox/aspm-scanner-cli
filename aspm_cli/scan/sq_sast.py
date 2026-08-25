@@ -98,8 +98,8 @@ class SQSASTScanner:
                 from accuknox_sq_sast.sonarqube_fetcher import SonarQubeFetcher
             except ImportError as e:
                 raise RuntimeError(
-                    "accuknox-sq-sast is not installed. Install it with "
-                    "`pip install accuknox-aspm-scanner[sq-sast]`."
+                    "accuknox-sq-sast is not installed. Reinstall with "
+                    "`pip install accuknox-aspm-scanner` to pull it in."
                 ) from e
             fetcher = SonarQubeFetcher(
                 sq_url=self.sonar_host_url,
