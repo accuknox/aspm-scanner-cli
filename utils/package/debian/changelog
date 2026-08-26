@@ -1,3 +1,15 @@
+aspm-scanner-cli (0.14.7) unstable; urgency=medium
+
+  * GA release of 0.14.7 (promotes v0.14.7-rc.3)
+  * Native macOS (Intel + Apple Silicon) and Windows local tool install (#54)
+  * SonarQube SAST --severity threshold gating (#53)
+  * SCA --repo-url/--repo-branch for asset identity (#56)
+  * SAST: skip files larger than 5 MB in OpenGrep scan (#55)
+  * Fix Windows gitleaks packaging self-copy in release (#58)
+  * Align CLI, wheel, and package version metadata to 0.14.7
+
+ -- AccuKnox <accuknox@accuknox.com>  Wed, 26 Aug 2026 12:00:00 +0530
+
 aspm-scanner-cli (0.14.7-rc.3) unstable; urgency=medium
 
   * Native macOS (Intel + Apple Silicon) and Windows local tool install (#54)
