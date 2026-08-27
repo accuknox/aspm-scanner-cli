@@ -1,3 +1,10 @@
+aspm-scanner-cli (0.14.8) unstable; urgency=medium
+
+  * DAST: ZAP browser-based auth, --zap-plan, and zap-api-scan.py support (#68)
+  * Align CLI, wheel, and package version metadata to 0.14.8
+
+ -- AccuKnox <accuknox@accuknox.com>  Thu, 27 Aug 2026 22:30:00 +0530
+
 aspm-scanner-cli (0.14.7) unstable; urgency=medium
 
   * GA release of 0.14.7 (promotes v0.14.7-rc.3)
