@@ -1,3 +1,10 @@
+aspm-scanner-cli (0.14.8) unstable; urgency=medium
+
+  * Build Linux native CLI on Debian 11 (glibc 2.31) so Amazon Linux 2023 / RHEL 9 (glibc 2.34) can run the Jenkins plugin binary
+  * Align CLI, wheel, and package version metadata to 0.14.8
+
+ -- AccuKnox <accuknox@accuknox.com>  Thu, 27 Aug 2026 12:00:00 +0530
+
 aspm-scanner-cli (0.14.7) unstable; urgency=medium
 
   * GA release of 0.14.7 (promotes v0.14.7-rc.3)
