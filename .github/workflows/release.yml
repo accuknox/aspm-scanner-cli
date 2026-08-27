@@ -145,10 +145,30 @@ jobs:
         run: |
           echo "GLIBC symbols required by native binary:"
           objdump -T dist/accuknox-aspm-scanner | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tee /tmp/glibc-syms.txt
-          if grep -E '^GLIBC_2\.(3[2-9]|[4-9][0-9]*)' /tmp/glibc-syms.txt; then
-            echo "Binary requires glibc newer than 2.31 (would fail on Amazon Linux 2023 / RHEL 9)"
-            exit 1
-          fi
+          # Do not grep 2.32+ with [4-9][0-9]* — that matches GLIBC_2.4 / 2.7 (zero extra digits).
+          python3 - <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          def parse(sym):
+              m = re.fullmatch(r"GLIBC_(\d+)\.(\d+)(?:\.(\d+))?", sym)
+              if not m:
+                  raise SystemExit(f"unparsed glibc symbol: {sym}")
+              major, minor, patch = m.groups()
+              return (int(major), int(minor), int(patch or 0))
+
+          max_ok = (2, 31, 0)
+          bad = []
+          for line in Path("/tmp/glibc-syms.txt").read_text().split():
+              if parse(line) > max_ok:
+                  bad.append(line)
+          if bad:
+              print("Binary requires glibc newer than 2.31 (would fail on Amazon Linux 2023 / RHEL 9):")
+              print("\n".join(bad))
+              sys.exit(1)
+          print("OK: highest required GLIBC is <= 2.31")
+          PY
 
       - name: Stage uniquely named release assets
         shell: bash
