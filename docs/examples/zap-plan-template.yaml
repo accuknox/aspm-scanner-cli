@@ -1,0 +1,66 @@
+# accuknox-aspm-scanner scan dast --zap-plan ./zap.yaml --container-mode
+# https://www.zaproxy.org/docs/automate/automation-framework/
+#
+# For plain username/password login, --auth-url/--auth-username/--auth-password is simpler -
+# use this plan instead when you need more than that: spiderAjax, activeScan, a non-browser
+# auth method, multiple users, custom verification, etc.
+
+env:
+  contexts:
+    - name: target-context
+      urls:
+        - "https://example.com/"
+      includePaths:
+        - "https://example.com/.*"
+      authentication:
+        method: browser
+        parameters:
+          loginPageUrl: "https://example.com/login"
+          browserId: firefox-headless
+          loginPageWait: 5
+        verification:
+          method: poll
+          pollUrl: "https://example.com/account"
+          pollFrequency: 60
+          pollUnits: requests
+          loggedInRegex: "user@example\\.com"
+          loggedOutRegex: "Sign in"
+      sessionManagement:
+        method: cookie
+      users:
+        - name: auth-user
+          credentials:
+            username: "user@example.com"
+            password: "change-me"
+
+  parameters:
+    failOnError: true
+    progressToStdout: true
+
+jobs:
+  - type: spider
+    parameters:
+      context: target-context
+      user: auth-user
+      maxDuration: 5
+
+  - type: spiderAjax
+    parameters:
+      context: target-context
+      user: auth-user
+      maxDuration: 5
+      maxCrawlDepth: 10
+      numberOfBrowsers: 4
+      browserId: firefox-headless
+      inScopeOnly: true
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 5
+
+  # - type: activeScan
+  #   parameters:
+  #     context: target-context
+  #     user: auth-user
+  #     maxRuleDurationInMins: 5
+  #     maxScanDurationInMins: 30
