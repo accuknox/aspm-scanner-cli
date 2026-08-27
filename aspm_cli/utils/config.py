@@ -375,19 +375,61 @@ class ConfigValidator:
             Logger.get_logger().debug(f"SAST scan configuration error: {concise_msg}")
             raise ValueError(concise_msg)
 
-    def validate_dast_scan(self, command: str, severity_threshold: str, container_mode: bool):
+    def validate_dast_scan(
+        self,
+        command: str,
+        severity_threshold: str,
+        container_mode: bool,
+        auth_url: str = None,
+        auth_username: str = None,
+        auth_password: str = None,
+        zap_plan: str = None,
+    ):
         class DASTScanConfig(BaseModel):
-            command: str = Field(..., min_length=1, description="Command arguments for DAST scanner")
+            command: str = Field("", description="Command arguments for DAST scanner")
             severity_threshold: Literal["LOW", "MEDIUM", "HIGH"] = Field(..., description="Severity threshold for DAST scan")
             container_mode: bool
+            auth_url: Optional[str] = None
+            auth_username: Optional[str] = None
+            auth_password: Optional[str] = None
+            zap_plan: Optional[str] = None
 
             @field_validator("severity_threshold", mode="before")
             @classmethod
             def convert_to_upper(cls, v: str):
                 return v.upper()
 
+            @model_validator(mode='after')
+            def check_command_or_plan(self) -> 'DASTScanConfig':
+                if not self.command and not self.zap_plan:
+                    raise ValueError("DAST scan requires either --command or --zap-plan.")
+                return self
+
+            @model_validator(mode='after')
+            def check_auth_trio(self) -> 'DASTScanConfig':
+                provided = {
+                    "--auth-url": self.auth_url,
+                    "--auth-username": self.auth_username,
+                    "--auth-password": self.auth_password,
+                }
+                given = {k for k, v in provided.items() if v}
+                if given and given != set(provided):
+                    missing = ", ".join(sorted(set(provided) - given))
+                    raise ValueError(f"Authenticated DAST scan requires {missing} as well.")
+                if given and self.zap_plan:
+                    raise ValueError("Use either --zap-plan or --auth-url/--auth-username/--auth-password, not both.")
+                return self
+
         try:
-            DASTScanConfig(command=command, severity_threshold=severity_threshold, container_mode=container_mode)
+            DASTScanConfig(
+                command=command,
+                severity_threshold=severity_threshold,
+                container_mode=container_mode,
+                auth_url=auth_url,
+                auth_username=auth_username,
+                auth_password=auth_password,
+                zap_plan=zap_plan,
+            )
             self._log_validation_success("DAST")
         except ValidationError as e:
             concise_msg = _format_validation_error(e)
