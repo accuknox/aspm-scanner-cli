@@ -4,6 +4,17 @@ on:
   push:
     tags:
       - 'v*'
+  # Rebuild and replace assets on an existing tag (no version bump).
+  # Use this to refresh v0.14.7 native binaries in place.
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Existing GitHub release tag to update (e.g. v0.14.7)'
+        required: true
+        default: 'v0.14.7'
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
 
 jobs:
   release:
@@ -33,7 +44,7 @@ jobs:
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
             dist/*.whl
           draft: false
@@ -48,18 +59,29 @@ jobs:
           # Amazon Linux 2023 / RHEL 9 (2.34). Building on Ubuntu 22.04 (glibc 2.35)
           # caused GLIBC_2.35 not found on those hosts. Newer glibc can run older
           # binaries; the reverse is not true.
+          #
+          # Each OS must upload a unique GitHub Release asset name. Linux and macOS
+          # previously both uploaded `accuknox-aspm-scanner`; the last job won, so
+          # Linux hosts downloaded a Mach-O binary (Exec format error).
           - os: ubuntu-22.04
             name: linux
             suffix: ''
             ext: ''
+            asset: accuknox-aspm-scanner-linux-amd64
+            # Jenkins / existing docs curl this unprefixed name; Linux-only.
+            compat_asset: accuknox-aspm-scanner
           - os: windows-latest
             name: windows
             suffix: '.exe'
             ext: '.exe'
+            asset: accuknox-aspm-scanner-windows-amd64.exe
+            compat_asset: accuknox-aspm-scanner.exe
           - os: macos-14
             name: macos
             suffix: ''
             ext: ''
+            asset: accuknox-aspm-scanner-darwin-arm64
+            compat_asset: ''
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
@@ -128,11 +150,26 @@ jobs:
             exit 1
           fi
 
+      - name: Stage uniquely named release assets
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          src="dist/accuknox-aspm-scanner${{ matrix.ext }}"
+          cp "$src" "release-assets/${{ matrix.asset }}"
+          if [ -n "${{ matrix.compat_asset }}" ]; then
+            cp "$src" "release-assets/${{ matrix.compat_asset }}"
+          fi
+          if [ "${{ matrix.name }}" = "macos" ] && [ -e release-assets/accuknox-aspm-scanner ]; then
+            echo "macOS must not upload the unprefixed accuknox-aspm-scanner asset"
+            exit 1
+          fi
+          ls -lh release-assets
+
       - name: Upload Native Binary to the Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            dist/accuknox-aspm-scanner${{ matrix.ext }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: release-assets/*
 
       - name: Upload Ubuntu Native Binary Artifact
         if: matrix.os == 'ubuntu-22.04'
@@ -193,12 +230,14 @@ jobs:
       - name: Upload Scanner Tarballs to Release
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
             utils/*.tar.gz
 
       - name: Upload ASPM DEB and Scanners for Linux
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
             utils/*.deb
 
@@ -224,6 +263,7 @@ jobs:
       - name: Upload Darwin Scanner Tarballs to Release
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
             utils/*-darwin-*.tar.gz
 
@@ -249,5 +289,6 @@ jobs:
       - name: Upload Windows Scanner Tarballs to Release
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
             utils/*-windows-*.tar.gz

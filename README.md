@@ -24,7 +24,7 @@ It can upload results to the **AccuKnox ASPM Platform**, but it can also run in 
 Install from the GitHub release wheel:
 
 ```bash
-pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.14.8/accuknox_aspm_scanner-0.14.8-py3-none-any.whl
+pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.14.7/accuknox_aspm_scanner-0.14.7-py3-none-any.whl
 ```
 
 ### 2. Restricted or on-prem environment
@@ -35,12 +35,24 @@ Install from the release `.deb` package:
 sudo dpkg -i accuknox-aspm-scanner_<version>.deb
 ```
 
-### 3. macOS and Windows
+### 3. Native binaries (Linux, macOS, Windows)
 
-Install the cross-platform Python wheel (same as connected environment above), or use the release native binary when available:
+Install the cross-platform Python wheel (same as connected environment above), or download the **platform-specific** PyInstaller binary from GitHub Releases. Do not reuse one filename across OSes:
 
-- **Windows:** `accuknox-aspm-scanner.exe` from GitHub Releases
-- **macOS:** PyInstaller binary from GitHub Releases (when published)
+| Platform | Release asset |
+|---|---|
+| Linux x86_64 | `accuknox-aspm-scanner-linux-amd64` (also published as `accuknox-aspm-scanner` for Jenkins compatibility) |
+| macOS Apple Silicon | `accuknox-aspm-scanner-darwin-arm64` |
+| Windows x64 | `accuknox-aspm-scanner-windows-amd64.exe` (also `accuknox-aspm-scanner.exe`) |
+
+```bash
+# Linux x86_64
+curl -fL -o accuknox-aspm-scanner \
+  https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.14.7/accuknox-aspm-scanner-linux-amd64
+chmod +x accuknox-aspm-scanner
+```
+
+The unprefixed `accuknox-aspm-scanner` asset is the Linux ELF only. macOS builds are published as `*-darwin-arm64` so they cannot overwrite the Linux binary.
 
 #### macOS — both local and container modes
 
