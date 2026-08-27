@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "9e73d8b255af5c4a96753b5b4d78dc6b9ed1c30eea04a9d0b929f4acd247800f"
+            "sha256": "6834c9dd8ccfbc65470e0c99bb3957a94163317dda0b8f811cd17991040a7a23"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -17,7 +17,7 @@
     },
     "default": {
         "accuknox-sq-sast": {
-            "file": "https://github.com/accuknox/aspm-sastjob/releases/download/2.0.2/accuknox_sq_sast-0.1.0-py3-none-any.whl"
+            "file": "https://github.com/accuknox/aspm-sastjob/releases/download/2.0.3/accuknox_sq_sast-0.1.1-py3-none-any.whl"
         },
         "aiohappyeyeballs": {
             "hashes": [
