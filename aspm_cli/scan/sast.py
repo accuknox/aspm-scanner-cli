@@ -143,17 +143,27 @@ class SASTScanner:
         """
         After codeassure writes verification data, promote is_false_positive
         and validation_reason to the top level of each finding.
+
+        Only set severity_by_ai when CodeAssure actually scored the finding.
+        Omit the key (never null): the control-plane Semgrep parser treats a
+        missing key as Unknown, but crashes on {"severity_by_ai": null}.
         """
         try:
             with open(self.result_file, 'r') as f:
                 data = json.load(f)
 
             for finding in data.get("results", []):
-                verification = finding.get("verification", {})
+                verification = finding.get("verification") or {}
                 is_vuln = verification.get("is_security_vulnerability")
-                finding["is_false_positive"] = not bool(is_vuln) if is_vuln is not None else None
-                finding["validation_reason"] = verification.get("reason")
-                finding["severity_by_ai"] = verification.get("severity").upper() if verification.get("severity") else None
+                if is_vuln is not None:
+                    finding["is_false_positive"] = not bool(is_vuln)
+                if verification.get("reason") is not None:
+                    finding["validation_reason"] = verification.get("reason")
+                ai_sev = verification.get("severity")
+                if ai_sev:
+                    finding["severity_by_ai"] = str(ai_sev).upper()
+                else:
+                    finding.pop("severity_by_ai", None)
 
             with open(self.result_file, 'w') as f:
                 json.dump(data, f, indent=2)
