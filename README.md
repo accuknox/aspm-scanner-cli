@@ -139,6 +139,7 @@ AccuKnox upload variables are optional when `--skip-upload` is used.
 - `SOFT_FAIL`: Set to `TRUE` to enable soft-fail by default
 - `KEEP_RESULTS`: Set to `TRUE` to keep result files after scan completion
 - `SCAN_IMAGE`: Override the scanner image used in container mode
+- `SYFT_IMAGE`: Override the Syft image used with `--enrich-licenses` in container mode (default: `anchore/syft:v1.42.3`)
 - `CODEASSURE_IMAGE`: Override the AI analysis image used by SAST AI analysis
 - `ACCUKNOX_ENABLE_AI_SAST`: Set to `TRUE` to enable AI-SAST per repo (alternative to `--ai-analysis`)
 - `GITLEAKS_IMAGE`: Override the Gitleaks image when `--engine gitleaks`
@@ -174,6 +175,7 @@ Supported tool types:
 - `dast`
 - `codeassure`
 - `gitleaks`
+- `syft`
 
 User-level tool installs are placed under:
 
@@ -423,6 +425,7 @@ Flags used after `container`:
 
 - `--container-mode`
 - `--generate-sbom`
+- `--enrich-licenses` (filesystem/fs SBOM only; default off)
 
 Typical `--command` values:
 
@@ -448,6 +451,17 @@ Filesystem SBOM (AccuKnox project classifier `application`; run from repo root i
 ```bash
 accuknox-aspm-scanner scan --skip-upload --keep-results --project-name demo-project container --command "filesystem ." --generate-sbom --container-mode
 ```
+
+Optional license enrich for filesystem/fs SBOM only. Trivy remains the SBOM engine (components + CVEs). With `--enrich-licenses`, Syft scans the same tree and copies normalized SPDX licenses onto matching Trivy packages (purl, then name@version). Existing Trivy licenses are not overwritten; Syft-only file components are not added. Image/rootfs SBOM and SCA are unchanged. `--enrich-licenses` on `image` / `rootfs` logs a warning and skips Syft.
+
+```bash
+accuknox-aspm-scanner tool install --type syft
+
+accuknox-aspm-scanner scan --project-name fs-test --keep-results --softfail \
+  container --command "filesystem ." --generate-sbom --enrich-licenses
+```
+
+`--container-mode` still works: Trivy image unchanged; Syft runs as `anchore/syft:v1.42.3` (override with `SYFT_IMAGE`) using the same `/workdir` mount.
 
 SBOM upload requires `--project-name` (or `ACCUKNOX_PROJECT_NAME`). `--project-name` is not required for vulnerability scans. Legacy env `ACCUKNOX_PROJECT` is also accepted.
 
