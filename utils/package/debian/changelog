@@ -1,3 +1,10 @@
+aspm-scanner-cli (0.14.9) unstable; urgency=medium
+
+  * SAST: omit severity_by_ai when CodeAssure did not score a finding
+  * Align CLI, wheel, and package version metadata to 0.14.9
+
+ -- AccuKnox <accuknox@accuknox.com>  Tue, 08 Sep 2026 09:22:00 +0530
+
 aspm-scanner-cli (0.14.8.1) unstable; urgency=medium
   * SAST: omit severity_by_ai when CodeAssure did not score a finding
   * Align CLI, wheel, and package version metadata to 0.14.8.1
