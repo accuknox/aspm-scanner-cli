@@ -27,6 +27,14 @@ class ContainerScanner(BaseScanner):
             action="store_true",
             help="Generate SBOM instead of running a vulnerability scan"
         )
+        parser.add_argument(
+            "--enrich-licenses",
+            action="store_true",
+            help=(
+                "Filesystem SBOM only: run Syft after Trivy and copy missing SPDX "
+                "licenses onto matching packages (default off)"
+            ),
+        )
 
     def validate_config(self, args: argparse.Namespace, validator: ConfigValidator):
         validator.validate_container_scan(
@@ -38,5 +46,11 @@ class ContainerScanner(BaseScanner):
     def run_scan(self, args: argparse.Namespace) -> tuple[int, str]:
         # Instantiate and run the original scanner logic
         generate_sbom = getattr(args, "generate_sbom", False)
-        scanner = OriginalContainerScanner(args.command, args.container_mode, generate_sbom=generate_sbom)
+        enrich_licenses = getattr(args, "enrich_licenses", False)
+        scanner = OriginalContainerScanner(
+            args.command,
+            args.container_mode,
+            generate_sbom=generate_sbom,
+            enrich_licenses=enrich_licenses,
+        )
         return scanner.run()
