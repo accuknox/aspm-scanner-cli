@@ -85,8 +85,8 @@ accuknox-aspm-scanner scan --skip-upload --keep-results sast --command "scan ."
 accuknox-aspm-scanner scan --skip-upload --keep-results sast --command "scan ." --container-mode
 ```
 
-Local Windows tools supported today: `iac`, `sast`, `secret`, `container` (Trivy), `gitleaks`, `sq-sast` (x64).  
-For `dast` / `codeassure`, use `--container-mode` for now. Tools install under `%USERPROFILE%\AppData\Local\Programs\AccuKnox\`.
+Local Windows tools supported today: `iac`, `sast`, `secret`, `container` (Trivy), `gitleaks`, `sq-sast`, `codeassure` (x64).  
+For `dast`, use `--container-mode` for now. Tools install under `%USERPROFILE%\AppData\Local\Programs\AccuKnox\`.
 
 | Platform | Install | Local scan (`tool install`) | Container scan (`--container-mode`) |
 |---|---|---|---|
