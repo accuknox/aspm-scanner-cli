@@ -5,7 +5,7 @@ a = Analysis(
     ['aspm_cli/cli.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('aspm_cli/dast_plans/*.yaml', 'aspm_cli/dast_plans')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

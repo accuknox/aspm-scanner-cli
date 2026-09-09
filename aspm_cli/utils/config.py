@@ -375,19 +375,68 @@ class ConfigValidator:
             Logger.get_logger().debug(f"SAST scan configuration error: {concise_msg}")
             raise ValueError(concise_msg)
 
-    def validate_dast_scan(self, command: str, severity_threshold: str, container_mode: bool):
+    def validate_dast_scan(
+        self,
+        command: Optional[str],
+        severity_threshold: str,
+        container_mode: bool,
+        plan: Optional[str] = None,
+        target_url: Optional[str] = None,
+        auth_login_url: Optional[str] = None,
+        auth_username: Optional[str] = None,
+        auth_password: Optional[str] = None,
+    ):
         class DASTScanConfig(BaseModel):
-            command: str = Field(..., min_length=1, description="Command arguments for DAST scanner")
+            command: Optional[str] = None
             severity_threshold: Literal["LOW", "MEDIUM", "HIGH"] = Field(..., description="Severity threshold for DAST scan")
             container_mode: bool
+            plan: Optional[str] = None
+            target_url: Optional[str] = None
+            auth_login_url: Optional[str] = None
+            auth_username: Optional[str] = None
+            auth_password: Optional[str] = None
 
             @field_validator("severity_threshold", mode="before")
             @classmethod
             def convert_to_upper(cls, v: str):
                 return v.upper()
 
+            @model_validator(mode="after")
+            def check_command_or_plan(self) -> "DASTScanConfig":
+                if self.plan:
+                    if self.command:
+                        raise ValueError("--command and --plan are mutually exclusive.")
+                    if not self.target_url:
+                        raise ValueError("--target-url is required when --plan is used.")
+                elif not self.command:
+                    raise ValueError("Either --command or --plan (with --target-url) is required.")
+
+                auth_fields = {
+                    "--auth-login-url": self.auth_login_url,
+                    "--auth-username": self.auth_username,
+                    "--auth-password": self.auth_password,
+                }
+                if any(auth_fields.values()):
+                    if not self.plan:
+                        raise ValueError("Authenticated scans (--auth-*) require --plan.")
+                    missing = [name for name, value in auth_fields.items() if not value]
+                    if missing:
+                        raise ValueError(
+                            f"Authenticated scan is missing required flag(s): {', '.join(missing)}."
+                        )
+                return self
+
         try:
-            DASTScanConfig(command=command, severity_threshold=severity_threshold, container_mode=container_mode)
+            DASTScanConfig(
+                command=command,
+                severity_threshold=severity_threshold,
+                container_mode=container_mode,
+                plan=plan,
+                target_url=target_url,
+                auth_login_url=auth_login_url,
+                auth_username=auth_username,
+                auth_password=auth_password,
+            )
             self._log_validation_success("DAST")
         except ValidationError as e:
             concise_msg = _format_validation_error(e)

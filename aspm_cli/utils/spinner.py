@@ -19,7 +19,6 @@ class Spinner:
         self._spinner = itertools.cycle(["|", "/", "-", "\\"])
         self._loop = None
         self._thread = None
-        self._task = None
 
     def start(self):
         if self.is_ci:
@@ -34,30 +33,19 @@ class Spinner:
         if self.is_ci:
             Logger.get_logger().info(f"{self.color}{self.message} - finished processing.")
         else:
+            # Signal the spinner coroutine to exit; it owns its own loop lifecycle
+            # (see _start_async_loop), so joining is enough - no cross-thread
+            # call_soon_threadsafe/is_running race to get wrong here.
             self._running = False
-
-            if self._loop and self._loop.is_running():
-                fut = asyncio.run_coroutine_threadsafe(self._cleanup(), self._loop)
-                fut.result()
-
-                self._loop.call_soon_threadsafe(self._loop.stop)
-                self._thread.join()
+            if self._thread:
+                self._thread.join(timeout=2)
 
             sys.stdout.write("\r" + " " * (len(self.message) + 4) + "\r\n")
             sys.stdout.flush()
 
-    async def _cleanup(self):
-        if self._task:
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
-
     def _start_async_loop(self):
         asyncio.set_event_loop(self._loop)
-        self._task = self._loop.create_task(self._spinner_loop())
-        self._loop.run_forever()
+        self._loop.run_until_complete(self._spinner_loop())
 
     async def _spinner_loop(self):
         while self._running:

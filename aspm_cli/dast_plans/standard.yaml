@@ -1,0 +1,53 @@
+env:
+  contexts:
+  - name: target-context
+    urls:
+    - "__TARGET_URL__"
+    includePaths:
+    - "__TARGET_URL__.*"
+__AUTH_CONTEXT_BLOCK__
+  parameters:
+    failOnError: true
+    failOnWarning: false
+    progressToStdout: true
+jobs:
+- type: passiveScan-config
+  name: passiveScan-config
+  parameters:
+    disableAllRules: false
+    enableTags: false
+    scanOnlyInScope: true
+  rules: []
+- type: spider
+  name: SpiderAsUser
+  parameters:
+    context: target-context
+__SPIDER_USER__
+    maxDuration: 15
+    maxChildren: 75
+    maxDepth: 7
+- type: spiderAjax
+  name: spiderAjax
+  parameters:
+    context: target-context
+__SPIDER_USER__
+    inScopeOnly: true
+    logoutAvoidance: true
+    maxCrawlDepth: 15
+    maxDuration: 15
+    numberOfBrowsers: 4
+    reloadWait: 1000
+    runOnlyIfModern: false
+    scopeCheck: Flexible
+- type: passiveScan-wait
+  name: Wait for Passive Scan
+  parameters:
+    maxDuration: 8
+- type: report
+  name: report
+  parameters:
+    template: traditional-json
+    reportDir: "."
+    reportFile: results
+    reportTitle: DAST Standard Scan Report
+    reportDescription: ''

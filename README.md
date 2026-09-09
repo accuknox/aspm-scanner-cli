@@ -540,16 +540,20 @@ Upload uses `data_type=API`. Output is code2api JSON (`internal_apis`, `external
 
 ### DAST Scan
 
-Use for OWASP ZAP-based scanning.
-
-Required:
-
-- `--command`
+Use for OWASP ZAP-based scanning. Supports two modes: a raw `--command` passed straight to a ZAP
+script, or a predefined `--plan` run through ZAP's Automation Framework.
 
 Flags used after `dast`:
 
+- `--command` — raw ZAP CLI args (e.g. `zap-baseline.py ...`). Mutually exclusive with `--plan`.
+- `--plan` — one of `baseline`, `standard`, `extended`, `comprehensive`. Requires `--target-url`.
+- `--target-url` — target to scan, required with `--plan`.
 - `--severity-threshold`
 - `--container-mode`
+
+Either `--command` or `--plan` (with `--target-url`) is required.
+
+#### `--command` mode
 
 Typical `--command` value:
 
@@ -571,6 +575,66 @@ ACCUKNOX_LABEL=POC \
 ACCUKNOX_TOKEN=abcd1234 \
 accuknox-aspm-scanner scan dast --command "zap-baseline.py -t http://example.com/ -I" --container-mode
 ```
+
+#### `--plan` mode
+
+Runs one of four bundled ZAP Automation Framework plans (`aspm_cli/dast_plans/*.yaml`) against
+`--target-url`. The tiers escalate spider depth/duration/breadth:
+
+| Tier | spider `maxDuration`/`maxChildren`/`maxDepth` | AJAX spider `maxDuration`/`maxCrawlDepth`/browsers | passive-scan wait |
+|---|---|---|---|
+| `baseline` | 10 / 50 / 5 | 10 / 10 / 4 | 5 |
+| `standard` | 15 / 75 / 7 | 15 / 15 / 4 | 8 |
+| `extended` | 20 / 100 / 10 | 20 / 20 / 6 | 12 |
+| `comprehensive` | 30 / 120 / 15 | 30 / 30 / 8 | 20 |
+
+All four are passive-scan only (spider + AJAX spider + passive scan, no active/attack scan job).
+
+```bash
+accuknox-aspm-scanner scan --skip-upload --keep-results dast \
+  --plan baseline --target-url https://example.com/ --container-mode
+```
+
+```bash
+ACCUKNOX_ENDPOINT=cspm.accuknox.com \
+ACCUKNOX_LABEL=POC \
+ACCUKNOX_TOKEN=abcd1234 \
+accuknox-aspm-scanner scan dast --plan comprehensive --target-url https://example.com/ --container-mode
+```
+
+##### Auth vs non-auth scans
+
+By default `--plan` crawls anonymously (non-auth). To crawl as a logged-in user (form-based auth),
+add `--auth-login-url` plus credentials — that's what switches the plan into authenticated mode; the
+spider and AJAX spider jobs then run `as user` against a ZAP context configured with `authentication`,
+`sessionManagement`, and `users`.
+
+- `--auth-login-url` — login page URL (also used as the login POST URL unless `--auth-login-request-url` is set)
+- `--auth-login-request-url` — login POST URL, if different from `--auth-login-url`
+- `--auth-login-request-body` — POST body template, default `username={%username%}&password={%password%}`
+- `--auth-username` / `--auth-password` — credentials; fall back to `DAST_AUTH_USERNAME` / `DAST_AUTH_PASSWORD` env vars so they don't need to be passed on the command line
+- `--auth-logged-in-regex` / `--auth-logged-out-regex` — response regex ZAP uses to verify session state (recommended: set at least one)
+
+Non-auth (default):
+
+```bash
+accuknox-aspm-scanner scan --skip-upload --keep-results dast \
+  --plan baseline --target-url https://example.com/ --container-mode
+```
+
+Authenticated:
+
+```bash
+DAST_AUTH_USERNAME=demo DAST_AUTH_PASSWORD=demo123 \
+accuknox-aspm-scanner scan --skip-upload --keep-results dast \
+  --plan standard --target-url https://example.com/ --container-mode \
+  --auth-login-url https://example.com/login \
+  --auth-logged-in-regex "\\Qlogout\\E"
+```
+
+Only form-based auth is supported for `--plan`. Raw `--command` mode (`zap-baseline.py`/`zap-full-scan.py`)
+still supports auth the traditional way — pass `-n <context-file> -U <user>` inside `--command`, with the
+context file placed in the working directory (it's bind-mounted the same way `results.json` is).
 
 ### SonarQube SAST Scan
 
