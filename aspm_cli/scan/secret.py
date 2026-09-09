@@ -4,6 +4,7 @@ import subprocess
 
 from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import config, docker_pull
+from aspm_cli.utils.subprocess_utils import utf8_text
 from aspm_cli.utils.docker_runtime import build_docker_run_prefix
 from aspm_cli.utils.logger import Logger
 from colorama import Fore
@@ -53,7 +54,7 @@ class SecretScanner:
 
     def _execute_scan(self, cmd, brand: str, write_stdout: bool):
         Logger.get_logger().debug(f"Running command: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, **utf8_text())
 
         if result.stdout:
             sanitized_stdout = result.stdout.replace(brand, "[scanner]")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 from aspm_cli.utils.logger import Logger
+from aspm_cli.utils.subprocess_utils import utf8_text
 
 class GitInfo:
     """
@@ -14,9 +15,9 @@ class GitInfo:
             result = subprocess.run(
                 ['git'] + command_parts,
                 capture_output=True,
-                text=True,
                 check=True,
-                timeout=5
+                timeout=5,
+                **utf8_text(),
             )
             return result.stdout.strip()
         except subprocess.CalledProcessError as e:

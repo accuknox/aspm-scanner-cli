@@ -1,3 +1,11 @@
+aspm-scanner-cli (0.15.1) unstable; urgency=medium
+
+  * Fix Windows UnicodeDecodeError (cp1252/charmap) when capturing scanner output and reading SAST results.json
+  * Native Windows CodeAssure install for AI-SAST (#75)
+  * Align CLI, wheel, and package version metadata to 0.15.1
+
+ -- AccuKnox <accuknox@accuknox.com>  Wed, 09 Sep 2026 13:54:00 +0530
+
 aspm-scanner-cli (0.14.9) unstable; urgency=medium
 
   * SAST: omit severity_by_ai when CodeAssure did not score a finding

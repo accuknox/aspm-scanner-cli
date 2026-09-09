@@ -21,13 +21,23 @@ def scan_timeout_seconds() -> Optional[int]:
     return timeout
 
 
+def utf8_text(**kwargs):
+    """Text-mode subprocess kwargs that stay UTF-8 on Windows.
+
+    ``text=True`` alone uses the locale encoding (often cp1252/'charmap' on
+    Windows), which raises UnicodeDecodeError on OpenGrep/CodeAssure output.
+    """
+    merged = {"text": True, "encoding": "utf-8", "errors": "replace"}
+    merged.update(kwargs)
+    return merged
+
+
 def run_scan_subprocess(cmd: List[str], **kwargs):
     """Run a scanner subprocess with a configurable timeout."""
     timeout = kwargs.pop("timeout", scan_timeout_seconds())
     return subprocess.run(
         cmd,
         capture_output=True,
-        text=True,
         timeout=timeout,
-        **kwargs,
+        **utf8_text(**kwargs),
     )

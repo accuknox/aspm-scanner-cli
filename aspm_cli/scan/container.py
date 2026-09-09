@@ -7,6 +7,7 @@ from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils import docker_pull
 from aspm_cli.utils import config
+from aspm_cli.utils.subprocess_utils import utf8_text
 from aspm_cli.utils.sbom import append_sbom_scanner_flags, normalize_sbom_args_for_docker
 from aspm_cli.utils.docker_runtime import build_docker_run_prefix, trivy_scan_needs_docker_socket
 from colorama import Fore
@@ -34,7 +35,7 @@ class ContainerScanner:
                 else "Scanning container image"
             )
             Logger.get_logger().debug(f"{log_msg}: {' '.join(scan_cmd)}")
-            result = subprocess.run(scan_cmd, capture_output=True, text=True)
+            result = subprocess.run(scan_cmd, capture_output=True, **utf8_text())
 
             if result.stdout:
                 sanitized_stdout = re.sub(

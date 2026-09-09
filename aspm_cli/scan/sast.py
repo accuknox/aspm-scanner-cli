@@ -10,6 +10,7 @@ from aspm_cli.utils.docker_runtime import build_docker_run_prefix, docker_volume
 from aspm_cli.utils.logger import Logger
 from colorama import Fore
 from aspm_cli.utils import config
+from aspm_cli.utils.subprocess_utils import utf8_text
 from urllib.parse import urlparse
 import re
 
@@ -57,7 +58,7 @@ class SASTScanner:
             cmd = self._build_sast_command(args)
 
             Logger.get_logger().debug(f"Running SAST scan: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            result = subprocess.run(cmd, capture_output=True, check=False, **utf8_text())
 
             # Log outputs
             if result.stdout:
@@ -114,7 +115,7 @@ class SASTScanner:
                 ToolManager.get_path("codeassure")  # raises FileNotFoundError if not installed
 
             # Check if there are any results to analyze
-            with open(self.result_file, 'r') as f:
+            with open(self.result_file, 'r', encoding='utf-8') as f:
                 current_data = json.load(f)
 
             results = current_data.get("results", [])
@@ -149,7 +150,7 @@ class SASTScanner:
         missing key as Unknown, but crashes on {"severity_by_ai": null}.
         """
         try:
-            with open(self.result_file, 'r') as f:
+            with open(self.result_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
             for finding in data.get("results", []):
@@ -165,7 +166,7 @@ class SASTScanner:
                 else:
                     finding.pop("severity_by_ai", None)
 
-            with open(self.result_file, 'w') as f:
+            with open(self.result_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2)
 
             Logger.get_logger().debug("Verification fields applied to results.")
@@ -308,14 +309,14 @@ class SASTScanner:
                     self.opengrep_image,
                     "-c", f"chmod 777 {self.result_file}"
                 ]
-                subprocess.run(chmod_cmd, capture_output=True, text=True)
+                subprocess.run(chmod_cmd, capture_output=True, **utf8_text())
             except Exception as e:
                 Logger.get_logger().debug(f"Could not fix file permissions: {e}")
 
     def process_result_file(self):
         try:
             # Load existing JSON
-            with open(self.result_file, 'r') as file:
+            with open(self.result_file, 'r', encoding='utf-8') as file:
                 data = json.load(file)
 
             # Ensure data is a dict
@@ -352,7 +353,7 @@ class SASTScanner:
             data.update(metadata)
 
             # Write back
-            with open(self.result_file, 'w') as file:
+            with open(self.result_file, 'w', encoding='utf-8') as file:
                 json.dump(data, file, indent=2)
 
             Logger.get_logger().debug("Result file processed successfully.")
@@ -379,7 +380,7 @@ class SASTScanner:
 
     def _severity_threshold_met(self):
         try:
-            with open(self.result_file, 'r') as f:
+            with open(self.result_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
             # OpenGrep already rates each finding on the standard scale via
