@@ -8,6 +8,7 @@ from aspm_cli.utils.docker_runtime import build_docker_run_prefix
 from aspm_cli.utils.logger import Logger
 from colorama import Fore
 from aspm_cli.utils import config
+from aspm_cli.utils.subprocess_utils import utf8_text
 
 class IaCScanner:
     ak_iac_image = os.getenv("SCAN_IMAGE", "public.ecr.aws/k9v9d5v2/bridgecrew/checkov:3.2.458")
@@ -36,7 +37,7 @@ class IaCScanner:
             iac_cmd = self._build_iac_command(sanitized_args)
 
             Logger.get_logger().debug(f"Executing command: {' '.join(iac_cmd)}")
-            result = subprocess.run(iac_cmd, capture_output=True, text=True)
+            result = subprocess.run(iac_cmd, capture_output=True, **utf8_text())
 
             if result.stdout:
                 sanitized_stdout = result.stdout.replace("checkov", "[scanner]")
@@ -114,7 +115,7 @@ class IaCScanner:
                     self.ak_iac_image,
                     "-c", f"chmod 777 {self.result_file}"
                 ]
-                subprocess.run(chmod_cmd, capture_output=True, text=True)
+                subprocess.run(chmod_cmd, capture_output=True, **utf8_text())
             except Exception as e:
                 Logger.get_logger().debug(f"Could not fix file permissions: {e}")
 

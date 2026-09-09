@@ -1,13 +1,14 @@
 import subprocess
 
 from aspm_cli.utils.logger import Logger
+from aspm_cli.utils.subprocess_utils import utf8_text
 
 
 def _image_exists_locally(image: str) -> bool:
     result = subprocess.run(
         ["docker", "image", "inspect", image],
         capture_output=True,
-        text=True,
+        **utf8_text(),
     )
     return result.returncode == 0
 
@@ -23,7 +24,7 @@ def docker_pull(image: str, platform: str = None):
     if platform:
         cmd.extend(["--platform", platform])
     cmd.append(image)
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, **utf8_text())
 
     if result.returncode != 0:
         Logger.get_logger().error(f"Failed to pull image {image}")

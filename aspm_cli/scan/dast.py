@@ -6,6 +6,7 @@ import shlex
 import yaml
 from colorama import Fore
 from aspm_cli.utils import config, docker_pull
+from aspm_cli.utils.subprocess_utils import utf8_text
 from aspm_cli.utils.docker_runtime import build_docker_run_prefix
 from aspm_cli.utils.logger import Logger
 from aspm_cli.tool.manager import ToolManager
@@ -206,7 +207,7 @@ class DASTScanner:
                 cmd, env = self._build_dast_command(sanitized_args)
 
             Logger.get_logger().debug(f"Running DAST scan: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+            result = subprocess.run(cmd, capture_output=True, env=env, **utf8_text())
 
             if result.stdout:
                 Logger.get_logger().debug(result.stdout)

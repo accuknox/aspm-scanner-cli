@@ -8,7 +8,7 @@ from typing import List, Optional, Tuple
 from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import config, docker_pull
 from aspm_cli.utils.logger import Logger
-from aspm_cli.utils.subprocess_utils import run_scan_subprocess
+from aspm_cli.utils.subprocess_utils import run_scan_subprocess, utf8_text
 from aspm_cli.utils.sca_prepare import append_skip_git_dir, prepare_sca_report
 from aspm_cli.utils.docker_runtime import (
     build_docker_run_prefix,
@@ -108,7 +108,7 @@ def _fix_result_file_permissions_if_docker(container_mode: bool, result_file: st
                 "-c", f"chmod 666 {os.path.basename(result_file)}",
             ],
             capture_output=True,
-            text=True,
+            **utf8_text(),
         )
     except Exception as exc:
         Logger.get_logger().debug(f"Could not fix SCA result file permissions: {exc}")
