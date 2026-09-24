@@ -15,7 +15,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 
-RUN apk add --no-cache git
+# podman: daemonless container runtime for container-mode scans on
+# containerd-only nodes (EKS/k3s) where no dockerd/docker.sock exists.
+# docker CLI above stays for environments that do have a real daemon --
+# aspm_cli.utils.container_runtime picks whichever is actually usable.
+RUN apk add --no-cache git podman \
+    && mkdir -p /etc/containers \
+    && printf '{"default":[{"type":"insecureAcceptAnything"}]}\n' > /etc/containers/policy.json \
+    && printf '[storage]\ndriver = "vfs"\n' > /etc/containers/storage.conf
 
 COPY . /CODE
 

@@ -1,12 +1,13 @@
 import subprocess
 
+from aspm_cli.utils.container_runtime import get_container_runtime
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils.subprocess_utils import utf8_text
 
 
 def _image_exists_locally(image: str) -> bool:
     result = subprocess.run(
-        ["docker", "image", "inspect", image],
+        [get_container_runtime(), "image", "inspect", image],
         capture_output=True,
         **utf8_text(),
     )
@@ -14,13 +15,13 @@ def _image_exists_locally(image: str) -> bool:
 
 
 def docker_pull(image: str, platform: str = None):
-    """Pull a Docker image, or use it if already present locally."""
+    """Pull a container image (via docker/nerdctl/podman), or use it if already present locally."""
     if _image_exists_locally(image):
-        Logger.get_logger().debug(f"Using local Docker image: {image}")
+        Logger.get_logger().debug(f"Using local container image: {image}")
         return
 
-    Logger.get_logger().debug(f"Pulling Docker image: {image}")
-    cmd = ["docker", "pull"]
+    Logger.get_logger().debug(f"Pulling container image: {image}")
+    cmd = [get_container_runtime(), "pull"]
     if platform:
         cmd.extend(["--platform", platform])
     cmd.append(image)
