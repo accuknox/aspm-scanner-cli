@@ -170,7 +170,9 @@ class ToolDownloader:
 
     def _download_file(self, url: str, dest: Path):
         Logger.get_logger().debug(f"Downloading {url}")
-        urllib.request.urlretrieve(url, dest)
+        # timeout is per socket read, so slow-but-moving big downloads still finish
+        with urllib.request.urlopen(url, timeout=60) as r, open(dest, "wb") as f:
+            shutil.copyfileobj(r, f)
 
     def _download_and_extract_tar_gz(self, url: str, extract_to: Path, tool_type: str) -> bool:
         with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
