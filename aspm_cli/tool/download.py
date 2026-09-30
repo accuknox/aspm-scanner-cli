@@ -475,7 +475,16 @@ class ToolDownloader:
             rules_dest = sast_dir / "rules"
             if rules_dest.exists():
                 shutil.rmtree(rules_dest)
-            shutil.copytree(rules_src, rules_dest)
+            # Rules are yaml only. Skip the sample files: Defender quarantines some of them
+            # (e.g. python-reverse-shell.py) and copytree then fails the whole install.
+            shutil.copytree(
+                rules_src,
+                rules_dest,
+                ignore=lambda d, names: [
+                    n for n in names
+                    if not (Path(d, n).is_dir() or n.endswith((".yaml", ".yml")))
+                ],
+            )
         return True
 
     def _install_windows_secret(self) -> bool:
