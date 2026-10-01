@@ -1,3 +1,11 @@
+aspm-scanner-cli (0.15.2-rc.2) unstable; urgency=medium
+
+  * Pre-release of 0.15.2 for a specific customer requirement
+  * Linux native build: skip git upgrade on Debian 11 when git is already present (bullseye-security 404)
+  * Align CLI, wheel, and package version metadata to 0.15.2-rc.2
+
+ -- AccuKnox <accuknox@accuknox.com>  Thu, 01 Oct 2026 10:45:00 +0530
+
 aspm-scanner-cli (0.15.2-rc.1) unstable; urgency=medium
 
   * Pre-release of 0.15.2 for a specific customer requirement

@@ -131,15 +131,26 @@ jobs:
               # can expire (LTS ended 2026-08-31); skip Valid-Until and fall
               # back to archive.debian.org if deb.debian.org still fails.
               apt_update() { apt-get -o Acquire::Check-Valid-Until=false update; }
-              if ! apt_update; then
+              use_archive_mirrors() {
                 sed -i \
                   -e "s|http://deb.debian.org/debian-security|http://archive.debian.org/debian-security|g" \
                   -e "s|http://security.debian.org/debian-security|http://archive.debian.org/debian-security|g" \
                   -e "s|http://deb.debian.org/debian|http://archive.debian.org/debian|g" \
                   /etc/apt/sources.list
+              }
+              if ! apt_update; then
+                use_archive_mirrors
                 apt_update
               fi
-              apt-get -o Acquire::Check-Valid-Until=false install -y --no-install-recommends git
+              # Image already has git. "install" would upgrade it; bullseye-security
+              # sometimes indexes a .deb that 404s on the CDN after LTS ended.
+              if ! command -v git >/dev/null 2>&1; then
+                if ! apt-get -o Acquire::Check-Valid-Until=false install -y --no-install-recommends git; then
+                  use_archive_mirrors
+                  apt_update
+                  apt-get -o Acquire::Check-Valid-Until=false install -y --no-install-recommends git
+                fi
+              fi
               python -m pip install --upgrade pip pipenv
               pipenv install
               pipenv run pip install pyinstaller
