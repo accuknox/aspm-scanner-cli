@@ -1,3 +1,10 @@
+aspm-scanner-cli (0.15.2-rc.3) unstable; urgency=medium
+
+  * Include main: Windows sast rules copy, install hint, --all skip (#78)
+  * Align CLI, wheel, and package version metadata to 0.15.2-rc.3
+
+ -- AccuKnox <accuknox@accuknox.com>  Thu, 01 Oct 2026 11:00:00 +0530
+
 aspm-scanner-cli (0.15.2-rc.2) unstable; urgency=medium
 
   * Pre-release of 0.15.2 for a specific customer requirement
