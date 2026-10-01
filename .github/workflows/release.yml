@@ -48,7 +48,7 @@ jobs:
           files: |
             dist/*.whl
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(env.RELEASE_TAG, '-rc') }}
 
   build-pyinstaller:
     needs: release

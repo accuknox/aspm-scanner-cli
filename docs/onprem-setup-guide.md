@@ -54,7 +54,7 @@ These are only required when not using `--skip-upload`:
 Install the CLI from the GitHub release wheel:
 
 ```bash
-pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.15.1/accuknox_aspm_scanner-0.15.1-py3-none-any.whl
+pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.15.2-rc.1/accuknox_aspm_scanner-0.15.2rc1-py3-none-any.whl
 ```
 
 ### Restricted or on-prem environment
