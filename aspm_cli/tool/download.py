@@ -170,7 +170,9 @@ class ToolDownloader:
 
     def _download_file(self, url: str, dest: Path):
         Logger.get_logger().debug(f"Downloading {url}")
-        urllib.request.urlretrieve(url, dest)
+        # timeout is per socket read, so slow-but-moving big downloads still finish
+        with urllib.request.urlopen(url, timeout=60) as r, open(dest, "wb") as f:
+            shutil.copyfileobj(r, f)
 
     def _download_and_extract_tar_gz(self, url: str, extract_to: Path, tool_type: str) -> bool:
         with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
@@ -475,7 +477,16 @@ class ToolDownloader:
             rules_dest = sast_dir / "rules"
             if rules_dest.exists():
                 shutil.rmtree(rules_dest)
-            shutil.copytree(rules_src, rules_dest)
+            # Rules are yaml only. Skip the sample files: Defender quarantines some of them
+            # (e.g. python-reverse-shell.py) and copytree then fails the whole install.
+            shutil.copytree(
+                rules_src,
+                rules_dest,
+                ignore=lambda d, names: [
+                    n for n in names
+                    if not (Path(d, n).is_dir() or n.endswith((".yaml", ".yml")))
+                ],
+            )
         return True
 
     def _install_windows_secret(self) -> bool:

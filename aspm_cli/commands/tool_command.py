@@ -4,7 +4,7 @@ from colorama import Fore
 from pydantic import ValidationError
 
 from aspm_cli.commands.base_command import BaseCommand
-from aspm_cli.tool.download import ToolDownloader
+from aspm_cli.tool.download import DARWIN_SUPPORTED_TOOLS, WINDOWS_SUPPORTED_TOOLS, ToolDownloader
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils.spinner import Spinner
 from aspm_cli.utils.validation import ALLOWED_TOOL_TYPES, ToolDownloadConfig
@@ -52,7 +52,11 @@ class ToolCommand(BaseCommand):
         failures = []
 
         if validated.all:
+            # ponytail: --all skips tools with no native installer here (e.g. dast on Windows)
+            supported = {"win32": WINDOWS_SUPPORTED_TOOLS, "darwin": DARWIN_SUPPORTED_TOOLS}.get(sys.platform)
             for tool in ALLOWED_TOOL_TYPES:
+                if supported and tool not in supported:
+                    continue
                 spinner = Spinner(message=f"{action_message_present[args.mode]} tool for: {tool}")
                 spinner.start()
                 downloaded = downloader.download_tool(tool, overwrite)
