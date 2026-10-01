@@ -82,6 +82,8 @@ class ToolManager:
             full_path = ToolManager._resolve_windows_path(full_path)
 
         if not full_path.exists():
-            raise FileNotFoundError(f"Tool not found. Please run `scanner tool install --type {name}`")
+            # sast-rules / dast-java are folders of the sast / dast installs, not --type choices
+            install_type = {"sast-rules": "sast", "dast-java": "dast"}.get(name, name)
+            raise FileNotFoundError(f"Tool not found. Please run `scanner tool install --type {install_type}`")
 
         return str(full_path)
