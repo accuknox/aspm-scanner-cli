@@ -58,6 +58,8 @@ def run(result_paths, scan_types=None, changed_files=None, mode="advisory",
             logger.debug("No SAST-shaped result file found - skipping AI remediation.")
 
     findings, meta = load_all_findings(result_paths, changed_files, scan_types)
+    # Same finding reported twice (overlapping rules/engines) = one comment.
+    findings = list({f["fingerprint"]: f for f in findings}.values())
     meta["pr_number"] = ctx.pr_id
     meta["mode"] = mode
 

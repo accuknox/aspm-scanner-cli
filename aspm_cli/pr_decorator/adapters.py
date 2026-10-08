@@ -309,6 +309,9 @@ def load_findings_quality(path, changed_files=None):
         fpath = c.get("path", "")
         if not fpath or (changed_files is not None and fpath not in changed_files):
             continue
+        # Security issues are already reported by the security scanners.
+        if (c.get("category") or "").lower() == "security":
+            continue
         start = max(int(c.get("start_line") or 1), 1)
         end = max(int(c.get("end_line") or start), start)
         native = (c.get("severity") or "low").upper()

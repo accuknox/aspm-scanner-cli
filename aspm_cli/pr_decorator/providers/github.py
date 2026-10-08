@@ -9,6 +9,7 @@ from .base import PRProvider
 
 API_ROOT = "https://api.github.com"
 _TIMEOUT = 30
+_BATCH = 25  # inline comments per review request
 
 
 class GitHubProvider(PRProvider):
@@ -67,28 +68,32 @@ class GitHubProvider(PRProvider):
     def post_review(self, body, event, comments, dry_run):
         logger = Logger.get_logger()
         url = f"{API_ROOT}/repos/{self.repo}/pulls/{self.pr_id}/reviews"
-        payload = {"commit_id": self.head_sha, "body": body, "event": event, "comments": comments}
 
         if dry_run:
             logger.info(f"[DRY RUN] POST {url} ({len(comments)} inline comment(s), event={event})")
             return
 
-        resp = requests.post(url, json=payload, headers=self._headers(), timeout=_TIMEOUT)
-        if resp.status_code == 422 and comments:
-            # GitHub rejects the *entire* review if even one inline comment's
-            # line isn't part of the PR's diff hunks (this CLI only scopes
-            # findings by file via --changed-files, not by which lines are
-            # actually in the diff - see adapters.py; a finding on an
-            # untouched line in an otherwise-changed file triggers this).
-            # Degrade to a comment-only review rather than losing the whole
-            # post - including the summary/gate result - over one bad line.
-            logger.warning(
-                f"GitHub rejected {len(comments)} inline comment(s) (422: {resp.text[:300]}) - "
-                f"likely one or more finding lines aren't part of the PR diff. Posting the "
-                f"summary/gate result without inline comments instead of failing outright."
-            )
-            payload["comments"] = []
-            resp = requests.post(url, json=payload, headers=self._headers(), timeout=_TIMEOUT)
-
-        resp.raise_for_status()
-        logger.info(f"Review posted: {resp.status_code}")
+        # Big reviews can 504 even though GitHub went on to create them, so post
+        # inline comments in small batches and treat a 5xx/timeout on a batch as
+        # a warning: the next run's fingerprint dedup re-posts anything lost.
+        batches = [comments[i:i + _BATCH] for i in range(0, len(comments), _BATCH)] or [[]]
+        for n, batch in enumerate(batches):
+            payload = {"commit_id": self.head_sha, "body": body if n == 0 else "(continued)",
+                       "event": event if n == 0 else "COMMENT", "comments": batch}
+            try:
+                resp = requests.post(url, json=payload, headers=self._headers(), timeout=_TIMEOUT)
+                if resp.status_code == 422 and batch:
+                    # One inline line outside the PR diff makes GitHub reject the whole
+                    # review - degrade to a comment-only review rather than lose the post.
+                    logger.warning(f"GitHub rejected {len(batch)} inline comment(s) (422: "
+                                   f"{resp.text[:300]}) - posting without inline comments instead.")
+                    payload["comments"] = []
+                    resp = requests.post(url, json=payload, headers=self._headers(), timeout=_TIMEOUT)
+                if resp.status_code >= 500:
+                    logger.warning(f"GitHub returned {resp.status_code} for review batch {n + 1}/"
+                                   f"{len(batches)}; it may still have been created. Continuing.")
+                    continue
+                resp.raise_for_status()
+                logger.info(f"Review batch {n + 1}/{len(batches)} posted: {resp.status_code}")
+            except requests.exceptions.Timeout:
+                logger.warning(f"Timed out posting review batch {n + 1}/{len(batches)}; continuing.")
