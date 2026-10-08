@@ -270,6 +270,19 @@ def render_summary_comment(findings, meta, thresholds=None, extra_sections=None)
                   f"| AI analysis: {'on' if meta.get('ai_analysis') else 'off'}_")
     lines.append("")
 
+    if total:
+        lines.append("## \U0001F6A6 Quality Gate")
+        lines.append("")
+        if not failed:
+            lines.append("✅ **Passed** — within configured thresholds.")
+        else:
+            lines.append("❌ **Failed**")
+            lines.append("")
+            lines.append("**Failed conditions**")
+            for sev, found, limit in failed:
+                lines.append(f"- {SEVERITY_ICON[sev]} {sev}: found {found}, threshold {limit}")
+        lines.append("")
+
     if extra_sections:
         lines.append(extra_sections)
 
@@ -304,18 +317,6 @@ def render_summary_comment(findings, meta, thresholds=None, extra_sections=None)
         lines.append(f"_{unknown_total} additional finding(s) with no severity signal from the scanner "
                       f"(e.g. Checkov OSS reports none natively) - not itemized above._")
         lines.append("")
-
-    lines.append("## \U0001F6A6 Quality Gate")
-    lines.append("")
-    if not failed:
-        lines.append("✅ **Passed** — within configured thresholds.")
-    else:
-        lines.append("❌ **Failed**")
-        lines.append("")
-        lines.append("**Failed conditions**")
-        for sev, found, limit in failed:
-            lines.append(f"- {SEVERITY_ICON[sev]} {sev}: found {found}, threshold {limit}")
-    lines.append("")
 
     lines.append("## ✅ Review Status")
     lines.append("")

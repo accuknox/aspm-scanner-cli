@@ -61,6 +61,7 @@ def run(result_paths, scan_types=None, changed_files=None, mode="advisory",
     # Same finding reported twice (overlapping rules/engines) = one comment.
     findings = list({f["fingerprint"]: f for f in findings}.values())
     meta["pr_number"] = ctx.pr_id
+    meta["ai_analysis"] = bool(llm_api_key)
     meta["mode"] = mode
 
     token = github_token or os.environ.get("GITHUB_TOKEN", "")
