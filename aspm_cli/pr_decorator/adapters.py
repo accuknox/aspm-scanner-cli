@@ -295,6 +295,50 @@ def load_findings_secret(path, changed_files=None):
     return load_findings_gitleaks_sarif(path, changed_files)
 
 
+def load_findings_quality(path, changed_files=None):
+    """Code-quality review JSON: {"comments": [{"path", "content", "start_line",
+    "end_line", "category", "severity", "suggestion_code"}]}.
+
+    Severity is capped at MEDIUM: quality feedback is advisory and must never
+    trip the CRITICAL/HIGH gate that security findings drive."""
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    findings = []
+    for c in data.get("comments") or []:
+        fpath = c.get("path", "")
+        if not fpath or (changed_files is not None and fpath not in changed_files):
+            continue
+        start = max(int(c.get("start_line") or 1), 1)
+        end = max(int(c.get("end_line") or start), start)
+        native = (c.get("severity") or "low").upper()
+        message = c.get("content", "")
+        # Not "fix": that renders as a one-line suggestion block, which would
+        # mangle a multi-line replacement when applied.
+        if c.get("suggestion_code"):
+            message += f"\n\n**Suggested change:**\n```\n{c['suggestion_code']}\n```"
+        findings.append({
+            "rule_id": c.get("category") or "quality",
+            "path": fpath,
+            "start_line": start,
+            "end_line": end,
+            "message": message,
+            "severity": "MEDIUM" if native in ("CRITICAL", "HIGH", "MEDIUM") else "LOW",
+            "native_severity": native,
+            "cwe": [],
+            "owasp": None,
+            "confidence": None,
+            "category": "quality",
+            "code": c.get("existing_code") or "",
+            "fingerprint": _fingerprint("quality", fpath, start, c.get("content", "")),
+            "fix": None,
+            "references": [],
+            "source": "AccuKnox Code Quality",
+        })
+
+    return findings, {"repo": None, "sha": None, "ref": None, "ai_analysis": True}
+
+
 # scan type (as passed to `aspm-cli scan <type>`) -> loader. Explicit,
 # because this CLI's own output filenames don't carry a type marker (unlike
 # the AccuKnox-labeled <label>-<TYPE>-*.json files detect_loader() sniffs).
@@ -304,6 +348,7 @@ LOADERS_BY_SCANTYPE = {
     "iac": load_findings_checkov,
     "sca": load_findings_trivy,
     "secret": load_findings_secret,
+    "quality": load_findings_quality,
 }
 
 # Filename substring -> loader, first match wins. Fallback for callers not
