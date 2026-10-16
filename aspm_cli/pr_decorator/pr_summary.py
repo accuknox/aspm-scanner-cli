@@ -25,8 +25,9 @@ from .remediation import DEFAULT_BASE_URL, DEFAULT_MODEL
 from .render import DISPLAYED_SEVERITIES, SEVERITY_ICON, SEVERITY_ORDER
 
 _MAX_FILES_IN_TABLE = 10
-_MAX_FILES_IN_DIAGRAM = 8
-_MAX_NODES_PER_FILE = 6
+_MAX_FILES_IN_DIAGRAM = 6
+_MAX_NODES_PER_FILE = 3
+_EXCERPT_LINES = 25
 _MAX_SYMBOLS_SHOWN = 5
 _TIMEOUT = 30
 
@@ -67,8 +68,11 @@ def build_file_changes(base_sha, head_sha):
     out = []
     for path, added, deleted in rows:
         diff_text = GitInfo.get_unified_diff_for_file(base_sha, head_sha, path)
+        added_lines = [l[1:].rstrip()[:160] for l in (diff_text or "").splitlines()
+                       if l.startswith("+") and not l.startswith("+++") and l[1:].strip()]
         out.append({"path": path, "added": added, "deleted": deleted,
-                     "symbols": _extract_symbols(diff_text)})
+                     "symbols": _extract_symbols(diff_text),
+                     "excerpt": added_lines[:_EXCERPT_LINES]})
     return out
 
 
@@ -97,10 +101,18 @@ def render_file_changes_table(file_changes):
 
 
 def _build_narrative_prompt(file_changes, findings):
-    file_lines = "\n".join(
-        f"- {r['path']} (+{r['added']} -{r['deleted']}): {', '.join(r['symbols']) or 'no named symbols detected'}"
-        for r in file_changes[:20]
-    )
+    # Never send the content of a file that has a secret finding to a third-party model.
+    secret_paths = {f["path"] for f in findings if f.get("category") == "secret"}
+    blocks = []
+    for r in file_changes[:12]:
+        head = f"### {r['path']} (+{r['added']} -{r['deleted']})"
+        if r["symbols"]:
+            head += f" defines: {', '.join(r['symbols'][:8])}"
+        excerpt = r.get("excerpt") or []
+        if r["path"] in secret_paths or not excerpt:
+            blocks.append(head + "\n(changed lines not shown - describe only as a code/config change)")
+        else:
+            blocks.append(head + "\n" + "\n".join(f"+ {l}" for l in excerpt))
     ranked = sorted(findings, key=lambda f: SEVERITY_ORDER.index(f["severity"]))
     finding_lines = "\n".join(
         f"- {f['severity']} {f['rule_id']} in {f['path']}:{f['start_line']} - "
@@ -109,18 +121,23 @@ def _build_narrative_prompt(file_changes, findings):
     ) or "none"
     return (
         "You are a senior application-security engineer writing the summary of a pull request "
-        "review. Be specific, factual and concise; never invent behaviour the data does not show.\n\n"
-        f"Changed files:\n{file_lines}\n\n"
+        "review for the developer who opened it. Be specific, factual and useful; never "
+        "invent behaviour the data does not show.\n\n"
+        "Changed files (added lines only):\n" + "\n\n".join(blocks) + "\n\n"
         f"Scanner findings in this PR (worst first):\n{finding_lines}\n\n"
         "Reply with ONLY a JSON object, no markdown fences, no explanation, matching exactly:\n"
         '{"summary": "one sentence: what the PR does and its overall risk", '
         '"what_it_does": ["bullet"], '
         '"impact": [{"severity": "CRITICAL|HIGH|MEDIUM|LOW", "where": "path:line", '
-        '"risk": "what an attacker or failure could do", "action": "the fix, as a short imperative"}]}\n\n'
-        "Rules: what_it_does has 3-5 bullets on the functional change only, naming the "
-        "files/functions involved. impact has at most 6 rows, worst first, one row per distinct "
-        "risk (merge findings that share a cause, e.g. several CVEs in one dependency file); "
-        "'where' must be a path from the findings; do not restate counts."
+        '"title": "5-9 word name of the risk", '
+        '"risk": "1-2 sentences: how this could realistically be exploited or fail, and what is at stake", '
+        '"action": "the concrete fix, e.g. the exact change or version", '
+        '"effort": "low|medium|high"}]}\n\n'
+        "Rules: what_it_does has 3-5 bullets describing ONLY what the added lines show, naming "
+        "files/functions; if a file's lines are not shown say it is a code/config change and "
+        "nothing more - never guess its purpose. impact has at most 6 entries, worst first, one "
+        "per distinct risk (merge findings sharing a cause, e.g. several CVEs in one dependency "
+        "file). 'where' must be a path from the findings. Do not restate counts."
     )
 
 
@@ -174,12 +191,19 @@ def render_narrative(narrative):
     if impact:
         lines += ["### \U0001F3AF Impact Analysis", ""]
         if all(isinstance(r, dict) for r in impact):
-            lines += ["| Risk | Where | What could go wrong | Recommended action |", "|---|---|---|---|"]
+            lines += ["_Ordered by risk - fix from the top. ⚡ marks a high-impact, low-effort fix._", ""]
             for r in impact:
                 sev = str(r.get("severity", "")).upper()
-                badge = f"{SEVERITY_ICON[sev]} {sev}" if sev in SEVERITY_ICON else "ℹ️ INFO"
-                where = f"`{_cell(r['where'])}`" if r.get("where") else ""
-                lines.append(f"| {badge} | {where} | {_cell(r.get('risk'))} | {_cell(r.get('action'))} |")
+                badge = f"{SEVERITY_ICON[sev]} **{sev}**" if sev in SEVERITY_ICON else "ℹ️ **INFO**"
+                where = f" · `{_cell(r['where'])}`" if r.get("where") else ""
+                title = _cell(r.get("title") or r.get("risk"))
+                quick = " ⚡" if str(r.get("effort", "")).lower() == "low" and sev in ("CRITICAL", "HIGH") else ""
+                lines.append(f"- {badge}{where} — **{title}**{quick}")
+                if r.get("title") and r.get("risk"):
+                    lines.append(f"  - **Why it matters:** {_cell(r['risk'])}")
+                if r.get("action"):
+                    effort = f" _(effort: {_cell(r['effort'])})_" if r.get("effort") else ""
+                    lines.append(f"  - **Fix:** {_cell(r['action'])}{effort}")
         else:
             lines += [f"- {r}" for r in impact]
         lines.append("")
@@ -198,7 +222,7 @@ _CLASSDEFS = (
 )
 
 
-def _mermaid_text(s, limit=44):
+def _mermaid_text(s, limit=30):
     """Mermaid labels break on quotes/brackets/angle brackets - strip them."""
     s = re.sub(r"[\"<>\[\]{}|()]", "", str(s)).strip()
     return s if len(s) <= limit else s[:limit - 1] + "…"
@@ -226,7 +250,9 @@ def render_flow_diagram(findings):
 
     lines = ["## \U0001F5FA️ Findings by File", "",
              "<details open>", "<summary><b>\U0001F4CC Findings map</b></summary>", "",
-             "```mermaid", "graph LR",
+             "```mermaid",
+             '%%{init: {"flowchart": {"nodeSpacing": 12, "rankSpacing": 28, "padding": 6}}}%%',
+             "graph LR",
              f'  PR(["<b>Pull Request</b><br/>{len(shown)} finding(s) · {len(files)} file(s)"])']
     members = {cls: [] for cls in ("root", "file", *_SEV_CLASS.values())}
     members["root"].append("PR")
@@ -236,7 +262,7 @@ def render_flow_diagram(findings):
         per_sev = {s: sum(1 for v in by_line.values() for f in v if f["severity"] == s)
                    for s in DISPLAYED_SEVERITIES}
         counts = " · ".join(f"{SEVERITY_ICON[s]} {n}" for s, n in per_sev.items() if n)
-        lines.append(f'  F{fi}["<b>{_mermaid_text(path, 48)}</b><br/>{counts}"]')
+        lines.append(f'  F{fi}["<b>{_mermaid_text(path, 40)}</b><br/>{counts}"]')
         members["file"].append(f"F{fi}")
         lines.append(f"  PR --> F{fi}")
         edge_colors.append(_SEV_COLOR[_SEV_CLASS[SEVERITY_ORDER[min(rank(v) for v in by_line.values())]]])

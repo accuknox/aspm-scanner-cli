@@ -14,7 +14,7 @@ from aspm_cli.pr_decorator.adapters import (  # noqa: E402
     load_findings_secret, load_findings_trivy, load_findings_trufflehog_jsonl,
 )
 from aspm_cli.pr_decorator.pr_summary import (  # noqa: E402
-    _extract_symbols, generate_pr_narrative, render_extra_sections, render_file_changes_table,
+    _build_narrative_prompt, _extract_symbols, generate_pr_narrative, render_extra_sections, render_file_changes_table,
     render_flow_diagram, render_narrative,
 )
 from aspm_cli.pr_decorator.remediation import enrich_with_remediation  # noqa: E402
@@ -421,14 +421,26 @@ def test_summary_has_no_boilerplate_notes():
     assert "advisory mode" not in body and "commented inline" not in body
 
 
-def test_render_narrative_table_and_string_fallback():
+def test_render_narrative_impact_cards_and_string_fallback():
     n = {"summary": "Adds billing.", "what_it_does": ["Adds lookup()"],
-         "impact": [{"severity": "high", "where": "a.py:12", "risk": "SQLi | bad", "action": "Parametrize"}]}
+         "impact": [{"severity": "high", "where": "a.py:12", "title": "SQL injection in lookup",
+                     "risk": "Caller can dump the | billing DB.", "action": "Parametrize the query", "effort": "low"}]}
     out = render_narrative(n)
-    assert "| 🟠 HIGH | `a.py:12` | SQLi / bad | Parametrize |" in out  # pipe can't break the table
+    assert "- 🟠 **HIGH** · `a.py:12` — **SQL injection in lookup** ⚡" in out
+    assert "  - **Why it matters:** Caller can dump the / billing DB." in out  # pipe neutralised
+    assert "  - **Fix:** Parametrize the query _(effort: low)_" in out
     assert "_Adds billing._" in out and "- Adds lookup()" in out
     legacy = render_narrative({"what_it_does": ["x"], "impact": ["plain bullet"]})
-    assert "- plain bullet" in legacy and "| Risk |" not in legacy
+    assert "- plain bullet" in legacy and "Why it matters" not in legacy
+
+
+def test_narrative_prompt_shows_changed_lines_but_never_for_secret_files():
+    rows = [{"path": "app.py", "added": "2", "deleted": "0", "symbols": ["run"], "excerpt": ["def run(): pass"]},
+            {"path": "settings.py", "added": "1", "deleted": "0", "symbols": [], "excerpt": ["KEY = 'AKIA...'"]}]
+    secret = dict(f("HIGH", path="settings.py"), category="secret")
+    prompt = _build_narrative_prompt(rows, [secret])
+    assert "+ def run(): pass" in prompt
+    assert "AKIA" not in prompt and "changed lines not shown" in prompt
 
 
 def test_quality_finding_title_comes_from_the_comment(tmp=None):
