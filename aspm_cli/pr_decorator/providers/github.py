@@ -84,11 +84,15 @@ class GitHubProvider(PRProvider):
                 resp = requests.post(url, json=payload, headers=self._headers(), timeout=_TIMEOUT)
                 if resp.status_code == 422 and batch:
                     # One inline line outside the PR diff makes GitHub reject the whole
-                    # review - degrade to a comment-only review rather than lose the post.
-                    logger.warning(f"GitHub rejected {len(batch)} inline comment(s) (422: "
-                                   f"{resp.text[:300]}) - posting without inline comments instead.")
+                    # review. Post the review body alone, then each comment on its own so
+                    # only the unresolvable ones are lost, not the whole batch.
+                    logger.warning(f"GitHub rejected a batch of {len(batch)} inline comment(s) (422) - "
+                                   f"retrying them one by one.")
                     payload["comments"] = []
                     resp = requests.post(url, json=payload, headers=self._headers(), timeout=_TIMEOUT)
+                    skipped = self._post_comments_individually(batch)
+                    if skipped:
+                        logger.warning(f"{skipped} inline comment(s) skipped: their line is not part of the PR diff.")
                 if resp.status_code >= 500:
                     logger.warning(f"GitHub returned {resp.status_code} for review batch {n + 1}/"
                                    f"{len(batches)}; it may still have been created. Continuing.")
@@ -97,3 +101,19 @@ class GitHubProvider(PRProvider):
                 logger.info(f"Review batch {n + 1}/{len(batches)} posted: {resp.status_code}")
             except requests.exceptions.Timeout:
                 logger.warning(f"Timed out posting review batch {n + 1}/{len(batches)}; continuing.")
+
+    def _post_comments_individually(self, comments):
+        """Returns how many GitHub refused (a line outside the diff is a 422)."""
+        url = f"{API_ROOT}/repos/{self.repo}/pulls/{self.pr_id}/comments"
+        skipped = 0
+        for c in comments:
+            payload = {"body": c["body"], "commit_id": self.head_sha, "path": c["path"],
+                       "line": c["line"], "side": "RIGHT"}
+            try:
+                resp = requests.post(url, json=payload, headers=self._headers(), timeout=_TIMEOUT)
+            except requests.exceptions.RequestException:
+                skipped += 1
+                continue
+            if resp.status_code >= 300:
+                skipped += 1
+        return skipped

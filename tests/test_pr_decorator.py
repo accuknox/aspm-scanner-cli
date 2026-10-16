@@ -14,7 +14,7 @@ from aspm_cli.pr_decorator.adapters import (  # noqa: E402
     load_findings_secret, load_findings_trivy, load_findings_trufflehog_jsonl,
 )
 from aspm_cli.pr_decorator.pr_summary import (  # noqa: E402
-    _build_narrative_prompt, _extract_symbols, generate_pr_narrative, render_extra_sections, render_file_changes_table,
+    _build_narrative_prompt, _extract_symbols, _ground_severity, generate_pr_narrative, render_extra_sections, render_file_changes_table,
     render_flow_diagram, render_narrative,
 )
 from aspm_cli.pr_decorator.remediation import enrich_with_remediation  # noqa: E402
@@ -432,6 +432,41 @@ def test_render_narrative_impact_cards_and_string_fallback():
     assert "_Adds billing._" in out and "- Adds lookup()" in out
     legacy = render_narrative({"what_it_does": ["x"], "impact": ["plain bullet"]})
     assert "- plain bullet" in legacy and "Why it matters" not in legacy
+
+
+def test_rejected_inline_comments_are_retried_one_by_one():
+    from types import SimpleNamespace
+    from aspm_cli.pr_decorator.providers import github as gh
+    calls = []
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        calls.append((url.rsplit("/", 1)[-1], json))
+        if url.endswith("/reviews") and json["comments"]:
+            return SimpleNamespace(status_code=422, text="Line could not be resolved")
+        if url.endswith("/comments") and json["path"] == "bad.py":
+            return SimpleNamespace(status_code=422, text="nope")
+        return SimpleNamespace(status_code=200, text="", raise_for_status=lambda: None)
+
+    real = gh.requests.post
+    gh.requests.post = fake_post
+    try:
+        gh.GitHubProvider("o/r", "1", "sha", "tok").post_review(
+            "body", "COMMENT",
+            [{"path": "good.py", "line": 3, "body": "x"}, {"path": "bad.py", "line": 9, "body": "y"}], False)
+    finally:
+        gh.requests.post = real
+    kinds = [c[0] for c in calls]
+    assert kinds == ["reviews", "reviews", "comments", "comments"], kinds
+    assert calls[1][1]["comments"] == []           # body-only review still posted
+    assert calls[2][1]["path"] == "good.py"         # the resolvable comment is not lost
+
+
+def test_impact_severity_comes_from_the_scanner_not_the_model():
+    fs = [f("HIGH", path="s.py", line=2), f("LOW", path="s.py", line=9, fp="2")]
+    rows = _ground_severity([{"severity": "MEDIUM", "where": "s.py:2-4"},
+                             {"severity": "LOW", "where": "s.py"},
+                             {"severity": "LOW", "where": "other.py:1"}], fs)
+    assert [r["severity"] for r in rows] == ["HIGH", "HIGH", "LOW"]  # unmatched row keeps the model's
 
 
 def test_render_narrative_sorts_impact_worst_first():

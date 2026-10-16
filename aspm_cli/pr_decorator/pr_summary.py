@@ -141,6 +141,22 @@ def _build_narrative_prompt(file_changes, findings):
     )
 
 
+def _ground_severity(impact, findings):
+    """The model describes risks; the scanner decides severity. Replace each row's
+    severity with the worst finding at its path (and line, when it names one)."""
+    for r in impact:
+        if not isinstance(r, dict) or not r.get("where"):
+            continue
+        path, _, line = str(r["where"]).partition(":")
+        line = int(line.split("-")[0]) if line.split("-")[0].isdigit() else None
+        hits = [f for f in findings if f["path"] == path
+                and f["severity"] in DISPLAYED_SEVERITIES
+                and (line is None or f["start_line"] <= line <= f["end_line"])]
+        if hits:
+            r["severity"] = min((f["severity"] for f in hits), key=SEVERITY_ORDER.index)
+    return impact
+
+
 def generate_pr_narrative(file_changes, findings, api_key, model=None, base_url=None):
     """{"what_it_does": [...], "impact": [...]} or None - skipped (no key/no
     diff) or failed (bad response, network error). Never raises."""
@@ -166,6 +182,7 @@ def generate_pr_narrative(file_changes, findings, api_key, model=None, base_url=
         data = json.loads(content)
         if not isinstance(data.get("what_it_does"), list) or not isinstance(data.get("impact"), list):
             raise ValueError(f"unexpected narrative shape: {data!r}")
+        _ground_severity(data["impact"], findings)
         return data
     except Exception as e:
         logger.warning(f"PR narrative generation failed: {e}")
