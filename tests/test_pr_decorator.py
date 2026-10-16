@@ -19,8 +19,8 @@ from aspm_cli.pr_decorator.pr_summary import (  # noqa: E402
 )
 from aspm_cli.pr_decorator.remediation import enrich_with_remediation  # noqa: E402
 from aspm_cli.pr_decorator.render import (  # noqa: E402
-    FINDING_MARKER_RE, MAX_DETAILED_PER_SEVERITY, compute_event, gate_status, load_findings,
-    render_finding_detail, render_inline_comment, render_severity_section, render_summary_comment,
+    FINDING_MARKER_RE, compute_event, gate_status, load_findings,
+    render_inline_comment, render_summary_comment,
 )
 
 
@@ -36,14 +36,6 @@ def test_gate_status():
     assert failed == [("HIGH", 2, 0)], failed
     failed = gate_status({"MEDIUM": 11}, {"HIGH": 0, "MEDIUM": 10, "LOW": None})
     assert failed == [("MEDIUM", 11, 10)], failed
-
-
-def test_severity_section_grouping():
-    findings = [f("HIGH", line=2), f("HIGH", line=1), f("LOW")]
-    section = render_severity_section(findings, "HIGH")
-    assert "HIGH Issues (2 found)" in section
-    assert section.index("a.py:1") < section.index("a.py:2")
-    assert render_severity_section(findings, "MEDIUM") == ""
 
 
 def test_summary_no_findings():
@@ -88,7 +80,7 @@ def test_load_findings_cwe_string_normalized_to_list():
     try:
         findings, _ = load_findings(path)
         assert findings[0]["cwe"] == ["CWE-319: Cleartext Transmission"], findings[0]["cwe"]
-        section = render_severity_section(findings, "HIGH")
+        section = render_inline_comment(findings[0])
         assert "C; W; E" not in section  # a bare string used to get joined character-by-character
     finally:
         os.unlink(path)
@@ -350,9 +342,6 @@ def test_unknown_severity_never_itemized_in_summary():
     assert "No rated issues found" in body
     assert "5 additional finding" in body
     assert "UNKNOWN Issues" not in body  # never an itemized section for it
-    # the exclusion lives in render_summary_comment's DISPLAYED_SEVERITIES loop,
-    # not in render_severity_section itself - calling it directly still works
-    assert render_severity_section(findings, "UNKNOWN") != ""
 
 
 def test_unknown_mixed_with_rated_findings_still_excluded():
@@ -361,24 +350,6 @@ def test_unknown_mixed_with_rated_findings_still_excluded():
     assert "Found **1 finding(s)**" in body  # headline excludes the UNKNOWN one
     assert "1 additional finding(s) with no severity signal" in body
     assert "UNKNOWN Issues" not in body
-
-
-def test_render_finding_detail_includes_cwe_owasp_references():
-    finding = f("HIGH", cwe=["CWE-89"])
-    finding["owasp"] = ["A03:2021 - Injection"]
-    finding["references"] = ["https://example.com/doc"]
-    detail = render_finding_detail(finding, 1)
-    assert "CWE-89" in detail
-    assert "A03:2021" in detail
-    assert "https://example.com/doc" in detail
-    assert "<details>" in detail and "</details>" in detail
-
-
-def test_severity_section_caps_detail_and_falls_back_to_index():
-    findings = [f("HIGH", path=f"f{i}.py", fp=f"fp{i}") for i in range(MAX_DETAILED_PER_SEVERITY + 3)]
-    section = render_severity_section(findings, "HIGH")
-    assert section.count("<details>") == MAX_DETAILED_PER_SEVERITY + 1  # +1 for the "+N more" wrapper
-    assert "+ 3 more HIGH finding(s)" in section
 
 
 def test_summary_comment_never_exceeds_hard_size_cap():
@@ -422,6 +393,25 @@ def test_render_flow_diagram_empty_without_findings():
     diagram = render_flow_diagram([f("HIGH", path="a.py")])
     assert "```mermaid" in diagram
     assert "a.py" in diagram
+    assert "classDef crit" in diagram and "class N0_0 high" in diagram
+
+
+def test_render_flow_diagram_boxes_per_line_colored_by_severity():
+    findings = [f("CRITICAL", path="r.txt", line=1, fp="1"), f("HIGH", path="r.txt", line=1, fp="2"),
+                f("LOW", path="r.txt", line=1, fp="3"), f("MEDIUM", path="a.py", line=9, fp="4"),
+                f("HIGH", path="a.py", line=3, fp="5"), f("UNKNOWN", path="u.py", fp="6")]
+    d = render_flow_diagram(findings)
+    assert 'L1 · rule +2 more"]' in d          # 3 findings on one line -> one box
+    assert d.index("r.txt") < d.index("a.py")   # worst file first
+    assert "u.py" not in d                      # UNKNOWN is never shown
+    assert "class N0_0 crit" in d and "class N1_0,N1_1" not in d
+    assert "N1_0 -.-> N1_1" in d                # line order inside a file
+
+
+def test_summary_does_not_repeat_inline_findings():
+    body = render_summary_comment([f("HIGH", line=7)], {"repo": "o/r", "ref": "main", "sha": "abc"})
+    assert "HIGH Issues" not in body and "a.py:7" not in body
+    assert "commented inline" in body
 
 
 def test_render_extra_sections_all_empty_produces_empty_string():

@@ -21,13 +21,6 @@ SEVERITY_ORDER = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN")
 # noise, not signal. Still counted internally (gate/dedup), just not shown.
 DISPLAYED_SEVERITIES = ("CRITICAL", "HIGH", "MEDIUM", "LOW")
 
-# Cap on fully-detailed <details> blocks per severity tier in the summary -
-# GitHub caps a comment body at 65536 chars; a large scan (we've seen 5000+
-# IaC findings on one real repo) would blow past that if every finding got
-# a full collapsible block. The rest fall back to a one-line index entry.
-# (There's also a hard _MAX_COMMENT_CHARS backstop below regardless of this.)
-MAX_DETAILED_PER_SEVERITY = 10
-
 # Gate thresholds: max findings allowed per severity before the gate fails.
 # None = unlimited. UNKNOWN defaults to unlimited - nothing to gate on
 # without a real severity (see adapters.load_findings_checkov).
@@ -39,11 +32,10 @@ FOOTER = ("\n---\n"
           "\U0001F537 **[AccuKnox ASPM](https://accuknox.com)** — AI-powered, security-first PR review "
           "· [Docs](https://help.accuknox.com) · [Report an issue](https://github.com/accuknox)")
 
-# GitHub caps an issue/PR comment body at 65536 chars. The per-finding caps
-# above (MAX_DETAILED_PER_SEVERITY, _MAX_CONTEXT_LINES) make hitting this
-# unlikely, not impossible (many severities x many files x a verbose AI
-# narrative) - this is the final backstop so an oversized comment degrades
-# to a truncation notice instead of a failed post.
+# GitHub caps an issue/PR comment body at 65536 chars. The summary no longer
+# itemizes findings (they are inline comments), so hitting this needs a very
+# verbose AI narrative - this is the final backstop so an oversized comment
+# degrades to a truncation notice instead of a failed post.
 _MAX_COMMENT_CHARS = 60000
 
 
@@ -130,113 +122,6 @@ def compute_event(findings, mode):
     return "REQUEST_CHANGES" if (mode == "blocking" and has_blocker) else "COMMENT"
 
 
-_MAX_CONTEXT_LINES = 25  # hard cap - a Checkov check can span a huge resource
-                          # block; without this, one finding could balloon the
-                          # comment past GitHub's 65536-char limit on its own.
-
-
-def _read_code_context(path, start_line, end_line, context=2):
-    """Lines start_line-context..end_line+context read straight from the
-    checked-out file (decorate-pr always runs inside the PR's checkout), the
-    target range marked with an arrow - richer than a tool-provided
-    single-line snippet. None on any read failure (deleted/renamed/unreadable
-    file) - callers fall back to the finding's own `code` field."""
-    try:
-        with open(path, encoding="utf-8", errors="replace") as fh:
-            lines = fh.readlines()
-    except OSError:
-        return None
-    if not lines:
-        return None
-    lo = max(start_line - context, 1)
-    hi = min(end_line + context, len(lines))
-    truncated = False
-    if hi - lo + 1 > _MAX_CONTEXT_LINES:
-        hi = lo + _MAX_CONTEXT_LINES - 1
-        truncated = True
-    out = []
-    for n in range(lo, hi + 1):
-        marker = "⚠️ " if start_line <= n <= end_line else "   "
-        out.append(f"{marker}{n}: {lines[n - 1].rstrip(chr(10))}")
-    if truncated:
-        out.append(f"   ... ({end_line - hi} more line(s) truncated)")
-    return "\n".join(out)
-
-
-def render_finding_detail(f, index):
-    """Rich collapsible block for one finding: full description, CWE/OWASP,
-    code with surrounding context, suggested fix, references. Used for the
-    summary comment's top findings per tier (see MAX_DETAILED_PER_SEVERITY);
-    render_inline_comment covers every finding on its own PR review thread."""
-    rule_short = f["rule_id"].split(".")[-1]
-    lines = ["<details>",
-              f"<summary><b>{index}. {f['severity']} in {f['path']}:{f['start_line']}</b> "
-              f"- <code>{rule_short}</code></summary>", ""]
-
-    line_range = str(f["start_line"]) if f["start_line"] == f["end_line"] else f"{f['start_line']}-{f['end_line']}"
-    lines += ["| | |", "|---|---|",
-              f"| **File** | `{f['path']}` |",
-              f"| **Lines** | {line_range} |",
-              f"| **Severity** | {SEVERITY_ICON[f['severity']]} {f['severity']} |",
-              f"| **Rule** | `{f['rule_id']}` |"]
-    if f["cwe"]:
-        lines.append(f"| **CWE** | {'; '.join(f['cwe'])} |")
-    owasp = f.get("owasp")
-    if owasp:
-        owasp_list = owasp if isinstance(owasp, list) else [owasp]
-        lines.append(f"| **OWASP** | {'; '.join(owasp_list)} |")
-    lines += ["", "**Description:**", "", f["message"], ""]
-
-    # Never re-read secret findings from disk - their own `code` is already
-    # deliberately empty to avoid re-leaking the matched value (see
-    # adapters.load_findings_trufflehog_jsonl / load_findings_gitleaks_sarif).
-    code = None
-    if f.get("category") != "secret" and f.get("path"):
-        code = _read_code_context(f["path"], f["start_line"], f["end_line"])
-    if code is None:
-        code = f.get("code", "")
-    if code:
-        lines += ["**Code:**", "```", code.strip(), "```", ""]
-
-    if f.get("fix"):
-        lines += ["**Suggested Fix:**", "```suggestion", f["fix"], "```", ""]
-
-    if f.get("references"):
-        lines.append("**References:**")
-        for ref in f["references"]:
-            lines.append(f"- {ref}")
-        lines.append("")
-
-    lines.append("</details>")
-    return "\n".join(lines)
-
-
-def render_severity_section(findings, severity):
-    """Rich collapsible detail for the first MAX_DETAILED_PER_SEVERITY
-    findings in this tier, a compact index line for the rest (GitHub caps a
-    comment body at 65536 chars - a large scan would blow past that if every
-    finding got a full block; see MAX_DETAILED_PER_SEVERITY)."""
-    items = sorted((f for f in findings if f["severity"] == severity),
-                    key=lambda x: (x["path"], x["start_line"]))
-    if not items:
-        return ""
-    lines = [f"### {SEVERITY_ICON[severity]} {severity} Issues ({len(items)} found)", ""]
-    detailed, rest = items[:MAX_DETAILED_PER_SEVERITY], items[MAX_DETAILED_PER_SEVERITY:]
-    for i, f in enumerate(detailed, 1):
-        lines.append(render_finding_detail(f, i))
-        lines.append("")
-    if rest:
-        lines.append(f"<details><summary>+ {len(rest)} more {severity} finding(s)</summary>")
-        lines.append("")
-        for f in rest:
-            cwe = f" — _{'; '.join(f['cwe'])}_" if f["cwe"] else ""
-            lines.append(f"- `{f['path']}:{f['start_line']}` — `{f['rule_id'].split('.')[-1]}`{cwe}")
-        lines.append("")
-        lines.append("</details>")
-        lines.append("")
-    return "\n".join(lines)
-
-
 def render_summary_comment(findings, meta, thresholds=None, extra_sections=None):
     thresholds = thresholds if thresholds is not None else DEFAULT_THRESHOLDS
     counts = Counter(f["severity"] for f in findings)
@@ -309,10 +194,9 @@ def render_summary_comment(findings, meta, thresholds=None, extra_sections=None)
         if counts.get(sev):
             lines.append(f"| {SEVERITY_ICON[sev]} {sev} | {counts[sev]} |")
     lines.append("")
-    for sev in DISPLAYED_SEVERITIES:
-        section = render_severity_section(findings, sev)
-        if section:
-            lines.append(section)
+    lines.append("Every finding is also commented inline on its line in the **Files changed** tab, "
+                 "with the suggested fix where one exists.")
+    lines.append("")
     if unknown_total:
         lines.append(f"_{unknown_total} additional finding(s) with no severity signal from the scanner "
                       f"(e.g. Checkov OSS reports none natively) - not itemized above._")

@@ -8,11 +8,11 @@ every function here degrades to None/"" (not a crash) when git or an LLM key
 isn't available, and render_extra_sections() is safe to call with any mix of
 missing pieces.
 
-No fabricated call-graph analysis: the "flow" diagram shows PR -> changed
-file -> its findings, which is what this codebase can actually derive - not
-a cross-function call chain, which would need real AST/call-graph analysis
-this repo doesn't have. A wrong diagram in a security review is worse than
-no diagram.
+No fabricated call-graph analysis: the diagram shows PR -> changed file ->
+one box per flagged line, coloured by its worst severity. Dotted lines only
+follow line order inside a file - they are not data flow, which would need
+real AST/call-graph analysis this repo doesn't have. A wrong diagram in a
+security review is worse than no diagram.
 """
 import json
 import re
@@ -22,10 +22,11 @@ import requests
 from aspm_cli.utils.git_info import GitInfo
 from aspm_cli.utils.logger import Logger
 from .remediation import DEFAULT_BASE_URL, DEFAULT_MODEL
-from .render import SEVERITY_ICON, SEVERITY_ORDER
+from .render import DISPLAYED_SEVERITIES, SEVERITY_ICON, SEVERITY_ORDER
 
 _MAX_FILES_IN_TABLE = 10
-_MAX_FILES_IN_DIAGRAM = 12
+_MAX_FILES_IN_DIAGRAM = 8
+_MAX_NODES_PER_FILE = 6
 _MAX_SYMBOLS_SHOWN = 5
 _TIMEOUT = 30
 
@@ -161,35 +162,85 @@ def render_narrative(narrative):
     return "\n".join(lines)
 
 
-def _mermaid_node_id(prefix, s):
-    return prefix + re.sub(r"[^a-zA-Z0-9]", "_", s)[:40]
+_SEV_CLASS = {"CRITICAL": "crit", "HIGH": "high", "MEDIUM": "med", "LOW": "low"}
+_CLASSDEFS = (
+    "classDef crit fill:#d73a49,stroke:#86181d,color:#fff",
+    "classDef high fill:#f66a0a,stroke:#b34700,color:#fff",
+    "classDef med fill:#ffd33d,stroke:#b08800,color:#000",
+    "classDef low fill:#e1e4e8,stroke:#959da5,color:#000",
+)
+
+
+def _mermaid_text(s, limit=44):
+    """Mermaid labels break on quotes/brackets/angle brackets - strip them."""
+    s = re.sub(r"[\"<>\[\]{}|]", "", str(s)).strip()
+    return s if len(s) <= limit else s[:limit - 1] + "…"
 
 
 def render_flow_diagram(findings):
-    """PR -> changed file -> its findings (grouped, worst severity shown) -
-    what this codebase actually knows. Not a call graph - see module
-    docstring for why that's deliberate, not a missing feature."""
-    if not findings:
-        return ""
-    by_file = {}
-    for f in findings:
-        by_file.setdefault(f["path"], []).append(f)
-    if not by_file:
+    """One subgraph per changed file (worst first); inside, one box per flagged
+    line coloured by its worst severity, e.g. 12 CVEs on requirements.txt:1
+    collapse to a single "+11 more" box. Capped so GitHub's mermaid renderer
+    and the comment size limit are never the failure point."""
+    shown = [f for f in findings if f["severity"] in DISPLAYED_SEVERITIES]
+    if not shown:
         return ""
 
+    by_file = {}
+    for f in shown:
+        by_file.setdefault(f["path"], {}).setdefault(f["start_line"], []).append(f)
+
+    def rank(items):
+        return min(SEVERITY_ORDER.index(f["severity"]) for f in items)
+
+    files = sorted(by_file.items(),
+                   key=lambda kv: (min(rank(v) for v in kv[1].values()), kv[0]))
+
     lines = ["## \U0001F5FA️ Findings by File", "",
-              "<details open>", "<summary><b>\U0001F4CC Overview</b></summary>", "",
-              "```mermaid", "graph LR", '  PR["Pull Request"]']
-    for path, items in list(by_file.items())[:_MAX_FILES_IN_DIAGRAM]:
-        fid = _mermaid_node_id("F", path)
-        worst = min(items, key=lambda x: SEVERITY_ORDER.index(x["severity"]))
-        icon = SEVERITY_ICON[worst["severity"]]
-        lines.append(f'  PR --> {fid}["{path}"]')
-        lines.append(f'  {fid} --> {fid}_c["{icon} {len(items)} finding(s)"]')
-    remaining = len(by_file) - _MAX_FILES_IN_DIAGRAM
+             "<details open>", "<summary><b>\U0001F4CC Findings map</b></summary>", "",
+             "```mermaid", "graph TD", '  PR(["Pull Request"])']
+    members = {cls: [] for cls in _SEV_CLASS.values()}
+
+    for fi, (path, by_line) in enumerate(files[:_MAX_FILES_IN_DIAGRAM]):
+        total = sum(len(v) for v in by_line.values())
+        worst = min(rank(v) for v in by_line.values())
+        lines.append(f'  subgraph F{fi}["{SEVERITY_ICON[SEVERITY_ORDER[worst]]} {_mermaid_text(path, 60)} · {total}"]')
+        lines.append("    direction TB")
+        # Worst-severity lines first when capping, then back to line order.
+        picked = sorted(by_line.items(), key=lambda kv: (rank(kv[1]), kv[0]))[:_MAX_NODES_PER_FILE]
+        picked.sort()
+        ids = []
+        for ni, (line_no, items) in enumerate(picked):
+            items = sorted(items, key=lambda x: SEVERITY_ORDER.index(x["severity"]))
+            top = items[0]
+            more = f" +{len(items) - 1} more" if len(items) > 1 else ""
+            label = f"{SEVERITY_ICON[top['severity']]} L{line_no} · {_mermaid_text(top['rule_id'].split('.')[-1])}{more}"
+            nid = f"N{fi}_{ni}"
+            lines.append(f'    {nid}["{label}"]')
+            members[_SEV_CLASS[top["severity"]]].append(nid)
+            ids.append(nid)
+        hidden = len(by_line) - len(picked)
+        if hidden > 0:
+            lines.append(f'    M{fi}["… {hidden} more line(s)"]')
+            members["low"].append(f"M{fi}")
+            ids.append(f"M{fi}")
+        lines.append("  end")
+        if len(ids) > 1:
+            lines.append("  " + " -.-> ".join(ids))
+        lines.append(f"  PR --> F{fi}")
+
+    remaining = len(files) - _MAX_FILES_IN_DIAGRAM
     if remaining > 0:
-        lines.append(f'  PR --> MORE["... and {remaining} more file(s)"]')
-    lines += ["```", "", "</details>", ""]
+        lines.append(f'  PR --> MORE["… and {remaining} more file(s)"]')
+        members["low"].append("MORE")
+
+    lines += ["  " + d for d in _CLASSDEFS]
+    lines += [f"  class {','.join(ids)} {cls}" for cls, ids in members.items() if ids]
+    lines += ["```", "",
+              f"{SEVERITY_ICON['CRITICAL']} Critical · {SEVERITY_ICON['HIGH']} High · "
+              f"{SEVERITY_ICON['MEDIUM']} Medium · {SEVERITY_ICON['LOW']} Low "
+              "— one box per flagged line, dotted lines follow line order within a file.",
+              "", "</details>", ""]
     return "\n".join(lines)
 
 
