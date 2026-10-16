@@ -191,6 +191,9 @@ def render_narrative(narrative):
     if impact:
         lines += ["### \U0001F3AF Impact Analysis", ""]
         if all(isinstance(r, dict) for r in impact):
+            # Don't trust the model's ordering: worst severity first, stable otherwise.
+            impact = sorted(impact, key=lambda r: SEVERITY_ORDER.index(str(r.get("severity", "")).upper())
+                            if str(r.get("severity", "")).upper() in SEVERITY_ORDER else len(SEVERITY_ORDER))
             lines += ["_Ordered by risk - fix from the top. ⚡ marks a high-impact, low-effort fix._", ""]
             for r in impact:
                 sev = str(r.get("severity", "")).upper()

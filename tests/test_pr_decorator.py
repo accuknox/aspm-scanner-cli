@@ -434,6 +434,12 @@ def test_render_narrative_impact_cards_and_string_fallback():
     assert "- plain bullet" in legacy and "Why it matters" not in legacy
 
 
+def test_render_narrative_sorts_impact_worst_first():
+    mk = lambda sev, w: {"severity": sev, "where": w, "title": w, "risk": "r", "action": "a"}
+    out = render_narrative({"impact": [mk("LOW", "l.py"), mk("CRITICAL", "c.py"), mk("MEDIUM", "m.py"), mk("HIGH", "h.py")]})
+    assert [out.index(x) for x in ("c.py", "h.py", "m.py", "l.py")] == sorted(out.index(x) for x in ("c.py", "h.py", "m.py", "l.py"))
+
+
 def test_narrative_prompt_shows_changed_lines_but_never_for_secret_files():
     rows = [{"path": "app.py", "added": "2", "deleted": "0", "symbols": ["run"], "excerpt": ["def run(): pass"]},
             {"path": "settings.py", "added": "1", "deleted": "0", "symbols": [], "excerpt": ["KEY = 'AKIA...'"]}]
