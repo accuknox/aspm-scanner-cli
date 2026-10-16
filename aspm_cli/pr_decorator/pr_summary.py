@@ -9,10 +9,10 @@ isn't available, and render_extra_sections() is safe to call with any mix of
 missing pieces.
 
 No fabricated call-graph analysis: the diagram shows PR -> changed file ->
-one box per flagged line, coloured by its worst severity. Dotted lines only
-follow line order inside a file - they are not data flow, which would need
-real AST/call-graph analysis this repo doesn't have. A wrong diagram in a
-security review is worse than no diagram.
+one box per flagged line, coloured by its worst severity. The edges are
+containment, not data flow, which would need real AST/call-graph analysis
+this repo doesn't have. A wrong diagram in a security review is worse than
+no diagram.
 """
 import json
 import re
@@ -101,18 +101,26 @@ def _build_narrative_prompt(file_changes, findings):
         f"- {r['path']} (+{r['added']} -{r['deleted']}): {', '.join(r['symbols']) or 'no named symbols detected'}"
         for r in file_changes[:20]
     )
+    ranked = sorted(findings, key=lambda f: SEVERITY_ORDER.index(f["severity"]))
     finding_lines = "\n".join(
-        f"- {f['severity']} {f['rule_id']} in {f['path']}:{f['start_line']}" for f in findings[:20]
+        f"- {f['severity']} {f['rule_id']} in {f['path']}:{f['start_line']} - "
+        f"{' '.join(str(f.get('message', '')).split())[:110]}"
+        for f in ranked[:25]
     ) or "none"
     return (
-        "You are summarizing a pull request for a security review comment.\n\n"
+        "You are a senior application-security engineer writing the summary of a pull request "
+        "review. Be specific, factual and concise; never invent behaviour the data does not show.\n\n"
         f"Changed files:\n{file_lines}\n\n"
-        f"Security findings in this PR:\n{finding_lines}\n\n"
+        f"Scanner findings in this PR (worst first):\n{finding_lines}\n\n"
         "Reply with ONLY a JSON object, no markdown fences, no explanation, matching exactly:\n"
-        '{"what_it_does": ["bullet", "..."], "impact": ["bullet", "..."]}\n\n'
-        "3-6 short bullets each. what_it_does describes the functional changes only. "
-        "impact covers functional AND security impact, referencing specific findings by "
-        "file/rule where relevant - call out anything CRITICAL/HIGH explicitly."
+        '{"summary": "one sentence: what the PR does and its overall risk", '
+        '"what_it_does": ["bullet"], '
+        '"impact": [{"severity": "CRITICAL|HIGH|MEDIUM|LOW", "where": "path:line", '
+        '"risk": "what an attacker or failure could do", "action": "the fix, as a short imperative"}]}\n\n'
+        "Rules: what_it_does has 3-5 bullets on the functional change only, naming the "
+        "files/functions involved. impact has at most 6 rows, worst first, one row per distinct "
+        "risk (merge findings that share a cause, e.g. several CVEs in one dependency file); "
+        "'where' must be a path from the findings; do not restate counts."
     )
 
 
@@ -129,7 +137,7 @@ def generate_pr_narrative(file_changes, findings, api_key, model=None, base_url=
             base_url,
             json={"model": model,
                   "messages": [{"role": "user", "content": _build_narrative_prompt(file_changes, findings)}],
-                  "max_tokens": 700},
+                  "max_tokens": 1100},
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json",
                      "HTTP-Referer": "https://github.com/accuknox/aspm-scanner-cli",
                      "X-Title": "AccuKnox PR Decorator"},
@@ -147,41 +155,62 @@ def generate_pr_narrative(file_changes, findings, api_key, model=None, base_url=
         return None
 
 
+def _cell(text):
+    """Table cells can't contain pipes or newlines."""
+    return " ".join(str(text or "").replace("|", "/").split())
+
+
 def render_narrative(narrative):
     if not narrative:
         return ""
     lines = []
-    if narrative.get("what_it_does"):
+    if narrative.get("what_it_does") or narrative.get("summary"):
         lines += ["### \U0001F4DD What This PR Does", ""]
-        lines += [f"- {b}" for b in narrative["what_it_does"]]
+        if narrative.get("summary"):
+            lines += [f"_{_cell(narrative['summary'])}_", ""]
+        lines += [f"- {b}" for b in narrative.get("what_it_does", [])]
         lines.append("")
-    if narrative.get("impact"):
+    impact = narrative.get("impact") or []
+    if impact:
         lines += ["### \U0001F3AF Impact Analysis", ""]
-        lines += [f"- {b}" for b in narrative["impact"]]
+        if all(isinstance(r, dict) for r in impact):
+            lines += ["| Risk | Where | What could go wrong | Recommended action |", "|---|---|---|---|"]
+            for r in impact:
+                sev = str(r.get("severity", "")).upper()
+                badge = f"{SEVERITY_ICON[sev]} {sev}" if sev in SEVERITY_ICON else "ℹ️ INFO"
+                where = f"`{_cell(r['where'])}`" if r.get("where") else ""
+                lines.append(f"| {badge} | {where} | {_cell(r.get('risk'))} | {_cell(r.get('action'))} |")
+        else:
+            lines += [f"- {r}" for r in impact]
         lines.append("")
     return "\n".join(lines)
 
 
 _SEV_CLASS = {"CRITICAL": "crit", "HIGH": "high", "MEDIUM": "med", "LOW": "low"}
+_SEV_COLOR = {"crit": "#d73a49", "high": "#f66a0a", "med": "#d4a72c", "low": "#8c959f"}
 _CLASSDEFS = (
-    "classDef crit fill:#d73a49,stroke:#86181d,color:#fff",
-    "classDef high fill:#f66a0a,stroke:#b34700,color:#fff",
-    "classDef med fill:#ffd33d,stroke:#b08800,color:#000",
-    "classDef low fill:#e1e4e8,stroke:#959da5,color:#000",
+    "classDef root fill:#0969da,stroke:#0550ae,stroke-width:2px,color:#fff",
+    "classDef file fill:#f6f8fa,stroke:#57606a,stroke-width:2px,color:#1f2328",
+    "classDef crit fill:#d73a49,stroke:#86181d,stroke-width:2px,color:#fff",
+    "classDef high fill:#f66a0a,stroke:#b34700,stroke-width:2px,color:#fff",
+    "classDef med fill:#ffd33d,stroke:#b08800,stroke-width:2px,color:#1f2328",
+    "classDef low fill:#e1e4e8,stroke:#959da5,stroke-width:2px,color:#1f2328",
 )
 
 
 def _mermaid_text(s, limit=44):
     """Mermaid labels break on quotes/brackets/angle brackets - strip them."""
-    s = re.sub(r"[\"<>\[\]{}|]", "", str(s)).strip()
+    s = re.sub(r"[\"<>\[\]{}|()]", "", str(s)).strip()
     return s if len(s) <= limit else s[:limit - 1] + "…"
 
 
 def render_flow_diagram(findings):
-    """One subgraph per changed file (worst first); inside, one box per flagged
-    line coloured by its worst severity, e.g. 12 CVEs on requirements.txt:1
-    collapse to a single "+11 more" box. Capped so GitHub's mermaid renderer
-    and the comment size limit are never the failure point."""
+    """Left-to-right tree: Pull Request -> changed file (with its per-severity
+    counts) -> one box per flagged line, coloured by that line's worst
+    severity; edges take the colour of what they lead to. Several findings on
+    one line (12 CVEs on requirements.txt:1) collapse into one "+N" box.
+    Capped so GitHub's mermaid renderer and the comment size limit are never
+    the failure point."""
     shown = [f for f in findings if f["severity"] in DISPLAYED_SEVERITIES]
     if not shown:
         return ""
@@ -193,53 +222,59 @@ def render_flow_diagram(findings):
     def rank(items):
         return min(SEVERITY_ORDER.index(f["severity"]) for f in items)
 
-    files = sorted(by_file.items(),
-                   key=lambda kv: (min(rank(v) for v in kv[1].values()), kv[0]))
+    files = sorted(by_file.items(), key=lambda kv: (min(rank(v) for v in kv[1].values()), kv[0]))
 
     lines = ["## \U0001F5FA️ Findings by File", "",
              "<details open>", "<summary><b>\U0001F4CC Findings map</b></summary>", "",
-             "```mermaid", "graph TD", '  PR(["Pull Request"])']
-    members = {cls: [] for cls in _SEV_CLASS.values()}
+             "```mermaid", "graph LR",
+             f'  PR(["<b>Pull Request</b><br/>{len(shown)} finding(s) · {len(files)} file(s)"])']
+    members = {cls: [] for cls in ("root", "file", *_SEV_CLASS.values())}
+    members["root"].append("PR")
+    edge_colors = []  # one colour per edge, in declaration order -> linkStyle
 
     for fi, (path, by_line) in enumerate(files[:_MAX_FILES_IN_DIAGRAM]):
-        total = sum(len(v) for v in by_line.values())
-        worst = min(rank(v) for v in by_line.values())
-        lines.append(f'  subgraph F{fi}["{SEVERITY_ICON[SEVERITY_ORDER[worst]]} {_mermaid_text(path, 60)} · {total}"]')
-        lines.append("    direction TB")
+        per_sev = {s: sum(1 for v in by_line.values() for f in v if f["severity"] == s)
+                   for s in DISPLAYED_SEVERITIES}
+        counts = " · ".join(f"{SEVERITY_ICON[s]} {n}" for s, n in per_sev.items() if n)
+        lines.append(f'  F{fi}["<b>{_mermaid_text(path, 48)}</b><br/>{counts}"]')
+        members["file"].append(f"F{fi}")
+        lines.append(f"  PR --> F{fi}")
+        edge_colors.append(_SEV_COLOR[_SEV_CLASS[SEVERITY_ORDER[min(rank(v) for v in by_line.values())]]])
         # Worst-severity lines first when capping, then back to line order.
         picked = sorted(by_line.items(), key=lambda kv: (rank(kv[1]), kv[0]))[:_MAX_NODES_PER_FILE]
         picked.sort()
-        ids = []
         for ni, (line_no, items) in enumerate(picked):
             items = sorted(items, key=lambda x: SEVERITY_ORDER.index(x["severity"]))
             top = items[0]
             more = f" +{len(items) - 1} more" if len(items) > 1 else ""
-            label = f"{SEVERITY_ICON[top['severity']]} L{line_no} · {_mermaid_text(top['rule_id'].split('.')[-1])}{more}"
+            label = f"L{line_no} · {_mermaid_text(top['rule_id'].split('.')[-1])}{more}"
             nid = f"N{fi}_{ni}"
-            lines.append(f'    {nid}["{label}"]')
-            members[_SEV_CLASS[top["severity"]]].append(nid)
-            ids.append(nid)
+            lines.append(f'  {nid}("{label}")')
+            lines.append(f"  F{fi} --> {nid}")
+            cls = _SEV_CLASS[top["severity"]]
+            members[cls].append(nid)
+            edge_colors.append(_SEV_COLOR[cls])
         hidden = len(by_line) - len(picked)
         if hidden > 0:
-            lines.append(f'    M{fi}["… {hidden} more line(s)"]')
+            lines.append(f'  M{fi}("… {hidden} more line(s)")')
+            lines.append(f"  F{fi} -.-> M{fi}")
             members["low"].append(f"M{fi}")
-            ids.append(f"M{fi}")
-        lines.append("  end")
-        if len(ids) > 1:
-            lines.append("  " + " -.-> ".join(ids))
-        lines.append(f"  PR --> F{fi}")
+            edge_colors.append(_SEV_COLOR["low"])
 
     remaining = len(files) - _MAX_FILES_IN_DIAGRAM
     if remaining > 0:
-        lines.append(f'  PR --> MORE["… and {remaining} more file(s)"]')
+        lines.append(f'  MORE("… and {remaining} more file(s)")')
+        lines.append("  PR -.-> MORE")
         members["low"].append("MORE")
+        edge_colors.append(_SEV_COLOR["low"])
 
     lines += ["  " + d for d in _CLASSDEFS]
     lines += [f"  class {','.join(ids)} {cls}" for cls, ids in members.items() if ids]
+    lines += [f"  linkStyle {i} stroke:{c},stroke-width:2px" for i, c in enumerate(edge_colors)]
     lines += ["```", "",
               f"{SEVERITY_ICON['CRITICAL']} Critical · {SEVERITY_ICON['HIGH']} High · "
               f"{SEVERITY_ICON['MEDIUM']} Medium · {SEVERITY_ICON['LOW']} Low "
-              "— one box per flagged line, dotted lines follow line order within a file.",
+              "— one box per flagged line; its colour is the worst severity on that line.",
               "", "</details>", ""]
     return "\n".join(lines)
 

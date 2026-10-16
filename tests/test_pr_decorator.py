@@ -348,7 +348,7 @@ def test_unknown_mixed_with_rated_findings_still_excluded():
     findings = [f("HIGH"), f("UNKNOWN", fp="fp2")]
     body = render_summary_comment(findings, {"repo": "o/r", "ref": "main", "sha": "abc"})
     assert "Found **1 finding(s)**" in body  # headline excludes the UNKNOWN one
-    assert "1 additional finding(s) with no severity signal" in body
+    assert "additional finding" not in body  # unrated noise is not mentioned at all
     assert "UNKNOWN Issues" not in body
 
 
@@ -394,6 +394,7 @@ def test_render_flow_diagram_empty_without_findings():
     assert "```mermaid" in diagram
     assert "a.py" in diagram
     assert "classDef crit" in diagram and "class N0_0 high" in diagram
+    assert "PR --> F0" in diagram and "F0 --> N0_0" in diagram
 
 
 def test_render_flow_diagram_boxes_per_line_colored_by_severity():
@@ -401,17 +402,44 @@ def test_render_flow_diagram_boxes_per_line_colored_by_severity():
                 f("LOW", path="r.txt", line=1, fp="3"), f("MEDIUM", path="a.py", line=9, fp="4"),
                 f("HIGH", path="a.py", line=3, fp="5"), f("UNKNOWN", path="u.py", fp="6")]
     d = render_flow_diagram(findings)
-    assert 'L1 · rule +2 more"]' in d          # 3 findings on one line -> one box
+    assert 'L1 · rule +2 more")' in d          # 3 findings on one line -> one box
     assert d.index("r.txt") < d.index("a.py")   # worst file first
     assert "u.py" not in d                      # UNKNOWN is never shown
     assert "class N0_0 crit" in d and "class N1_0,N1_1" not in d
-    assert "N1_0 -.-> N1_1" in d                # line order inside a file
+    assert "F1 --> N1_1" in d                   # file -> its boxes, in line order
+    assert "linkStyle 0 stroke:#d73a49" in d    # edge takes the colour of the worst severity
+    assert "🔴 1 · 🟠 1 · ⚪ 1" in d             # per-file severity counts on the file box
 
 
 def test_summary_does_not_repeat_inline_findings():
     body = render_summary_comment([f("HIGH", line=7)], {"repo": "o/r", "ref": "main", "sha": "abc"})
     assert "HIGH Issues" not in body and "a.py:7" not in body
-    assert "commented inline" in body
+
+
+def test_summary_has_no_boilerplate_notes():
+    body = render_summary_comment([f("HIGH"), f("UNKNOWN", fp="2")], {"repo": "o/r", "mode": "advisory"})
+    assert "advisory mode" not in body and "commented inline" not in body
+
+
+def test_render_narrative_table_and_string_fallback():
+    n = {"summary": "Adds billing.", "what_it_does": ["Adds lookup()"],
+         "impact": [{"severity": "high", "where": "a.py:12", "risk": "SQLi | bad", "action": "Parametrize"}]}
+    out = render_narrative(n)
+    assert "| 🟠 HIGH | `a.py:12` | SQLi / bad | Parametrize |" in out  # pipe can't break the table
+    assert "_Adds billing._" in out and "- Adds lookup()" in out
+    legacy = render_narrative({"what_it_does": ["x"], "impact": ["plain bullet"]})
+    assert "- plain bullet" in legacy and "| Risk |" not in legacy
+
+
+def test_quality_finding_title_comes_from_the_comment(tmp=None):
+    path = _write_json({"comments": [{"path": "a.py", "start_line": 5, "end_line": 5, "category": "other",
+                                      "severity": "high", "content": "File handle is never closed. Use a with block."}]})
+    try:
+        findings, _ = load_all_findings([path], None, ["quality"])
+        assert findings[0]["rule_id"] == "File handle is never closed", findings[0]["rule_id"]
+        assert findings[0]["severity"] == "MEDIUM"
+    finally:
+        os.unlink(path)
 
 
 def test_render_extra_sections_all_empty_produces_empty_string():

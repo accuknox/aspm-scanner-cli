@@ -194,21 +194,13 @@ def render_summary_comment(findings, meta, thresholds=None, extra_sections=None)
         if counts.get(sev):
             lines.append(f"| {SEVERITY_ICON[sev]} {sev} | {counts[sev]} |")
     lines.append("")
-    lines.append("Every finding is also commented inline on its line in the **Files changed** tab, "
-                 "with the suggested fix where one exists.")
-    lines.append("")
-    if unknown_total:
-        lines.append(f"_{unknown_total} additional finding(s) with no severity signal from the scanner "
-                      f"(e.g. Checkov OSS reports none natively) - not itemized above._")
-        lines.append("")
 
     lines.append("## ✅ Review Status")
     lines.append("")
     if blocking:
         lines.append("**Recommendation:** \U0001F6A8 **Changes requested** — thresholds exceeded.")
     elif failed:
-        lines.append("**Recommendation:** ⚠️ Review recommended — thresholds exceeded "
-                      "(advisory mode, not blocking).")
+        lines.append("**Recommendation:** ⚠️ Review recommended — thresholds exceeded.")
     else:
         lines.append("**Recommendation:** ✅ No blocking issues found.")
     return _finalize(lines)

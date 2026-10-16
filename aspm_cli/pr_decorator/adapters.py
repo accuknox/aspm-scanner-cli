@@ -26,6 +26,8 @@ remediation.py already carries for its own untested LLM call).
 import hashlib
 import json
 import os
+import re
+import textwrap
 
 from .render import load_findings as load_findings_sast
 
@@ -316,12 +318,16 @@ def load_findings_quality(path, changed_files=None):
         end = max(int(c.get("end_line") or start), start)
         native = (c.get("severity") or "low").upper()
         message = c.get("content", "")
+        # The review tool's category is often just "other"; the first sentence
+        # of the comment is a far better title for the inline comment and map.
+        sentence = re.split(r"[.!?\n]", message.strip())[0]
+        title = textwrap.shorten(sentence, 50, placeholder="…") or "Code quality"
         # Not "fix": that renders as a one-line suggestion block, which would
         # mangle a multi-line replacement when applied.
         if c.get("suggestion_code"):
             message += f"\n\n**Suggested change:**\n```\n{c['suggestion_code']}\n```"
         findings.append({
-            "rule_id": c.get("category") or "quality",
+            "rule_id": title,
             "path": fpath,
             "start_line": start,
             "end_line": end,
