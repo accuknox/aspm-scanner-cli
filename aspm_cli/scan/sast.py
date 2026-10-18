@@ -13,15 +13,21 @@ from aspm_cli.utils import config
 from aspm_cli.utils.subprocess_utils import utf8_text
 from urllib.parse import urlparse
 import re
+import importlib.util
+from pathlib import Path
+import shutil
+import sys
+import tempfile
 
 class SASTScanner:
     opengrep_image = os.getenv("SCAN_IMAGE", "public.ecr.aws/k9v9d5v2/accuknox/opengrepjob:0.1.0")
-    codeassure_image = os.getenv("CODEASSURE_IMAGE", "public.ecr.aws/k9v9d5v2/accuknox/ai-sast-codeassure-cli:0.1.1")
+    codeassure_image = os.getenv("CODEASSURE_IMAGE", "accuknox/codeassure:local")
     result_file = "results.json"
 
     def __init__(self, command=None, container_mode=True, severity = None,
                  repo_url=None, commit_ref=None, commit_sha=None,
-                 pipeline_id=None, job_url=None, ai_analysis=True, codeassure_config=None,aiscan_severity=None):
+                 pipeline_id=None, job_url=None, ai_analysis=True, codeassure_config=None,aiscan_severity=None,
+                 graph_no_joern=False, context_graph_config=None):
         """
         :param command: Raw OpenGrep CLI args (string)
         :param container_mode: Run in Docker if True, else use local binary
@@ -45,7 +51,9 @@ class SASTScanner:
         self.pipeline_id = pipeline_id
         self.job_url = job_url
         self.ai_analysis = ai_analysis
-        self.codeassure_config = codeassure_config
+        self.codeassure_config = codeassure_config or os.getenv("CODEASSURE_CONFIG")
+        self.graph_no_joern = graph_no_joern
+        self.context_graph_config = context_graph_config or os.getenv("CONTEXT_GRAPH_CONFIG")
 
     def run(self):
         try:
@@ -58,6 +66,8 @@ class SASTScanner:
             cmd = self._build_sast_command(args)
 
             Logger.get_logger().debug(f"Running SAST scan: {' '.join(cmd)}")
+            if "--help" not in (self.command or ""):
+                Path(self.result_file).unlink(missing_ok=True)
             result = subprocess.run(cmd, capture_output=True, check=False, **utf8_text())
 
             # Log outputs
@@ -74,14 +84,18 @@ class SASTScanner:
                     Logger.log_with_color("INFO", sanitized_stderr, Fore.WHITE)
                     return config.PASS_RETURN_CODE, None
                 else:
-                    Logger.get_logger().error(sanitized_stderr)
+                    Logger.get_logger().info(sanitized_stderr)
 
+            if result.returncode not in (0, 1):
+                Logger.get_logger().error(f"SAST scanner failed with exit code {result.returncode}")
+                return 2, None
 
             if os.path.exists(self.result_file) and os.stat(self.result_file).st_size > 0:
                 self._fix_file_permissions_if_docker()
                 self.process_result_file()
 
                 # Run AI analysis if enabled (before checking severity threshold)
+                ai_failed = False
                 if self.ai_analysis:
                     try:
                         Logger.get_logger().debug("Starting AI analysis of SAST results...")
@@ -89,6 +103,11 @@ class SASTScanner:
                         self._apply_verification_fields()
                     except Exception as e:
                         Logger.get_logger().error(f"AI analysis failed: {e}")
+                        self._record_ai_failure()
+                        ai_failed = True
+
+                if ai_failed:
+                    return 2, self.result_file
 
                 # Check severity threshold and return appropriate exit code
                 if self._severity_threshold_met():
@@ -104,133 +123,133 @@ class SASTScanner:
 
 
     def _run_ai_analysis(self):
-        """
-        Runs AI analysis on the results. If any error occurs, the original results are preserved.
-        This ensures the scan continues successfully even if AI analysis fails.
-        """
-        try:
-            if self.container_mode:
-                docker_pull(self.codeassure_image)
+        original = json.loads(Path(self.result_file).read_text(encoding="utf-8"))
+        if not original.get("results"):
+            original["ai_sast"] = {"requested": True, "status": "completed", "total": 0, "analyzed": 0}
+            Path(self.result_file).write_text(json.dumps(original, indent=2), encoding="utf-8")
+            return
+        if self.container_mode:
+            docker_pull(self.codeassure_image)
+        Logger.get_logger().info(f"Generating context graphs and verifying {len(original['results'])} findings with CodeAssure.")
+        # A unique output avoids stale checkpoints; the raw scan survives failure.
+        with tempfile.TemporaryDirectory(prefix=".ai-sast-", dir=os.getcwd()) as directory:
+            output = Path(directory) / "verified.json"
+            completed = subprocess.run(self._build_ai_analysis_command(output), check=False)
+            if completed.returncode not in (0, 2) or not output.is_file():
+                raise RuntimeError(f"CodeAssure exited with code {completed.returncode}; base results retained")
+            verified = json.loads(output.read_text(encoding="utf-8"))
+            if len(verified.get("results", [])) != len(original["results"]):
+                raise ValueError("CodeAssure changed the finding count")
+            if verified.get("ai_sast", {}).get("status") not in {"completed", "partial"}:
+                raise RuntimeError("CodeAssure output is missing analysis status; install the current CLI")
+            Path(self.result_file).write_text(json.dumps(verified, indent=2), encoding="utf-8")
+            if verified["ai_sast"]["status"] != "completed":
+                raise RuntimeError("AI analysis is partial; inspect ai_sast in results.json")
+            if verified.get("graph_analysis", {}).get("status") != "completed":
+                raise RuntimeError("Required context graphs are incomplete; inspect graph_analysis in results.json")
+
+    def _record_ai_failure(self):
+        data = json.loads(Path(self.result_file).read_text(encoding="utf-8"))
+        summary = data.get("ai_sast", {})
+        summary.update(requested=True, status="partial" if any(r.get("verification") for r in data.get("results", [])) else "failed")
+        data["ai_sast"] = summary
+        self._promote_verification_fields(data)
+        Path(self.result_file).write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    @staticmethod
+    def _promote_verification_fields(data):
+        for finding in data.get("results", []):
+            verification = finding.get("verification") or {}
+            verdict = verification.get("verdict")
+            status = verification.get("analysis_status", finding.get("ai_analysis_status"))
+            finding["is_false_positive"] = (verdict == "false_positive") if verdict in ("true_positive", "false_positive") and status == "completed" else None
+            finding["validation_reason"] = verification.get("reason")
+            ai_sev = verification.get("severity")
+            if ai_sev and status == "completed":
+                finding["severity_by_ai"] = str(ai_sev).upper()
             else:
-                ToolManager.get_path("codeassure")  # raises FileNotFoundError if not installed
+                finding.pop("severity_by_ai", None)
+        data["ai_analysis"] = any((r.get("verification") or {}).get("analysis_status") == "completed" for r in data.get("results", []))
 
-            # Check if there are any results to analyze
-            with open(self.result_file, 'r', encoding='utf-8') as f:
-                current_data = json.load(f)
-
-            results = current_data.get("results", [])
-            Logger.get_logger().info(f"Running AI analysis: {len(results)} findings to analyze.")
-            
-            if not results or len(results) == 0:
-                Logger.get_logger().debug("No results to analyze. Skipping AI analysis.")
-                return
-
-
-            cmd = self._build_ai_analysis_command()
- 
-            ai_result = subprocess.run(cmd, check=False)
-
-            if ai_result.returncode != 0:
-                Logger.get_logger().warning(f"AI analysis failed with exit code: {ai_result.returncode}. Continuing with original results.")
-                return
-
-        except Exception as e:
-            Logger.get_logger().warning(f"Unexpected error during AI analysis: {e}. Continuing with original results.")
-            Logger.get_logger().debug(f"Exception details: {str(e)}")
-
-        return
-    
     def _apply_verification_fields(self):
-        """
-        After codeassure writes verification data, promote is_false_positive
-        and validation_reason to the top level of each finding.
-
-        Only set severity_by_ai when CodeAssure actually scored the finding.
-        Omit the key (never null): the control-plane Semgrep parser treats a
-        missing key as Unknown, but crashes on {"severity_by_ai": null}.
-        """
-        try:
-            with open(self.result_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-
-            for finding in data.get("results", []):
-                verification = finding.get("verification") or {}
-                is_vuln = verification.get("is_security_vulnerability")
-                if is_vuln is not None:
-                    finding["is_false_positive"] = not bool(is_vuln)
-                if verification.get("reason") is not None:
-                    finding["validation_reason"] = verification.get("reason")
-                ai_sev = verification.get("severity")
-                if ai_sev:
-                    finding["severity_by_ai"] = str(ai_sev).upper()
-                else:
-                    finding.pop("severity_by_ai", None)
-
-            with open(self.result_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2)
-
-            Logger.get_logger().debug("Verification fields applied to results.")
-        except Exception as e:
-            Logger.get_logger().warning(f"Could not apply verification fields: {e}")
+        data = json.loads(Path(self.result_file).read_text(encoding="utf-8"))
+        self._promote_verification_fields(data)
+        Path(self.result_file).write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     def validate_updated_results(self, results):
         if not isinstance(results, dict) or "results" not in results:
             raise ValueError("AI analysis output is not in the expected format.")
 
-    
-    def _build_ai_analysis_command(self) -> list[str]:
-        """
-        Build the AI Analysis CLI command (local or Docker).
+    @staticmethod
+    def _codeassure_command():
+        executable = os.getenv("CODEASSURE_EXECUTABLE")
+        if executable:
+            return [executable]
+        source = os.getenv("CODEASSURE_SOURCE")
+        if source:
+            if getattr(sys, "frozen", False):
+                raise ValueError("Use CODEASSURE_EXECUTABLE with a standalone ASPM scanner")
+            entry = Path(source).expanduser().resolve() / "build_entry.py"
+            if not entry.is_file():
+                raise FileNotFoundError(f"CodeAssure entry point missing: {entry}")
+            return [sys.executable, str(entry)]
+        executable = shutil.which("codeassure")
+        if executable:
+            return [executable]
+        if not getattr(sys, "frozen", False) and importlib.util.find_spec("sast_verify"):
+            return [sys.executable, "-m", "sast_verify.cli"]
+        try:
+            return [ToolManager.get_path("codeassure")]
+        except FileNotFoundError:
+            pass
+        entry = Path(__file__).resolve().parents[3] / "codeassure-cli" / "build_entry.py"
+        if entry.is_file() and not getattr(sys, "frozen", False):
+            return [sys.executable, str(entry)]
+        raise FileNotFoundError("Install AI SAST with `accuknox-aspm-scanner tool install --type codeassure` or set CODEASSURE_EXECUTABLE")
 
-        :return: List of command arguments
-        """
-
+    def _build_ai_analysis_command(self, output=None) -> list[str]:
+        output = Path(output or self.result_file).resolve()
         if not self.container_mode:
-            cmd = [
-                ToolManager.get_path("codeassure"),
-                "--codebase", os.getcwd(),
-                "--findings", self.result_file,
-                "--output", self.result_file,
-            ]
+            cmd = [*self._codeassure_command(), "--codebase", os.getcwd(),
+                   "--findings", str(Path(self.result_file).resolve()), "--output", str(output)]
             if self.codeassure_config:
-                cmd.extend(["--config", self.codeassure_config])
-            if self.aiscan_severity:
-                cmd.extend(["--severity", ",".join(self.aiscan_severity)])
-
+                cmd += ["--config", str(Path(self.codeassure_config).expanduser().resolve())]
+            if self.context_graph_config:
+                cmd += ["--context-graph-config", str(Path(self.context_graph_config).expanduser().resolve())]
         else:
             cmd = build_docker_run_prefix(workdir="/workspace")
-            if self.codeassure_config:
-                config_path = os.path.abspath(self.codeassure_config)
-            elif os.path.exists(os.path.join(os.getcwd(), "codeassure.json")):
-                config_path = os.path.join(os.getcwd(), "codeassure.json")
-            else:
-                config_path = None
-            if config_path:
-                cmd.extend(docker_volume_mount(config_path, "/app/codeassure.json"))
-                try:
-                    with open(config_path) as _f:
-                        _cfg = json.load(_f)
-                    _raw_key = _cfg.get("model", {}).get("api_key")
-                    if _raw_key:
-                        if _raw_key.startswith("$"):
-                            env_var_name = _raw_key[1:]
-                            api_key_val = os.environ.get(env_var_name)
-                        if api_key_val:
-                            cmd.extend(["-e", f"{env_var_name}={api_key_val}"])
-                except Exception:
-                    pass
-
-            cmd.extend([
-                self.codeassure_image,
-                "--codebase", "/workspace",
-                "--findings", "/workspace/results.json",
-                "--output", "/workspace/results.json",
-            ])
-            if self.aiscan_severity:
-                cmd.extend(["--severity", ",".join(self.aiscan_severity)])
-
-
-        return cmd    
+            config_path = Path(self.codeassure_config or "codeassure.json").expanduser().resolve()
+            if not config_path.is_file():
+                raise FileNotFoundError("Supply --codeassure-config for container AI analysis")
+            cmd.extend(docker_volume_mount(str(config_path), "/app/codeassure.json"))
+            # Pass names, never secret values in process arguments or logs.
+            cfg = json.loads(config_path.read_text(encoding="utf-8"))
+            names = {"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY"}
+            def references(value):
+                if isinstance(value, dict):
+                    for child in value.values():
+                        references(child)
+                elif isinstance(value, list):
+                    for child in value:
+                        references(child)
+                elif isinstance(value, str) and re.fullmatch(r"\$[A-Za-z_][A-Za-z0-9_]*", value):
+                    names.add(value[1:])
+            references(cfg)
+            for name in sorted(names):
+                if name in os.environ:
+                    cmd += ["-e", name]
+            if self.context_graph_config:
+                cmd.extend(docker_volume_mount(str(Path(self.context_graph_config).expanduser().resolve()), "/app/context_graph.json"))
+            cmd += [self.codeassure_image, "--config", "/app/codeassure.json",
+                    "--codebase", "/workspace", "--findings", "/workspace/results.json",
+                    "--output", "/workspace/" + output.relative_to(Path.cwd()).as_posix()]
+            if self.context_graph_config:
+                cmd += ["--context-graph-config", "/app/context_graph.json"]
+        if self.aiscan_severity:
+            cmd += ["--severity", ",".join(self.aiscan_severity)]
+        if self.graph_no_joern:
+            cmd.append("--graph-no-joern")
+        return cmd
 
     def _build_sast_args(self):
         """
@@ -348,7 +367,8 @@ class SASTScanner:
                 "run_id": self.pipeline_id,
                 "repo_url": self.repo_url,
                 "repo_run_url": self.job_url,
-                "ai_analysis": self.ai_analysis
+                "ai_analysis": False,
+                "ai_sast": {"requested": self.ai_analysis, "status": "pending" if self.ai_analysis else "disabled"},
             }
             data.update(metadata)
 
@@ -390,6 +410,13 @@ class SASTScanner:
             # filter on impact instead of remapping severity.
             results = data.get("results", [])
             for result in results:
+                verification = result.get("verification") or {}
+                if verification.get("analysis_status") == "completed" and verification.get("verdict") in {"true_positive", "false_positive"}:
+                    if verification["verdict"] == "false_positive" or verification.get("is_security_vulnerability") is False:
+                        continue
+                    if str(verification.get("severity", "UNKNOWN")).upper() in self.severity:
+                        return True
+                    continue
                 # impact can be absent for some rules; bucket those as UNKNOWN
                 # so the default still fails on them.
                 impact = (result.get("extra", {}).get("metadata", {}).get("impact") or "UNKNOWN").upper()

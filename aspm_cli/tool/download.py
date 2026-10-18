@@ -30,10 +30,12 @@ CODEASSURE_WINDOWS_ASSET = "codeassure-windows-amd64.tar.gz"
 
 # Tools with native macOS installers (Intel x86_64 + Apple Silicon arm64).
 DARWIN_SUPPORTED_TOOLS = frozenset({
+    "codeassure",
     "iac",
     "sast",
     "secret",
     "container",
+    "syft",
     "gitleaks",
     "sq-sast",
 })
@@ -44,6 +46,7 @@ WINDOWS_SUPPORTED_TOOLS = frozenset({
     "sast",
     "secret",
     "container",
+    "syft",
     "gitleaks",
     "sq-sast",
     "codeassure",
@@ -80,6 +83,12 @@ class ToolDownloader:
         self.install_dir.mkdir(parents=True, exist_ok=True)
 
     def download_tool(self, tool_type, overwrite=False):
+        if tool_type == "codeassure":
+            from aspm_cli.tool.ai_sast import install_ai_sast
+            return install_ai_sast(self.install_dir, overwrite)
+        if tool_type == "syft":
+            from aspm_cli.tool.syft import install_syft
+            return install_syft(self.install_dir, overwrite)
         if not local_tool_install_supported():
             Logger.get_logger().error(
                 f"Local scanner tool install is not supported on {platform_name()}. "

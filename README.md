@@ -762,3 +762,63 @@ Enable verbose debug mode:
 ```bash
 DEBUG=TRUE accuknox-aspm-scanner scan --skip-upload iac --command "-d ."
 ```
+### Scan compiled artifacts, manifests and existing SBOMs
+
+Install the native inventory and vulnerability engines, or pass `--container-mode`:
+
+```sh
+accuknox-aspm-scanner tool install --type syft
+accuknox-aspm-scanner tool install --type container
+
+# Existing --command workflows remain supported.
+accuknox-aspm-scanner scan --skip-upload --keep-results sca --target ./dist/service
+accuknox-aspm-scanner scan --skip-upload --keep-results sca --target ./dist/application.jar
+accuknox-aspm-scanner scan --skip-upload --keep-results sca --target ./package-lock.json
+accuknox-aspm-scanner scan --skip-upload --keep-results sca --target ./dependencies.cdx.json
+accuknox-aspm-scanner scan --skip-upload --keep-results sbom --target ./dist/service
+
+# Upload results using existing ACCUKNOX_ENDPOINT/TOKEN/LABEL/TENANT settings.
+accuknox-aspm-scanner scan --project-name payments sca --target ./dist/service --asset-name payment-service
+```
+
+`--target-type auto|directory|manifest|binary|archive|sbom` controls input detection.
+`--target` and legacy `--command` are mutually exclusive. Use a directory to include
+companion manifests/lockfiles while preserving relative paths. Standalone manifest
+scans select only that file. No dependency installation or build execution occurs.
+Existing CycloneDX and SPDX **JSON** SBOMs are supported; XML/tag-value are excluded.
+For reproducible disconnected scans, populate `--cache-dir` first, then use
+`--offline`. Container mode mounts the selected input read-only and maps input,
+result and cache paths explicitly; it does not require a Docker socket mount.
+
+Native Syft 1.42.3 downloads are verified against pinned SHA-256 checksums on Linux,
+macOS and Windows. Trivy remains pinned to 0.69.3. `SYFT_IMAGE` and `SCAN_IMAGE`
+override the corresponding container images.
+
+Use `--output-dir` outside the target directory to retain `result.json`,
+`sbom.json`, and `vulnerabilities.json`. Otherwise a temporary result directory is
+used; `--keep-results` retains it. Operational failures retain diagnostics/results.
+Exit codes for these new workflows are `0` success, `1` severity gate, `2`
+operational/incomplete inventory failure. `--softfail` applies to severity gates.
+Limited nonempty inventory can still match advisories; it does not establish that
+all embedded dependencies were identified. Stripped binaries may have no usable
+metadata and cannot be declared vulnerability-free.
+
+### Mobile scanning from CI/CD
+
+Full APK/IPA analysis runs on the backend's existing mobile services:
+
+```sh
+accuknox-aspm-scanner scan --project-name mobile-app mobile --target ./app.apk --asset-name android-app
+accuknox-aspm-scanner scan --project-name mobile-app mobile --target ./app.apk --mode static_dynamic
+accuknox-aspm-scanner scan --project-name mobile-app mobile --target ./app.ipa --mode static
+accuknox-aspm-scanner scan --project-name mobile-app mobile --target ./app.apk --no-wait --idempotency-key build-123
+accuknox-aspm-scanner scan --keep-results mobile --run-id RUN_UUID --output-dir ./mobile-results
+```
+
+Default static mode includes SBOM and dependency vulnerability matching. Dynamic
+mode requires an Android analyzer; IPA supports static/SBOM modes. `--mode sbom`
+uses the backend's mobile inventory and dependency pipeline. Mobile analysis cannot
+use `--skip-upload`. Commands wait by default (`--timeout`, default 3600 seconds),
+or return a run ID with `--no-wait`. Resume a wait/download with `--run-id`.
+A timeout does not cancel the backend run. Backend capability checks report missing
+services or an incompatible deployment before starting work.

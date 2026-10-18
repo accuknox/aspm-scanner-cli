@@ -20,6 +20,8 @@ ALLOWED_SCAN_TYPES = [
     "sast",
     "dast",
     "sca",
+    "sbom",
+    "mobile",
     "ml-scan",
     "api-discovery",
 ]
@@ -52,7 +54,7 @@ def print_banner():
         # Skipping if there are any issues with Unicode chars
         print(Fore.BLUE + "ACCUKNOX ASPM SCANNER")
 
-def upload_results(file_path, endpoint, label, token, tenant_id, data_type, keep_file=False):
+def upload_results(file_path, endpoint, label, token, tenant_id, data_type, keep_file=False, extra_params=None):
     upload_exit_code = 1
     """Uploads scan results to the AccuKnox endpoint."""
     logger = Logger.get_logger()
@@ -79,6 +81,10 @@ def upload_results(file_path, endpoint, label, token, tenant_id, data_type, keep
     }
     if tenant_id:
         params["tenant_id"] = tenant_id
+    if extra_params:
+        # Repository identity (repo_url, branch, commit_sha, ...) places the scan under repository > branch.
+        params.update({k: v for k, v in extra_params.items() if v})
+        logger.debug(f"Attaching scan to repository: {extra_params.get('repo_url', 'unknown')} @ {extra_params.get('branch', 'unknown branch')}")
 
     # Log request details when DEBUG is enabled
     if logger.level == logging.DEBUG:

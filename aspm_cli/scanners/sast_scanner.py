@@ -35,8 +35,14 @@ class SASTScanner(BaseScanner):
         parser.add_argument("--commit-sha", default=GitInfo.get_commit_sha(), help="Commit SHA for scanning")
         parser.add_argument("--pipeline-id", help="Pipeline ID for scanning")
         parser.add_argument("--job-url", help="Job URL for scanning")
-        parser.add_argument("--ai-analysis", action="store_true", help="Enable AI analysis of results")
+        ai = parser.add_mutually_exclusive_group()
+        ai.add_argument("--ai-analysis", dest="ai_analysis", action="store_true", default=None,
+                        help="Enable CodeAssure AI analysis and context graphs (enabled by default)")
+        ai.add_argument("--no-ai-analysis", dest="ai_analysis", action="store_false",
+                        help="Run the base SAST scanner without AI analysis")
         parser.add_argument("--codeassure-config", help="Path to codeassure.json config file for AI analysis")
+        parser.add_argument("--graph-no-joern", action="store_true", help="Use native tree-sitter graphs without Joern")
+        parser.add_argument("--context-graph-config", help="Path to context_graph.json")
 
     def validate_config(self, args: argparse.Namespace, validator: ConfigValidator):
         validator.validate_sast_scan(
@@ -46,7 +52,7 @@ class SASTScanner(BaseScanner):
 
     def run_scan(self, args: argparse.Namespace) -> tuple[int, str]:
         env_ai = os.getenv("ACCUKNOX_ENABLE_AI_SAST", "").upper()
-        ai_analysis = args.ai_analysis or env_ai in ("TRUE", "1", "YES")
+        ai_analysis = args.ai_analysis if args.ai_analysis is not None else env_ai not in ("FALSE", "0", "NO", "OFF")
         scanner = OriginalSASTScanner(
             command=args.command,
             container_mode=args.container_mode,
@@ -58,6 +64,8 @@ class SASTScanner(BaseScanner):
             pipeline_id=args.pipeline_id,
             job_url=args.job_url,
             ai_analysis=ai_analysis,
-            codeassure_config=getattr(args, 'codeassure_config', None)
+            codeassure_config=getattr(args, 'codeassure_config', None),
+            graph_no_joern=getattr(args, 'graph_no_joern', False),
+            context_graph_config=getattr(args, 'context_graph_config', None),
         )
         return scanner.run()

@@ -9,6 +9,7 @@ from aspm_cli.utils.logger import Logger
 from aspm_cli.utils.spinner import Spinner
 from aspm_cli.utils.config import ConfigValidator
 from aspm_cli.utils.common import upload_results, handle_failure, ALLOWED_SCAN_TYPES
+from aspm_cli.utils.ingest_identity import collect_ingest_identity
 from aspm_cli.utils.git_info import GitInfo
 from aspm_cli.utils.sbom import (
     derive_sbom_classifier,
@@ -56,6 +57,16 @@ class ScanCommand(BaseCommand):
                 "accuknox_tenant": args.tenant or os.getenv("ACCUKNOX_TENANT"),
                 "accuknox_project_name": resolve_project_name(args.project_name),
             }
+
+            if getattr(args, "target", None) or args.scantype.upper() in {"SBOM", "MOBILE"}:
+                from aspm_cli.scan.artifact import execute_artifact
+                from aspm_cli.utils.artifact_engine import ArtifactError
+                try:
+                    code = execute_artifact(args, accuknox_config, softfail)
+                except (ArtifactError, OSError, ValueError) as exc:
+                    Logger.get_logger().error(str(exc))
+                    code = 2
+                raise SystemExit(code)
 
             # Get the correct scanner strategy from the registry
             scantype_key = args.scantype
@@ -147,6 +158,7 @@ class ScanCommand(BaseCommand):
                         accuknox_config["accuknox_tenant"],
                         data_type,
                         keep_file=keep_results,
+                        extra_params=collect_ingest_identity(),
                     )
                 else:
                     # Clean up result file when skipping upload (unless --keep-results is set)
@@ -161,7 +173,7 @@ class ScanCommand(BaseCommand):
                 # Upload issues should always fail the workflow; softfail applies only to findings
                 handle_failure(upload_exit_code, softfail=False, allow_softfail=False)
             else:
-                handle_failure(exit_code, softfail, allow_softfail=True)
+                handle_failure(exit_code, softfail, allow_softfail=not (args.scantype.lower() == "sast" and exit_code == 2))
 
         except ValidationError as e:
             Logger.get_logger().error(f"Configuration validation error: {e}")
