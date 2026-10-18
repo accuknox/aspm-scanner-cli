@@ -660,6 +660,98 @@ ACCUKNOX_TOKEN=abcd1234 \
 accuknox-aspm-scanner scan sq-sast --command "-Dsonar.projectKey=<PROJECT_KEY> -Dsonar.host.url=<HOST_URL> -Dsonar.token=<TOKEN> -Dsonar.organization=<ORG_ID>" --container-mode
 ```
 
+## Quality Gates
+
+A quality gate lets the **policy thresholds configured in AccuKnox** decide the build. The CLI uploads every
+scan as part of one run, waits for AccuKnox to evaluate them, and then passes, warns or fails the build from
+the verdict. The thresholds live in AccuKnox (policy service), not in the CLI.
+
+### Unified run: `pipeline`
+
+```bash
+export ACCUKNOX_ENDPOINT=cspm.accuknox.com ACCUKNOX_LABEL=POC ACCUKNOX_TOKEN=<token>
+export ACCUKNOX_GATE_TOKEN=<user token>   # see "Tokens" below
+
+accuknox-aspm-scanner pipeline --scans sast,sca,secret,iac,sbom --quality-gate
+```
+
+`pipeline` runs the scans in order, uploads them under one run id, then waits for the verdict (default 5 minutes).
+
+- `--scans`: any of `sast`, `sq-sast`, `sca`, `secret`, `iac`, `sbom` (container/filesystem SBOM).
+- Per-scan options: `--sast-command` (default `scan .`), `--sca-command` (`fs .`), `--secret-command`
+  (`filesystem .`), `--secret-engine`, `--iac-command` (`-d .`), `--sbom-command` (`filesystem .`),
+  `--sq-sast-command`, `--container-mode`.
+- Only scans that produced a result are declared to the gate, so a clean secret scan (nothing to upload)
+  never leaves the gate waiting.
+- With `--quality-gate`, findings no longer fail a scan step: the policy decides. Scans that cannot run or
+  upload still fail the build. Without it, `pipeline` simply runs the scans one after another.
+- `--fail-fast` stops at the first scan that cannot run.
+
+### Separate steps: `scan --quality-gate` + `gate`
+
+When each scan is its own workflow step, tie them to one run and finish with `gate`:
+
+```bash
+accuknox-aspm-scanner scan --quality-gate --gate-scanners SG,TR,IAC sast --command "scan ."
+accuknox-aspm-scanner scan --quality-gate --gate-scanners SG,TR,IAC sca  --command "fs ."
+accuknox-aspm-scanner scan --quality-gate --gate-scanners SG,TR,IAC iac  --command "-d ."
+accuknox-aspm-scanner gate
+```
+
+`--gate-scanners` must list every scan type the run uploads (`SG` sast, `SQ` sq-sast, `TR` sca/container,
+`IAC`, `TruffleHog`/`DS` secret, `SBOM`). A scan that produces no result (for example a clean secret scan)
+must not be listed, or the gate waits for it. Use `pipeline` to have this handled for you.
+
+All steps of one CI run share a run id automatically (derived from the CI run on GitHub Actions, GitLab,
+Bitbucket, Azure DevOps and Jenkins). Outside CI, or to override it, set `ACCUKNOX_CLI_ID` / `--cli-id`.
+`scan --quality-gate` prints the run id it used.
+
+### Outcome and exit codes
+
+| AccuKnox verdict | Result | Exit code |
+|---|---|---|
+| passed | build continues | 0 |
+| warning (a `warn` policy action) | build continues, warning printed | 0 |
+| failed (a `block` policy action) | build fails | 1 |
+| a scan could not be evaluated (unparsable scan, policy service unavailable) | build fails | 2 |
+| no verdict before `--gate-timeout` | `--gate-on-timeout fail` (default) fails, `pass` continues | 2 / 0 |
+
+`--softfail` reports a policy failure without failing the build. It does not hide scans that could not be
+evaluated. The CLI prints a per-scanner table and every breached threshold, adds GitHub annotations, and
+writes a summary to `$GITHUB_STEP_SUMMARY` when available.
+
+### Options
+
+- `--quality-gate` (or `ACCUKNOX_QUALITY_GATE=true`): enable the gate.
+- `--gate-timeout <seconds>`: how long to wait for the verdict (default 300).
+- `--gate-on-timeout fail|pass`: what to do if the verdict does not arrive in time (default `fail`).
+- `--cli-id`, `--repository`: override the run id / the `owner/name` that policy scopes match.
+
+The repository and branch are detected from the CI environment or git. Policy scopes are matched against
+`owner/name:branch`; set `ACCUKNOX_REPO_URL` / `ACCUKNOX_BRANCH` when they cannot be detected.
+
+### Tokens
+
+Uploads use `ACCUKNOX_TOKEN`. The gate API identifies a *user*, which that token may not, so `gate` and
+`pipeline` use `ACCUKNOX_GATE_TOKEN` (or `--gate-token`) for polling and fall back to `ACCUKNOX_TOKEN`. If the
+fallback is rejected the error says so. Keep both as CI secrets.
+
+### GitHub Actions example
+
+```yaml
+- uses: actions/checkout@v4
+- name: AccuKnox scans and quality gate
+  env:
+    ACCUKNOX_ENDPOINT: cspm.accuknox.com
+    ACCUKNOX_LABEL: my-label
+    ACCUKNOX_TOKEN: ${{ secrets.ACCUKNOX_TOKEN }}
+    ACCUKNOX_GATE_TOKEN: ${{ secrets.ACCUKNOX_GATE_TOKEN }}
+  run: accuknox-aspm-scanner pipeline --scans sast,sca,secret,iac --quality-gate
+```
+
+The first run for a tenant can be slow while AccuKnox downloads reference data for a scan type, so raise
+`--gate-timeout` if the gate times out on first use.
+
 ## Quickstart
 
 Local mode is the default. Install the required local tool first:

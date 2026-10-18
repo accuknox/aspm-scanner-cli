@@ -1,21 +1,27 @@
 import os
 import sys
-import json
 from pydantic import ValidationError
 
 from aspm_cli.commands.base_command import BaseCommand
 from aspm_cli.scanners import scanner_registry
 from aspm_cli.utils.logger import Logger
-from aspm_cli.utils.spinner import Spinner
-from aspm_cli.utils.config import ConfigValidator
-from aspm_cli.utils.common import upload_results, handle_failure, ALLOWED_SCAN_TYPES
+from aspm_cli.utils.common import handle_failure, ALLOWED_SCAN_TYPES
 from aspm_cli.utils.ingest_identity import collect_ingest_identity
-from aspm_cli.utils.git_info import GitInfo
-from aspm_cli.utils.sbom import (
-    derive_sbom_classifier,
-    enrich_sbom_payload,
-    is_sbom_payload_empty,
-    resolve_project_name,
+from aspm_cli.utils.quality_gate import (
+    EXIT_OPERATIONAL,
+    GATE_SCANNERS,
+    GateConfigError,
+    gate_upload_params,
+    normalize_scanners,
+    resolve_cli_id,
+)
+from aspm_cli.utils.scan_runner import (
+    UploadOutcome,
+    build_accuknox_config,
+    discard_result,
+    gate_exit_code,
+    run_scan,
+    upload_run,
 )
 
 class ScanCommand(BaseCommand):
@@ -36,6 +42,27 @@ class ScanCommand(BaseCommand):
         parser.add_argument('--softfail', action='store_true', help='Enable soft fail mode for scanning')
         parser.add_argument('--skip-upload', action='store_true', help='Skip control plane upload')
         parser.add_argument('--keep-results', action='store_true', help='Keep scan results file after completion')
+        parser.add_argument(
+            "--quality-gate",
+            action="store_true",
+            help=(
+                "Tie this upload to a quality-gate run so policy thresholds decide the build. Findings no longer "
+                "fail this step; run `accuknox-aspm-scanner gate` after all scans (or use `pipeline`). "
+                "Also enabled by ACCUKNOX_QUALITY_GATE=true."
+            ),
+        )
+        parser.add_argument(
+            "--gate-scanners",
+            help=f"Quality gate: every scan type this run uploads, e.g. SG,TR,IAC (of {', '.join(GATE_SCANNERS)}).",
+        )
+        parser.add_argument(
+            "--cli-id",
+            help="Quality gate: run id shared by all steps (default: ACCUKNOX_CLI_ID, else derived from the CI run).",
+        )
+        parser.add_argument(
+            "--repository",
+            help="Quality gate: owner/name that policy scopes match (default: derived from the repository URL).",
+        )
 
         # Dynamically add subparsers for each registered scanner
         for scan_type, scanner_class in scanner_registry.items():
@@ -49,16 +76,16 @@ class ScanCommand(BaseCommand):
             softfail = args.softfail or os.getenv("SOFT_FAIL") == "TRUE"
             skip_upload = args.skip_upload
             keep_results = args.keep_results or os.getenv("KEEP_RESULTS") == "TRUE"
+            quality_gate = args.quality_gate or os.getenv("ACCUKNOX_QUALITY_GATE", "").lower() in ("1", "true", "yes")
 
-            accuknox_config = {
-                "accuknox_endpoint": args.endpoint or os.getenv("ACCUKNOX_ENDPOINT"),
-                "accuknox_label": args.label or os.getenv("ACCUKNOX_LABEL"),
-                "accuknox_token": args.token or os.getenv("ACCUKNOX_TOKEN"),
-                "accuknox_tenant": args.tenant or os.getenv("ACCUKNOX_TENANT"),
-                "accuknox_project_name": resolve_project_name(args.project_name),
-            }
+            accuknox_config = build_accuknox_config(args)
 
             if getattr(args, "target", None) or args.scantype.upper() in {"SBOM", "MOBILE"}:
+                if quality_gate:
+                    raise GateConfigError(
+                        "The quality gate does not cover artifact/mobile scans; use sast, sq-sast, sca, secret, iac "
+                        "or `container --generate-sbom`."
+                    )
                 from aspm_cli.scan.artifact import execute_artifact
                 from aspm_cli.utils.artifact_engine import ArtifactError
                 try:
@@ -74,110 +101,61 @@ class ScanCommand(BaseCommand):
                 Logger.get_logger().error(f"Invalid scan type: {scantype_key}. Allowed types: {', '.join(scanner_registry.keys())}")
                 sys.exit(1)
 
-            scanner = scanner_registry[scantype_key]() # Instantiate the scanner strategy
+            if quality_gate:
+                if skip_upload:
+                    raise GateConfigError("--quality-gate needs the results uploaded; remove --skip-upload.")
+                declared = normalize_scanners(args.gate_scanners or os.getenv("ACCUKNOX_GATE_SCANNERS") or "")
+                cli_id = resolve_cli_id(args.cli_id)
 
-            # Validate configurations using the ConfigValidator
-            validator = ConfigValidator(args.scantype.lower(), **accuknox_config, softfail=softfail, skip_upload=skip_upload)
-            
-            scanner.validate_config(args, validator)
-
-            # Run scan with spinner
-            spinner = Spinner(message=f"Running {args.scantype.lower()} scan...")
-            
-            spinner.start()
-            
-            exit_code, result_file = scanner.run_scan(args)
-            spinner.stop()
+            run = run_scan(args, accuknox_config, softfail, skip_upload)
 
             # Upload results and handle failure
-            upload_exit_code = 0
-            if result_file and os.path.exists(result_file):
-                # Check if this is SBOM mode (container scan with --generate-sbom)
-                is_sbom_upload = (
-                    args.scantype.lower() == "container"
-                    and getattr(args, "generate_sbom", False)
-                )
-
-                # If this is an SBOM upload, enrich the SBOM file with project_name and classifier
-                if is_sbom_upload:
-                    project_name = accuknox_config.get("accuknox_project_name")
-                    scan_command = getattr(args, "command", "") or ""
-                    project_classifier = derive_sbom_classifier(scan_command)
-                    try:
-                        with open(result_file, "r", encoding="utf-8") as f:
-                            data = json.load(f)
-
-                        if isinstance(data, dict):
-                            enrich_sbom_payload(
-                                data,
-                                scan_command,
-                                project_name,
-                                project_classifier,
-                            )
-
-                            with open(result_file, "w", encoding="utf-8") as f:
-                                json.dump(data, f, indent=2)
-                    except Exception as e:
-                        Logger.get_logger().debug(
-                            f"Failed to enrich SBOM results.json: {e}"
-                        )
-
-                # Upload if not skipping
-                if not skip_upload:
-                    if is_sbom_upload:
-                        try:
-                            with open(result_file, "r", encoding="utf-8") as f:
-                                sbom_data = json.load(f)
-                            if is_sbom_payload_empty(sbom_data):
-                                Logger.get_logger().warning(
-                                    "SBOM output is empty or missing components; skipping upload."
-                                )
-                                if not keep_results:
-                                    os.remove(result_file)
-                                else:
-                                    Logger.get_logger().info(f"Results file kept at: {result_file}")
-                                upload_exit_code = 0
-                                Logger.get_logger().debug(
-                                    f"Scan exit_code={exit_code}, upload_exit_code={upload_exit_code}, "
-                                    f"softfail={softfail}, skip_upload={skip_upload}, keep_results={keep_results}"
-                                )
-                                handle_failure(exit_code, softfail, allow_softfail=True)
-                                return
-                        except (json.JSONDecodeError, OSError) as e:
-                            Logger.get_logger().warning(
-                                f"Could not read SBOM file for upload validation: {e}"
-                            )
-
-                    # Determine data_type: SBOM for SBOM uploads, otherwise use scanner's identifier
-                    data_type = "SBOM" if is_sbom_upload else scanner.get_data_type_identifier()
-                    upload_exit_code = upload_results(
-                        result_file,
-                        accuknox_config["accuknox_endpoint"],
-                        accuknox_config["accuknox_label"],
-                        accuknox_config["accuknox_token"],
-                        accuknox_config["accuknox_tenant"],
-                        data_type,
-                        keep_file=keep_results,
-                        extra_params=collect_ingest_identity(),
-                    )
+            outcome = UploadOutcome()
+            if run.result_file and os.path.exists(run.result_file):
+                if skip_upload:
+                    discard_result(run, keep_results)
                 else:
-                    # Clean up result file when skipping upload (unless --keep-results is set)
-                    if not keep_results:
-                        os.remove(result_file)
-                    else:
-                        Logger.get_logger().info(f"Results file kept at: {result_file}")
+                    extra_params = collect_ingest_identity()
+                    if quality_gate:
+                        if run.data_type not in declared:
+                            declared.append(run.data_type)
+                        extra_params = gate_upload_params(cli_id, declared, extra_params, args.repository)
+                        Logger.get_logger().info(f"Quality gate run id: {cli_id}")
+                    outcome = upload_run(run, accuknox_config, keep_results, extra_params)
+                    if outcome.empty_sbom:
+                        if quality_gate:
+                            Logger.get_logger().warning(
+                                "The SBOM was empty and not uploaded, so the gate will keep waiting for it. "
+                                "Remove SBOM from --gate-scanners."
+                            )
+                        Logger.get_logger().debug(
+                            f"Scan exit_code={run.exit_code}, upload_exit_code=0, "
+                            f"softfail={softfail}, skip_upload={skip_upload}, keep_results={keep_results}"
+                        )
+                        handle_failure(run.exit_code, softfail, allow_softfail=True)
+                        return
+            elif quality_gate:
+                Logger.get_logger().warning(
+                    f"The {run.data_type} scan produced no result to upload, so the gate will keep waiting for it. "
+                    "Remove it from --gate-scanners, or use `pipeline`, which declares only the scans that ran."
+                )
+            upload_exit_code = outcome.exit_code
             Logger.get_logger().debug(
-                f"Scan exit_code={exit_code}, upload_exit_code={upload_exit_code}, softfail={softfail}, skip_upload={skip_upload}, keep_results={keep_results}"
+                f"Scan exit_code={run.exit_code}, upload_exit_code={upload_exit_code}, softfail={softfail}, skip_upload={skip_upload}, keep_results={keep_results}"
             )
             if upload_exit_code != 0:
                 # Upload issues should always fail the workflow; softfail applies only to findings
                 handle_failure(upload_exit_code, softfail=False, allow_softfail=False)
             else:
+                exit_code = gate_exit_code(run, outcome.uploaded) if quality_gate else run.exit_code
                 handle_failure(exit_code, softfail, allow_softfail=not (args.scantype.lower() == "sast" and exit_code == 2))
 
         except ValidationError as e:
             Logger.get_logger().error(f"Configuration validation error: {e}")
             sys.exit(1)
+        except GateConfigError as e:
+            Logger.get_logger().error(str(e))
+            sys.exit(EXIT_OPERATIONAL)
         except Exception as e:
             Logger.get_logger().error("Scan failed.")
             Logger.get_logger().error(e)

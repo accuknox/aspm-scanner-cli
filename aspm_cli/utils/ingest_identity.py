@@ -47,6 +47,27 @@ def _clean_repo_url(url: str) -> str:
     return value if "." in host and len(segments) >= 2 else ""
 
 
+def derive_repository(repo_url: str) -> str:
+    """``owner/name`` (nested groups kept) of a repository URL, '' when it cannot be derived.
+
+    This is the form quality-gate policy scopes (``owner/name:branch``) match against.
+    """
+    value = (repo_url or "").strip()
+    if not value:
+        return ""
+    if "://" in value:
+        parts = urlsplit(value)
+        host, path = parts.hostname or "", parts.path
+    else:
+        scp = _SCP_LIKE.match(value)
+        host, path = (scp.group("host"), scp.group("path")) if scp else (value.partition("/")[0], value.partition("/")[2])
+    segments = [segment for segment in path.strip("/").split("/") if segment]
+    if "." not in host or len(segments) < 2:
+        return ""
+    segments[-1] = segments[-1].removesuffix(".git")
+    return "/".join(segments) if segments[-1] else ""
+
+
 def _clean_branch(branch: str) -> str:
     value = branch.strip().removeprefix("refs/heads/").strip("/")
     if not value or value == "HEAD" or len(value) > 255 or _BRANCH_FORBIDDEN.search(value):
