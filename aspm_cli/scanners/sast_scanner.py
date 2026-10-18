@@ -37,9 +37,9 @@ class SASTScanner(BaseScanner):
         parser.add_argument("--job-url", help="Job URL for scanning")
         ai = parser.add_mutually_exclusive_group()
         ai.add_argument("--ai-analysis", dest="ai_analysis", action="store_true", default=None,
-                        help="Enable CodeAssure AI analysis and context graphs (enabled by default)")
+                        help="Enable CodeAssure AI analysis and context graphs (off by default; also ACCUKNOX_ENABLE_AI_SAST=TRUE)")
         ai.add_argument("--no-ai-analysis", dest="ai_analysis", action="store_false",
-                        help="Run the base SAST scanner without AI analysis")
+                        help="Run the base SAST scanner without AI analysis, even if ACCUKNOX_ENABLE_AI_SAST=TRUE")
         parser.add_argument("--codeassure-config", help="Path to codeassure.json config file for AI analysis")
         parser.add_argument("--graph-no-joern", action="store_true", help="Use native tree-sitter graphs without Joern")
         parser.add_argument("--context-graph-config", help="Path to context_graph.json")
@@ -51,8 +51,9 @@ class SASTScanner(BaseScanner):
         )
 
     def run_scan(self, args: argparse.Namespace) -> tuple[int, str]:
+        # AI analysis is opt-in: an explicit flag wins, then ACCUKNOX_ENABLE_AI_SAST, otherwise off.
         env_ai = os.getenv("ACCUKNOX_ENABLE_AI_SAST", "").upper()
-        ai_analysis = args.ai_analysis if args.ai_analysis is not None else env_ai not in ("FALSE", "0", "NO", "OFF")
+        ai_analysis = args.ai_analysis if args.ai_analysis is not None else env_ai in ("TRUE", "1", "YES", "ON")
         scanner = OriginalSASTScanner(
             command=args.command,
             container_mode=args.container_mode,

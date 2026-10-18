@@ -12,15 +12,18 @@ from aspm_cli.scanners.sast_scanner import SASTScanner as Strategy
 
 
 class AiSastTests(unittest.TestCase):
-    def test_default_and_explicit_opt_out_take_precedence_over_environment(self):
+    def test_ai_analysis_is_opt_in_and_an_explicit_flag_beats_the_environment(self):
         parser = argparse.ArgumentParser()
         Strategy().add_arguments(parser)
-        for env, flags, enabled in [("", [], True), ("FALSE", [], False),
-                                     ("TRUE", ["--no-ai-analysis"], False),
-                                     ("FALSE", ["--ai-analysis"], True)]:
+        for env, flags, enabled in [("", [], False), ("FALSE", [], False), ("TRUE", [], True),
+                                     ("1", [], True), ("TRUE", ["--no-ai-analysis"], False),
+                                     ("FALSE", ["--ai-analysis"], True), ("", ["--ai-analysis"], True)]:
             with self.subTest(env=env, flags=flags), patch.dict(os.environ, {"ACCUKNOX_ENABLE_AI_SAST": env}), patch("aspm_cli.scanners.sast_scanner.OriginalSASTScanner") as factory:
                 Strategy().run_scan(parser.parse_args(["--command", "scan .", *flags]))
                 self.assertEqual(factory.call_args.kwargs["ai_analysis"], enabled)
+
+    def test_the_underlying_scanner_does_not_run_ai_unless_asked(self):
+        self.assertFalse(SASTScanner(command="scan .").ai_analysis)
 
     def test_best_practice_is_not_a_false_positive_and_fallback_is_not_a_verdict(self):
         data = {"results": [{"verification": {"verdict": verdict,
@@ -32,7 +35,7 @@ class AiSastTests(unittest.TestCase):
 
     def test_ai_process_failure_preserves_base_report_and_returns_operational_error(self):
         with tempfile.TemporaryDirectory() as directory:
-            scanner = SASTScanner(container_mode=False)
+            scanner = SASTScanner(container_mode=False, ai_analysis=True)
             scanner.result_file = str(Path(directory) / "results.json")
             def scan(*args, **kwargs):
                 Path(scanner.result_file).write_text(json.dumps({"results": [{"check_id": "r", "extra": {"metadata": {"impact": "HIGH"}}}]}))

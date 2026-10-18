@@ -40,6 +40,17 @@ SCAN_BUILDERS = {
 }
 
 
+# Scans that have an AI analysis step, and the scanner options --ai-analysis turns into for each.
+# A scan type that gains AI analysis later is added here; the --ai-* options are shared.
+AI_SCANS = {
+    "sast": lambda a: ["--ai-analysis"]
+    + (["--aiscan-severity", a.aiscan_severity] if a.aiscan_severity else [])
+    + (["--codeassure-config", a.codeassure_config] if a.codeassure_config else [])
+    + (["--context-graph-config", a.context_graph_config] if a.context_graph_config else [])
+    + (["--graph-no-joern"] if a.graph_no_joern else []),
+}
+
+
 class PipelineCommand(BaseCommand):
     help_text = "Run several scans, upload them as one run and enforce the quality gate"
 
@@ -68,6 +79,16 @@ class PipelineCommand(BaseCommand):
         parser.add_argument("--cli-id", help="Run id (default: ACCUKNOX_CLI_ID, else derived from the CI run)")
         parser.add_argument("--repository", help="owner/name that policy scopes match (default: from the repository URL)")
         add_gate_arguments(parser)
+
+        parser.add_argument(
+            "--ai-analysis",
+            action="store_true",
+            help=f"Run AI analysis on the scans that support it ({', '.join(AI_SCANS)}). Off by default.",
+        )
+        parser.add_argument("--aiscan-severity", help="With --ai-analysis: only analyze findings of these severities (e.g. HIGH,CRITICAL)")
+        parser.add_argument("--codeassure-config", help="With --ai-analysis: path to the codeassure.json model config")
+        parser.add_argument("--context-graph-config", help="With --ai-analysis: path to context_graph.json")
+        parser.add_argument("--graph-no-joern", action="store_true", help="With --ai-analysis: use tree-sitter graphs without Joern")
 
         parser.add_argument("--sast-command", default="scan .", help="SAST scanner arguments (default: 'scan .')")
         parser.add_argument("--sq-sast-command", help="SonarQube scanner arguments (required for sq-sast)")
@@ -105,6 +126,14 @@ class PipelineCommand(BaseCommand):
         unknown = [scan for scan in scans if scan not in SCAN_BUILDERS]
         if unknown or not scans:
             raise GateConfigError(f"Unknown scan(s): {', '.join(unknown) or '(none)'}. Available: {', '.join(SCAN_BUILDERS)}.")
+        ai_options = [flag for flag, value in (
+            ("--aiscan-severity", args.aiscan_severity), ("--codeassure-config", args.codeassure_config),
+            ("--context-graph-config", args.context_graph_config), ("--graph-no-joern", args.graph_no_joern),
+        ) if value]
+        if ai_options and not args.ai_analysis:
+            raise GateConfigError(f"{', '.join(ai_options)} only apply with --ai-analysis.")
+        if args.ai_analysis and not any(scan in AI_SCANS for scan in scans):
+            logger.warning(f"--ai-analysis has no effect: none of the selected scans support it ({', '.join(AI_SCANS)}).")
         if "sq-sast" in scans and not args.sq_sast_command:
             raise GateConfigError("--sq-sast-command is required for the sq-sast scan.")
 
@@ -116,6 +145,8 @@ class PipelineCommand(BaseCommand):
         for scan in scans:
             registry_key, build_argv = SCAN_BUILDERS[scan]
             argv = build_argv(args) + (["--container-mode"] if args.container_mode else [])
+            if args.ai_analysis and scan in AI_SCANS:
+                argv += AI_SCANS[scan](args)
             try:
                 scan_args = scanner_args(registry_key, argv)
                 run = run_scan(scan_args, accuknox_config, softfail, args.skip_upload)

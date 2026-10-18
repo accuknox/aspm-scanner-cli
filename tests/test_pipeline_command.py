@@ -25,6 +25,7 @@ class Harness:
         self.crash = set()       # registry keys whose scanner raises
         self.upload_fails = set()  # data types whose upload fails
         self.uploads = []        # (data_type, params, file existed when uploaded)
+        self.scan_args = {}      # registry key -> the Namespace the scanner was run with
         self.poll_result = qg.GateResult("resolved", {"ready": True, "status": "passed", "message": "ok"})
         self.polled = []
 
@@ -43,6 +44,7 @@ class Harness:
 
     def run_scan(self, args, accuknox_config, softfail, skip_upload):
         key = args.scantype
+        self.scan_args[key] = args
         if key in self.crash:
             raise RuntimeError(f"{key} blew up")
         result_file = None
@@ -200,6 +202,36 @@ def test_an_empty_sbom_is_skipped_not_declared(harness, monkeypatch):
 def test_sbom_runs_as_a_container_sbom(harness):
     assert run_pipeline(harness, scans="sbom", quality_gate=True) == 0
     assert harness.uploads[0][0] == "SBOM" and harness.uploads[0][1]["scanners"] == "SBOM"
+
+
+# ------------------------------------------------------------ AI analysis
+
+
+def test_ai_analysis_is_off_unless_the_flag_is_given(harness):
+    assert run_pipeline(harness, scans="sast,iac") == 0
+    assert harness.scan_args["SAST"].ai_analysis is None  # undecided: the scanner's own default (off) applies
+
+
+def test_ai_flag_turns_it_on_for_sast_with_its_options(harness):
+    code = run_pipeline(
+        harness, scans="sast,iac,sca", ai_analysis=True, aiscan_severity="HIGH,CRITICAL",
+        codeassure_config="/cfg/codeassure.json", graph_no_joern=True,
+    )
+    assert code == 0
+    sast = harness.scan_args["SAST"]
+    assert sast.ai_analysis is True and sast.aiscan_severity == "HIGH,CRITICAL"
+    assert sast.codeassure_config == "/cfg/codeassure.json" and sast.graph_no_joern is True
+    assert not hasattr(harness.scan_args["IAC"], "ai_analysis")  # scans without an AI step are untouched
+
+
+def test_ai_options_need_the_ai_flag(harness):
+    assert run_pipeline(harness, scans="sast", aiscan_severity="HIGH") == 2
+    assert harness.scan_args == {}
+
+
+def test_ai_flag_with_no_ai_capable_scan_warns_but_runs(harness, caplog):
+    assert run_pipeline(harness, scans="iac,sca", ai_analysis=True) == 0
+    assert "--ai-analysis has no effect" in caplog.text
 
 
 # ------------------------------------------------------- scanner arg parsing

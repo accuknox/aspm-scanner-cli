@@ -26,7 +26,7 @@ class SASTScanner:
 
     def __init__(self, command=None, container_mode=True, severity = None,
                  repo_url=None, commit_ref=None, commit_sha=None,
-                 pipeline_id=None, job_url=None, ai_analysis=True, codeassure_config=None,aiscan_severity=None,
+                 pipeline_id=None, job_url=None, ai_analysis=False, codeassure_config=None,aiscan_severity=None,
                  graph_no_joern=False, context_graph_config=None):
         """
         :param command: Raw OpenGrep CLI args (string)

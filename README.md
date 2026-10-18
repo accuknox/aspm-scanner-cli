@@ -331,6 +331,8 @@ With AI analysis (CLI flag or per-repo env var):
 accuknox-aspm-scanner scan --skip-upload --keep-results sast --command "scan ." --ai-analysis --aiscan-severity "HIGH,CRITICAL"
 ```
 
+AI analysis is **off by default**; `--ai-analysis` (or the variable below) turns it on, and `--no-ai-analysis` forces it off even when the variable is set.
+
 Per-repo AI-SAST via environment variable (e.g. GitLab CI variable):
 
 ```bash
@@ -686,6 +688,9 @@ accuknox-aspm-scanner pipeline --scans sast,sca,secret,iac,sbom --quality-gate
 - With `--quality-gate`, findings no longer fail a scan step: the policy decides. Scans that cannot run or
   upload still fail the build. Without it, `pipeline` simply runs the scans one after another.
 - `--fail-fast` stops at the first scan that cannot run.
+- `--ai-analysis` runs AI analysis on the scans that support it (today: `sast`; off by default), with
+  `--aiscan-severity`, `--codeassure-config`, `--context-graph-config` and `--graph-no-joern`. These options
+  need `--ai-analysis`. Other scan types ignore it until they gain an AI step.
 
 ### Separate steps: `scan --quality-gate` + `gate`
 
