@@ -229,6 +229,12 @@ def test_summary_lists_scanners_breaches_and_the_verdict():
     assert text.splitlines()[-1] == "Quality gate failed: Gate failed: SG"
 
 
+def test_a_compliance_breach_is_described_without_a_threshold():
+    reason = {"policy": "p", "action": "block", "param": "compliance", "framework": "owasp-top-10",
+              "found": 7, "categories": ["A01:2021", "A03:2021"]}
+    assert qg._reason_line(reason) == "p [block]: owasp-top-10: 7 findings (A01:2021, A03:2021)"
+
+
 def test_softfail_still_reports_the_gate_as_failed():
     result = resolved("failed", blocking=True, message="Gate failed: SG", results={})
     last = qg.summary_lines(result, qg.EXIT_PASS, softfail=True)[-1]

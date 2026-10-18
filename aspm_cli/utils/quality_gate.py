@@ -237,7 +237,11 @@ def decide(result: GateResult, softfail: bool = False, on_timeout: str = "fail")
 
 
 def _reason_line(reason: Mapping) -> str:
-    detail = f"{reason.get('param', '?')} found {reason.get('found', '?')} > threshold {reason.get('threshold', '?')}"
+    if reason.get("framework"):  # compliance: any finding under a listed framework breaches, there is no count threshold
+        categories = ", ".join(reason.get("categories") or [])
+        detail = f"{reason['framework']}: {reason.get('found', '?')} findings" + (f" ({categories})" if categories else "")
+    else:
+        detail = f"{reason.get('param', '?')} found {reason.get('found', '?')} > threshold {reason.get('threshold', '?')}"
     return f"{reason.get('policy') or 'policy'} [{reason.get('action') or '?'}]: {detail}"
 
 
