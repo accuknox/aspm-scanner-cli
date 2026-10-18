@@ -33,6 +33,11 @@ def add_gate_arguments(parser):
         default="fail",
         help="What to do when the verdict does not arrive in time (default: fail).",
     )
+    parser.add_argument(
+        "--gate-json-file",
+        help="Also write the quality gate response (JSON) to this file. It is always printed on stdout "
+        "(default: ACCUKNOX_GATE_JSON_FILE).",
+    )
 
 
 class GateCommand(BaseCommand):
@@ -73,5 +78,5 @@ class GateCommand(BaseCommand):
         Logger.get_logger().info(f"Waiting up to {args.gate_timeout}s for the quality gate of run {cli_id}...")
         result = poll_gate(config, cli_id, timeout=args.gate_timeout)
         exit_code = decide(result, softfail, args.gate_on_timeout)
-        report(result, exit_code, softfail)
+        report(result, exit_code, softfail, cli_id=cli_id, json_file=args.gate_json_file or os.getenv("ACCUKNOX_GATE_JSON_FILE"))
         sys.exit(exit_code)

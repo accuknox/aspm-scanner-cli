@@ -1,3 +1,4 @@
+import json
 import uuid
 
 import pytest
@@ -260,3 +261,23 @@ def test_report_writes_github_summary_and_annotation(tmp_path, monkeypatch, caps
     qg.report(result, qg.EXIT_POLICY_FAILED)
     assert "::error title=AccuKnox quality gate::Quality gate failed: Gate failed: SG" in capsys.readouterr().out
     assert "### AccuKnox quality gate" in summary.read_text()
+
+
+def test_report_prints_the_backend_response_as_json_and_can_save_it(tmp_path, capsys):
+    payload = {"ready": True, "status": "failed", "blocking": True, "message": "Gate failed: SG", "results": {}}
+    out = tmp_path / "gate.json"
+    qg.report(resolved("failed", **{k: v for k, v in payload.items() if k not in ("ready", "status", "message")}),
+              qg.EXIT_POLICY_FAILED, cli_id=CLI_ID, json_file=str(out))
+    printed = capsys.readouterr().out
+    body = printed.split("-----\n", 1)[1].rsplit("\n-----", 1)[0]
+    document = json.loads(body)
+    assert document["cli_id"] == CLI_ID and document["exit_code"] == 1 and document["state"] == "resolved"
+    assert document["response"]["status"] == "failed" and document["response"]["blocking"] is True
+    assert json.loads(out.read_text()) == document
+
+
+def test_json_is_printed_for_a_timeout_without_a_response(capsys):
+    qg.report(qg.GateResult("timeout", {}, "no verdict in 300s"), qg.EXIT_OPERATIONAL, cli_id=CLI_ID)
+    body = capsys.readouterr().out.split("-----\n", 1)[1].rsplit("\n-----", 1)[0]
+    document = json.loads(body)
+    assert document["state"] == "timeout" and document["response"] == {} and document["detail"] == "no verdict in 300s"

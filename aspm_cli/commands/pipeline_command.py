@@ -226,7 +226,7 @@ class PipelineCommand(BaseCommand):
         gate_config = {**accuknox_config, "accuknox_gate_token": args.gate_token or os.getenv("ACCUKNOX_GATE_TOKEN")}
         result = poll_gate(gate_config, cli_id, timeout=args.gate_timeout)
         gate_code = decide(result, softfail, args.gate_on_timeout)
-        report(result, gate_code, softfail)
+        report(result, gate_code, softfail, cli_id=cli_id, json_file=args.gate_json_file or os.getenv("ACCUKNOX_GATE_JSON_FILE"))
         if broken:
             logger.error(f"These scans could not run, so the build fails regardless of the gate: {', '.join(broken)}.")
             return EXIT_OPERATIONAL

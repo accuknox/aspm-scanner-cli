@@ -731,6 +731,20 @@ writes a summary to `$GITHUB_STEP_SUMMARY` when available.
 - `--gate-timeout <seconds>`: how long to wait for the verdict (default 300).
 - `--gate-on-timeout fail|pass`: what to do if the verdict does not arrive in time (default `fail`).
 - `--cli-id`, `--repository`: override the run id / the `owner/name` that policy scopes match.
+- `--gate-json-file <path>` (or `ACCUKNOX_GATE_JSON_FILE`): also save the gate response to a file.
+
+### Machine-readable result
+
+After the verdict the CLI prints the gate response as JSON on **stdout** (logs go to stderr), between the
+lines `----- quality gate response (json) -----` and `----- end quality gate response -----`:
+
+```json
+{"cli_id": "…", "state": "resolved", "exit_code": 1, "softfail": false, "detail": null,
+ "response": { "status": "failed", "blocking": true, "results": {"SG": {"status": "fail", "counts": {…}, "reasons": […]}}, "overall": […] }}
+```
+
+`response` is the backend's poll response verbatim (empty when no verdict arrived); `state` is
+`resolved | timeout | unsupported | rejected`. Use `--gate-json-file` for automations that should not parse stdout.
 
 The repository and branch are detected from the CI environment or git. Policy scopes are matched against
 `owner/name:branch`; set `ACCUKNOX_REPO_URL` / `ACCUKNOX_BRANCH` when they cannot be detected.

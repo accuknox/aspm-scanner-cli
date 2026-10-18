@@ -10,6 +10,7 @@ not be evaluated, the gate could not be reached or did not resolve in time).
 """
 from __future__ import annotations
 
+import json
 import os
 import time
 import uuid
@@ -281,8 +282,38 @@ def summary_lines(result: GateResult, exit_code: int, softfail: bool = False) ->
     return lines
 
 
-def report(result: GateResult, exit_code: int, softfail: bool = False) -> None:
-    """Log the verdict, emit CI annotations and write the GitHub step summary when available."""
+def result_document(result: GateResult, exit_code: int, cli_id: str | None = None, softfail: bool = False) -> dict:
+    """The machine-readable outcome: the backend response verbatim plus how the CLI judged it."""
+    return {
+        "cli_id": cli_id,
+        "state": result.state,
+        "exit_code": exit_code,
+        "softfail": softfail,
+        "detail": result.detail or None,
+        "response": result.payload or {},
+    }
+
+
+def emit_result_json(document: dict, json_file: str | None = None) -> None:
+    """Print the outcome as JSON on stdout (logs go to stderr) and optionally write it to a file."""
+    text = json.dumps(document, indent=2, sort_keys=True, default=str)
+    print(f"----- quality gate response (json) -----\n{text}\n----- end quality gate response -----", flush=True)
+    if json_file:
+        try:
+            with open(json_file, "w", encoding="utf-8") as handle:
+                handle.write(text + "\n")
+        except OSError as exc:
+            Logger.get_logger().warning(f"Could not write the quality gate response to {json_file}: {exc}")
+
+
+def report(
+    result: GateResult,
+    exit_code: int,
+    softfail: bool = False,
+    cli_id: str | None = None,
+    json_file: str | None = None,
+) -> None:
+    """Log the verdict, print its JSON, emit CI annotations and write the GitHub step summary when available."""
     logger = Logger.get_logger()
     lines = summary_lines(result, exit_code, softfail)
     warned = result.state == "resolved" and bool(result.payload.get("warnings"))
@@ -290,6 +321,8 @@ def report(result: GateResult, exit_code: int, softfail: bool = False) -> None:
     for line in lines[:-1]:
         logger.info(line)
     Logger.log_with_color("ERROR" if exit_code else "INFO", lines[-1], color)
+
+    emit_result_json(result_document(result, exit_code, cli_id, softfail), json_file)
 
     if os.environ.get("GITHUB_ACTIONS") == "true":
         level = "error" if exit_code else "warning" if (warned or softfail and result.payload.get("status") == "failed") else None
