@@ -409,6 +409,12 @@ def test_render_flow_diagram_boxes_per_line_marked_by_severity():
     assert "🔴 1 · 🟠 1 · ⚪ 1" in d             # per-file severity counts on the file box
 
 
+def test_render_flow_diagram_has_severity_pie():
+    d = render_flow_diagram([f("HIGH", fp="1"), f("HIGH", line=2, fp="2"), f("LOW", line=3, fp="3")])
+    assert 'pie showData title Findings by severity' in d
+    assert '"🟠 High" : 2' in d and '"⚪ Low" : 1' in d and "🔴 Critical\" :" not in d
+
+
 def test_summary_does_not_repeat_inline_findings():
     body = render_summary_comment([f("HIGH", line=7)], {"repo": "o/r", "ref": "main", "sha": "abc"})
     assert "HIGH Issues" not in body and "a.py:7" not in body
