@@ -230,16 +230,6 @@ def render_narrative(narrative):
     return "\n".join(lines)
 
 
-_SEV_CLASS = {"CRITICAL": "crit", "HIGH": "high", "MEDIUM": "med", "LOW": "low"}
-_SEV_COLOR = {"crit": "#d73a49", "high": "#f66a0a", "med": "#d4a72c", "low": "#8c959f"}
-_CLASSDEFS = (
-    "classDef root fill:#0969da,stroke:#0550ae,stroke-width:2px,color:#fff",
-    "classDef file fill:#f6f8fa,stroke:#57606a,stroke-width:2px,color:#1f2328",
-    "classDef crit fill:#d73a49,stroke:#86181d,stroke-width:2px,color:#fff",
-    "classDef high fill:#f66a0a,stroke:#b34700,stroke-width:2px,color:#fff",
-    "classDef med fill:#ffd33d,stroke:#b08800,stroke-width:2px,color:#1f2328",
-    "classDef low fill:#e1e4e8,stroke:#959da5,stroke-width:2px,color:#1f2328",
-)
 
 
 def _mermaid_text(s, limit=30):
@@ -274,18 +264,13 @@ def render_flow_diagram(findings):
              '%%{init: {"flowchart": {"nodeSpacing": 12, "rankSpacing": 28, "padding": 6}}}%%',
              "graph LR",
              f'  PR(["<b>Pull Request</b><br/>{len(shown)} finding(s) · {len(files)} file(s)"])']
-    members = {cls: [] for cls in ("root", "file", *_SEV_CLASS.values())}
-    members["root"].append("PR")
-    edge_colors = []  # one colour per edge, in declaration order -> linkStyle
 
     for fi, (path, by_line) in enumerate(files[:_MAX_FILES_IN_DIAGRAM]):
         per_sev = {s: sum(1 for v in by_line.values() for f in v if f["severity"] == s)
                    for s in DISPLAYED_SEVERITIES}
         counts = " · ".join(f"{SEVERITY_ICON[s]} {n}" for s, n in per_sev.items() if n)
         lines.append(f'  F{fi}["<b>{_mermaid_text(path, 40)}</b><br/>{counts}"]')
-        members["file"].append(f"F{fi}")
         lines.append(f"  PR --> F{fi}")
-        edge_colors.append(_SEV_COLOR[_SEV_CLASS[SEVERITY_ORDER[min(rank(v) for v in by_line.values())]]])
         # Worst-severity lines first when capping, then back to line order.
         picked = sorted(by_line.items(), key=lambda kv: (rank(kv[1]), kv[0]))[:_MAX_NODES_PER_FILE]
         picked.sort()
@@ -293,34 +278,24 @@ def render_flow_diagram(findings):
             items = sorted(items, key=lambda x: SEVERITY_ORDER.index(x["severity"]))
             top = items[0]
             more = f" +{len(items) - 1} more" if len(items) > 1 else ""
-            label = f"L{line_no} · {_mermaid_text(top['rule_id'].split('.')[-1])}{more}"
+            label = f"{SEVERITY_ICON[top['severity']]} L{line_no} · {_mermaid_text(top['rule_id'].split('.')[-1])}{more}"
             nid = f"N{fi}_{ni}"
             lines.append(f'  {nid}("{label}")')
             lines.append(f"  F{fi} --> {nid}")
-            cls = _SEV_CLASS[top["severity"]]
-            members[cls].append(nid)
-            edge_colors.append(_SEV_COLOR[cls])
         hidden = len(by_line) - len(picked)
         if hidden > 0:
             lines.append(f'  M{fi}("… {hidden} more line(s)")')
             lines.append(f"  F{fi} -.-> M{fi}")
-            members["low"].append(f"M{fi}")
-            edge_colors.append(_SEV_COLOR["low"])
 
     remaining = len(files) - _MAX_FILES_IN_DIAGRAM
     if remaining > 0:
         lines.append(f'  MORE("… and {remaining} more file(s)")')
         lines.append("  PR -.-> MORE")
-        members["low"].append("MORE")
-        edge_colors.append(_SEV_COLOR["low"])
 
-    lines += ["  " + d for d in _CLASSDEFS]
-    lines += [f"  class {','.join(ids)} {cls}" for cls, ids in members.items() if ids]
-    lines += [f"  linkStyle {i} stroke:{c},stroke-width:2px" for i, c in enumerate(edge_colors)]
     lines += ["```", "",
               f"{SEVERITY_ICON['CRITICAL']} Critical · {SEVERITY_ICON['HIGH']} High · "
               f"{SEVERITY_ICON['MEDIUM']} Medium · {SEVERITY_ICON['LOW']} Low "
-              "— one box per flagged line; its colour is the worst severity on that line.",
+              "— one box per flagged line, marked with its worst severity.",
               "", "</details>", ""]
     return "\n".join(lines)
 

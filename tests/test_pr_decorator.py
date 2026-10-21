@@ -393,21 +393,19 @@ def test_render_flow_diagram_empty_without_findings():
     diagram = render_flow_diagram([f("HIGH", path="a.py")])
     assert "```mermaid" in diagram
     assert "a.py" in diagram
-    assert "classDef crit" in diagram and "class N0_0 high" in diagram
+    assert "classDef" not in diagram and "linkStyle" not in diagram  # no coloured boxes
     assert "PR --> F0" in diagram and "F0 --> N0_0" in diagram
 
 
-def test_render_flow_diagram_boxes_per_line_colored_by_severity():
+def test_render_flow_diagram_boxes_per_line_marked_by_severity():
     findings = [f("CRITICAL", path="r.txt", line=1, fp="1"), f("HIGH", path="r.txt", line=1, fp="2"),
                 f("LOW", path="r.txt", line=1, fp="3"), f("MEDIUM", path="a.py", line=9, fp="4"),
                 f("HIGH", path="a.py", line=3, fp="5"), f("UNKNOWN", path="u.py", fp="6")]
     d = render_flow_diagram(findings)
-    assert 'L1 · rule +2 more")' in d          # 3 findings on one line -> one box
+    assert '🔴 L1 · rule +2 more")' in d          # 3 findings on one line -> one box
     assert d.index("r.txt") < d.index("a.py")   # worst file first
     assert "u.py" not in d                      # UNKNOWN is never shown
-    assert "class N0_0 crit" in d and "class N1_0,N1_1" not in d
     assert "F1 --> N1_1" in d                   # file -> its boxes, in line order
-    assert "linkStyle 0 stroke:#d73a49" in d    # edge takes the colour of the worst severity
     assert "🔴 1 · 🟠 1 · ⚪ 1" in d             # per-file severity counts on the file box
 
 
