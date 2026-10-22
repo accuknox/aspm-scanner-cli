@@ -208,7 +208,7 @@ def test_load_all_findings_scan_type_overrides_filename_sniffing():
     try:
         findings, _ = load_all_findings([path], scan_types=["iac"])
         assert len(findings) == 1
-        assert findings[0]["source"] == "AccuKnox IaC (Checkov)"
+        assert findings[0]["source"] == "AccuKnox IaC"
     finally:
         os.unlink(path)
 
@@ -327,8 +327,8 @@ def test_load_findings_secret_dispatches_by_extension():
     try:
         jsonl_findings, _ = load_findings_secret(jsonl_path)
         sarif_findings, _ = load_findings_secret(sarif_path)
-        assert jsonl_findings[0]["source"] == "AccuKnox Secrets (TruffleHog)"
-        assert sarif_findings[0]["source"] == "AccuKnox Secrets (Gitleaks)"
+        assert jsonl_findings[0]["source"] == "AccuKnox Secrets"
+        assert sarif_findings[0]["source"] == "AccuKnox Secrets"
     finally:
         os.unlink(jsonl_path)
         os.unlink(sarif_path)

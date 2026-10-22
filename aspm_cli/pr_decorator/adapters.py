@@ -92,7 +92,7 @@ def load_findings_checkov(path, changed_files=None):
                 "fingerprint": _fingerprint("checkov", c.get("check_id"), file_path, line_range[0]),
                 "fix": None,
                 "references": [c["guideline"]] if c.get("guideline") else [],
-                "source": "AccuKnox IaC (Checkov)",
+                "source": "AccuKnox IaC",
             })
 
     repo = None
@@ -154,7 +154,7 @@ def load_findings_trivy(path, changed_files=None):
                     "trivy", v.get("VulnerabilityID"), target, v.get("PkgName")),
                 "fix": None,
                 "references": [v["PrimaryURL"]] if v.get("PrimaryURL") else [],
-                "source": "AccuKnox SCA (Trivy)",
+                "source": "AccuKnox SCA",
             })
 
     meta = {"repo": data.get("ArtifactName"), "sha": None, "ref": None, "ai_analysis": False}
@@ -231,7 +231,7 @@ def load_findings_trufflehog_jsonl(path, changed_files=None):
                 "fingerprint": _fingerprint("trufflehog", detector, file_path, line_no, redacted),
                 "fix": None,
                 "references": [],
-                "source": "AccuKnox Secrets (TruffleHog)",
+                "source": "AccuKnox Secrets",
             })
     meta = {"repo": None, "sha": None, "ref": None, "ai_analysis": False}
     return findings, meta
@@ -283,7 +283,7 @@ def load_findings_gitleaks_sarif(path, changed_files=None):
                 "fingerprint": _fingerprint("gitleaks", rule_id, file_path, start_line),
                 "fix": None,
                 "references": [],
-                "source": "AccuKnox Secrets (Gitleaks)",
+                "source": "AccuKnox Secrets",
             })
     meta = {"repo": None, "sha": None, "ref": None, "ai_analysis": False}
     return findings, meta
