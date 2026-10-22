@@ -294,10 +294,39 @@ def render_flow_diagram(findings):
     return "\n".join(lines)
 
 
+def render_top_fixes(findings, limit=3):
+    """No-AI stand-in for the Impact Analysis: the few spots (file:line) worth
+    fixing first, worst severity then most findings. Nothing here comes from a
+    model, so it always renders."""
+    spots = {}
+    for f in findings:
+        if f["severity"] in DISPLAYED_SEVERITIES:
+            spots.setdefault((f["path"], f["start_line"]), []).append(f)
+    ranked = sorted(spots.items(), key=lambda kv: (min(SEVERITY_ORDER.index(f["severity"]) for f in kv[1]),
+                                                   -len(kv[1]), kv[0]))[:limit]
+    if not ranked:
+        return ""
+    lines = ["### 🚀 Top fixes", "", "_Start here - the biggest risk for the least work._", ""]
+    for n, ((path, line), items) in enumerate(ranked, 1):
+        items = sorted(items, key=lambda x: SEVERITY_ORDER.index(x["severity"]))
+        top = items[0]
+        more = f" +{len(items) - 1} more" if len(items) > 1 else ""
+        if top.get("category") == "secret":
+            how = "Rotate this credential, then remove it from the code."
+        else:
+            how = _cell(" ".join(str(top.get("message", "")).split())[:120]) or "See the inline comment."
+        quick = " ⚡ fix suggested inline" if top.get("fix") else ""
+        lines.append(f"{n}. {SEVERITY_ICON[top['severity']]} **{_cell(top['rule_id'].split('.')[-1])}**{more}"
+                     f" · `{_cell(path)}:{line}`{quick}")
+        lines.append(f"   - {how}")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def render_extra_sections(file_changes, narrative, findings):
     """Everything above Security Findings, in order. Each piece is already
     individually degrade-safe (empty string when its data is missing) - this
     just concatenates whatever came back."""
     parts = [render_file_changes_table(file_changes), render_narrative(narrative),
-             render_flow_diagram(findings)]
+             "" if narrative else render_top_fixes(findings), render_flow_diagram(findings)]
     return "\n".join(p for p in parts if p)

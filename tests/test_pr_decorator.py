@@ -14,7 +14,7 @@ from aspm_cli.pr_decorator.adapters import (  # noqa: E402
     load_findings_secret, load_findings_trivy, load_findings_trufflehog_jsonl,
 )
 from aspm_cli.pr_decorator.pr_summary import (  # noqa: E402
-    _build_narrative_prompt, _extract_symbols, _ground_severity, generate_pr_narrative, render_extra_sections, render_file_changes_table,
+    _build_narrative_prompt, _extract_symbols, render_top_fixes, _ground_severity, generate_pr_narrative, render_extra_sections, render_file_changes_table,
     render_flow_diagram, render_narrative,
 )
 from aspm_cli.pr_decorator.remediation import enrich_with_remediation  # noqa: E402
@@ -406,6 +406,17 @@ def test_render_flow_diagram_boxes_per_line_marked_by_severity():
     assert d.index("r.txt") < d.index("a.py")   # worst file first
     assert "u.py" not in d                      # UNKNOWN is never shown
     assert "N1_0 ~~~ N1_1" in d or "N0_0 ~~~ N0_1" in d  # boxes stack in a column
+
+
+def test_top_fixes_ranks_worst_spot_first_and_only_without_ai():
+    fs = [f("LOW", path="l.py", fp="1"), f("HIGH", path="h.py", line=4, fp="2"),
+          f("HIGH", path="h.py", line=4, fp="3"), dict(f("CRITICAL", path="s.py", fp="4"), category="secret")]
+    out = render_top_fixes(fs, limit=2)
+    assert out.index("s.py:1") < out.index("h.py:4") and "l.py" not in out
+    assert "+1 more" in out and "Rotate this credential" in out
+    assert render_top_fixes([]) == ""
+    assert "Top fixes" in render_extra_sections([], None, fs)
+    assert "Top fixes" not in render_extra_sections([], {"summary": "x", "impact": []}, fs)
 
 
 def test_summary_does_not_repeat_inline_findings():
