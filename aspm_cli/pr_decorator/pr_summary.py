@@ -260,10 +260,6 @@ def render_flow_diagram(findings):
 
     lines = ["## \U0001F5FA️ Findings by File", "",
              "<details open>", "<summary><b>\U0001F4CC Findings map</b></summary>", "",
-             "```mermaid", "pie showData title Findings by severity",
-             *[f'  "{SEVERITY_ICON[sv]} {sv.title()}" : {n}'
-               for sv in DISPLAYED_SEVERITIES if (n := sum(1 for f in shown if f["severity"] == sv))],
-             "```", "",
              "```mermaid",
              '%%{init: {"flowchart": {"nodeSpacing": 12, "rankSpacing": 28, "padding": 6}}}%%',
              "graph LR",
