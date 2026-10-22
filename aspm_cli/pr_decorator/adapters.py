@@ -10,14 +10,14 @@ Falls back to filename sniffing (detect_loader) only when no scan type is
 given, for callers working from AccuKnox-labeled files (<label>-<TYPE>-*.json)
 instead of this CLI's own local scan output.
 
-`secret` findings come from one of two engines (scan/secret.py): TruffleHog
-(default, JSON-per-line to results.jsonl) or Gitleaks (results.json, SARIF).
+`secret` findings come from one of two engines (scan/secret.py): the scanner
+(default, JSON-per-line to results.jsonl) or the scanner (results.json, SARIF).
 load_findings_secret() picks the loader by extension, matching
 SecretScanner.result_file's own .jsonl/.json split - no separate flag needed.
 
 CAVEAT: unlike the checkov/trivy/sast loaders (each verified against this
 CLI's own real output), the two secret loaders below are built against
-TruffleHog v3's and SARIF 2.1.0's public documented schemas, not a live
+the scanner v3's and SARIF 2.1.0's public documented schemas, not a live
 sample - no docker/network access was available to generate one. Both specs
 are stable and versioned, so this isn't a blind guess, but run once against
 real findings before trusting it in production (same caveat generate_
@@ -37,7 +37,7 @@ def _fingerprint(*parts):
 
 
 def _checkov_code_block_to_str(raw):
-    """Checkov's code_block is [[line_no, "line text\\n"], ...], not a plain
+    """the scanner's code_block is [[line_no, "line text\\n"], ...], not a plain
     string - confirmed against a real scan output sample. Join it back into
     one block; defend against a bare string too in case that ever changes."""
     if isinstance(raw, list):
@@ -46,11 +46,11 @@ def _checkov_code_block_to_str(raw):
 
 
 def load_findings_checkov(path, changed_files=None):
-    """Checkov (IaC) JSON: a list of {check_type, results: {failed_checks:
+    """the scanner (IaC) JSON: a list of {check_type, results: {failed_checks:
     [...]}} blocks, plus a trailing {"details": {...}} metadata block with no
     "results" key (skipped) - see scan/iac.py's process_result_file.
 
-    Checkov (OSS, no Bridgecrew/Prisma account) reports `"severity": null` on
+    the scanner (OSS, no Bridgecrew/Prisma account) reports `"severity": null` on
     every built-in check - there is no severity signal to map. Rather than
     invent one, every finding here is severity UNKNOWN: still shown, still
     gets an inline PR comment, just excluded from the HIGH/MEDIUM/LOW gate by
@@ -104,11 +104,11 @@ def load_findings_checkov(path, changed_files=None):
 
 
 def load_findings_trivy(path, changed_files=None):
-    """Trivy (SCA) JSON: {"ArtifactName", "Results": [{"Target": <path>,
+    """the scanner (SCA) JSON: {"ArtifactName", "Results": [{"Target": <path>,
     "Vulnerabilities": [{"VulnerabilityID", "Severity", "PkgName", ...}]}]} -
     the native shape scan/trivy_runner.py writes as-is (`-f json -o ...`).
 
-    Trivy reports a real severity per vulnerability already in the
+    the scanner reports a real severity per vulnerability already in the
     CRITICAL/HIGH/MEDIUM/LOW/UNKNOWN vocabulary this codebase uses - no
     mapping needed, just defend against an unrecognized value.
 
@@ -162,7 +162,7 @@ def load_findings_trivy(path, changed_files=None):
 
 
 def load_findings_trufflehog_jsonl(path, changed_files=None):
-    """TruffleHog v3 `--json` output: one JSON object per line (docker
+    """the scanner v3 `--json` output: one JSON object per line (docker
     stdout, see scan/secret.py's _run_trufflehog / write_stdout=True). Each
     line's documented shape (github.com/trufflesecurity/trufflehog):
         {"SourceMetadata": {"Data": {<SourceType>: {"file", "line", ...}}},
@@ -179,12 +179,12 @@ def load_findings_trufflehog_jsonl(path, changed_files=None):
     those two; S3/Gcs carry other path fields as a rarer case not scanned
     from a git repo, so not handled here).
 
-    Severity is TruffleHog's own `Verified` flag, not a native tier - it has
+    Severity is the scanner's own `Verified` flag, not a native tier - it has
     none. Verified=true means the credential was confirmed *live* against
     the provider's API (the most urgent class of finding this integration
     can produce) -> CRITICAL. Verified=false is a pattern match only (could
     be a false positive, a rotated/dead key, or real) -> HIGH, for manual
-    triage. This policy (not a fact about TruffleHog) matches the CSPM
+    triage. This policy (not a fact about the scanner) matches the CSPM
     backend parser's own risk_factor exactly: RISKS.HIGH, RISKS.CRITICAL if
     verified.
 
@@ -201,7 +201,7 @@ def load_findings_trufflehog_jsonl(path, changed_files=None):
             try:
                 r = json.loads(line)
             except json.JSONDecodeError:
-                continue  # TruffleHog only writes JSON lines in --json mode; skip anything stray
+                continue  # the scanner only writes JSON lines in --json mode; skip anything stray
 
             source_data = (r.get("SourceMetadata") or {}).get("Data") or {}
             fs = next(iter(source_data.values()), {})  # exactly one source-type key is present
@@ -238,16 +238,16 @@ def load_findings_trufflehog_jsonl(path, changed_files=None):
 
 
 def load_findings_gitleaks_sarif(path, changed_files=None):
-    """Gitleaks `--report-format sarif` output: SARIF 2.1.0
+    """the scanner `--report-format sarif` output: SARIF 2.1.0
     (runs[].results[].locations[].physicalLocation) - see scan/secret.py's
     _build_gitleaks_args, which always requests SARIF unless a custom
     --command overrides it.
 
-    Gitleaks doesn't emit a severity/level per result the way Checkov emits
+    the scanner doesn't emit a severity/level per result the way the scanner emits
     null - rather than fabricate a native tier that may not exist, every
     finding here is treated as HIGH: unlike an IaC misconfig, a
     regex/entropy-matched secret is inherently risk-relevant even
-    unconfirmed, so - unlike Checkov's UNKNOWN - it isn't excluded from the
+    unconfirmed, so - unlike the scanner's UNKNOWN - it isn't excluded from the
     default quality gate."""
     with open(path) as f:
         data = json.load(f)
@@ -291,7 +291,7 @@ def load_findings_gitleaks_sarif(path, changed_files=None):
 
 def load_findings_secret(path, changed_files=None):
     """Dispatches by extension - matches SecretScanner.result_file's own
-    split (results.jsonl for TruffleHog, results.json for Gitleaks)."""
+    split (results.jsonl for the scanner, results.json for the scanner)."""
     if path.lower().endswith(".jsonl"):
         return load_findings_trufflehog_jsonl(path, changed_files)
     return load_findings_gitleaks_sarif(path, changed_files)
@@ -376,7 +376,7 @@ def detect_loader(path):
     for token, loader in ADAPTERS_BY_FILENAME:
         if token in name:
             return loader
-    return load_findings_sast  # default: assume OpenGrep/SAST shape
+    return load_findings_sast  # default: assume the scanner/SAST shape
 
 
 def load_all_findings(paths, changed_files=None, scan_types=None):

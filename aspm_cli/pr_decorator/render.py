@@ -15,7 +15,7 @@ from collections import Counter
 SEVERITY_ICON = {"CRITICAL": "\U0001F534", "HIGH": "\U0001F7E0", "MEDIUM": "\U0001F7E1", "LOW": "⚪", "UNKNOWN": "❔"}
 SEVERITY_ORDER = ("CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN")
 
-# UNKNOWN (Checkov OSS never sets a real severity - every IaC finding lands
+# UNKNOWN (the scanner never sets a real severity - every IaC finding lands
 # here, see adapters.load_findings_checkov) is deliberately never itemized
 # in the PR comment: dozens of unrated findings from one resource block is
 # noise, not signal. Still counted internally (gate/dedup), just not shown.
@@ -49,7 +49,7 @@ def _finalize(lines):
 
 
 def load_findings(path, changed_files=None):
-    """OpenGrep/SAST result loader - the default shape adapters.py falls
+    """the scanner/SAST result loader - the default shape adapters.py falls
     back to for any file it can't otherwise identify."""
     with open(path) as f:
         data = json.load(f)
@@ -63,13 +63,13 @@ def load_findings(path, changed_files=None):
         native_sev = extra.get("severity", "INFO")
         # Severity tier comes from extra.metadata.impact (LOW/MEDIUM/HIGH/
         # CRITICAL) - the same signal scan/sast.py's own quality gate uses
-        # ("OpenGrep already rates each finding on the standard scale via
+        # ("the scanner already rates each finding on the standard scale via
         # extra.metadata.impact... The rule-level extra.severity (ERROR/
         # WARNING/INFO) is a different axis"), and what the CSPM backend's
-        # own Semgrep parser reads for risk_factor. Confirmed against a real
+        # own the scanner parser reads for risk_factor. Confirmed against a real
         # scan sample: impact is absent on ~85% of default-ruleset findings
         # (most rules don't carry one) - those fall to UNKNOWN, same policy
-        # as Checkov's null severity, rather than invented from extra.severity.
+        # as the scanner's null severity, rather than invented from extra.severity.
         impact = (metadata.get("impact") or "").upper()
         severity = impact if impact in ("CRITICAL", "HIGH", "MEDIUM", "LOW") else "UNKNOWN"
         cwe = metadata.get("cwe", [])
@@ -127,7 +127,7 @@ def render_summary_comment(findings, meta, thresholds=None, extra_sections=None)
     counts = Counter(f["severity"] for f in findings)
     # UNKNOWN is never itemized (see DISPLAYED_SEVERITIES) - the headline
     # count and "no issues" check are about what's actually shown, not
-    # Checkov's unrated noise.
+    # the scanner's unrated noise.
     total = sum(counts.get(sev, 0) for sev in DISPLAYED_SEVERITIES)
     unknown_total = counts.get("UNKNOWN", 0)
     failed = gate_status(counts, thresholds)

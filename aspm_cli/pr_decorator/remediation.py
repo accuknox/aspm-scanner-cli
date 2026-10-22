@@ -1,6 +1,6 @@
 """
 Optional LLM-generated remediation for SAST findings that have no native
-`fix` (~10% of OpenGrep rules carry one - see render.load_findings). Ported
+`fix` (~10% of the scanner rules carry one - see render.load_findings). Ported
 from PR-Decorator's generate_remediation.py, swapping urllib for `requests`
 (already a dependency here, see utils/common.py).
 

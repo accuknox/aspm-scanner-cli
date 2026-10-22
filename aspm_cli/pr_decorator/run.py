@@ -16,7 +16,7 @@ from .render import compute_event, render_inline_comment, render_summary_comment
 
 
 def _find_sast_path(result_paths, scan_types):
-    """Native fix / AI remediation only make sense against the OpenGrep/SAST
+    """Native fix / AI remediation only make sense against the the scanner/SAST
     shaped file - pick it out of a possibly multi-scan-type file list."""
     if scan_types:
         for path, t in zip(result_paths, scan_types):
@@ -85,7 +85,7 @@ def run(result_paths, scan_types=None, changed_files=None, mode="advisory",
     # Dry run has no token guarantee and no real PR to check against, so it
     # can't know what's already posted - treat everything as new.
     posted_fps = set() if dry_run else provider.find_posted_fingerprints()
-    # UNKNOWN findings (Checkov's unrated noise, see render.DISPLAYED_SEVERITIES)
+    # UNKNOWN findings (the scanner's unrated noise, see render.DISPLAYED_SEVERITIES)
     # don't get their own inline thread either - same reasoning as the summary.
     new_findings = [f for f in findings
                      if f["fingerprint"] not in posted_fps and f["severity"] != "UNKNOWN"]

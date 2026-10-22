@@ -88,7 +88,7 @@ def test_load_findings_cwe_string_normalized_to_list():
 
 def test_load_findings_severity_from_impact_not_native_severity():
     # extra.metadata.impact (LOW/MEDIUM/HIGH/CRITICAL) is the real severity
-    # signal - see scan/sast.py's own gate and the CSPM backend's Semgrep
+    # signal - see scan/sast.py's own gate and the CSPM backend's the scanner
     # parser. extra.severity (ERROR/WARNING/INFO) is a different axis and
     # must NOT be used to derive it, even though ERROR looks HIGH-ish.
     fixture = {"results": [
@@ -199,7 +199,7 @@ def test_checkov_code_block_is_line_pairs_not_a_string():
 
 
 def test_load_all_findings_scan_type_overrides_filename_sniffing():
-    # scan/iac.py writes IaC's own Checkov shape to results_json.json - a
+    # scan/iac.py writes IaC's own the scanner shape to results_json.json - a
     # filename detect_loader() would otherwise (wrongly) sniff as SAST.
     fixture = [{"check_type": "terraform", "results": {"failed_checks": [
         {"check_id": "CKV_1", "file_path": "/main.tf", "file_line_range": [1, 1], "severity": None},
@@ -335,7 +335,7 @@ def test_load_findings_secret_dispatches_by_extension():
 
 
 def test_unknown_severity_never_itemized_in_summary():
-    # Checkov OSS never sets real severity - every IaC finding lands here.
+    # the scanner never sets real severity - every IaC finding lands here.
     # A wall of unrated findings is noise, not signal (see DISPLAYED_SEVERITIES).
     findings = [f("UNKNOWN", fp=f"fp{i}") for i in range(5)]
     body = render_summary_comment(findings, {"repo": "o/r", "ref": "main", "sha": "abc"})
