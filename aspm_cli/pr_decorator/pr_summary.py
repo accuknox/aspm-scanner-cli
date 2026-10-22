@@ -239,10 +239,9 @@ def _mermaid_text(s, limit=30):
 
 
 def render_flow_diagram(findings):
-    """Left-to-right tree: Pull Request -> changed file (with its per-severity
-    counts) -> one box per flagged line, coloured by that line's worst
-    severity; edges take the colour of what they lead to. Several findings on
-    one line (12 CVEs on requirements.txt:1) collapse into one "+N" box.
+    """One diagram: a column per changed file (a subgraph titled with its path),
+    one plain box per flagged line - severity circle, rule, "+N" when several
+    findings share the line (12 CVEs on requirements.txt:1), then the line.
     Capped so GitHub's mermaid renderer and the comment size limit are never
     the failure point."""
     shown = [f for f in findings if f["severity"] in DISPLAYED_SEVERITIES]
@@ -258,44 +257,39 @@ def render_flow_diagram(findings):
 
     files = sorted(by_file.items(), key=lambda kv: (min(rank(v) for v in kv[1].values()), kv[0]))
 
-    lines = ["## \U0001F5FA️ Findings by File", "",
-             "<details open>", "<summary><b>\U0001F4CC Findings map</b></summary>", "",
+    lines = ["## 🗺️ Findings by File", "",
+             "<details open>", "<summary><b>📌 Findings map</b></summary>", "",
              "```mermaid",
-             '%%{init: {"flowchart": {"nodeSpacing": 12, "rankSpacing": 28, "padding": 6}}}%%',
-             "graph LR",
-             f'  PR(["<b>Pull Request</b><br/>{len(shown)} finding(s) · {len(files)} file(s)"])']
+             '%%{init: {"flowchart": {"nodeSpacing": 14, "rankSpacing": 14, "padding": 8}}}%%',
+             "graph TD"]
 
     for fi, (path, by_line) in enumerate(files[:_MAX_FILES_IN_DIAGRAM]):
-        per_sev = {s: sum(1 for v in by_line.values() for f in v if f["severity"] == s)
-                   for s in DISPLAYED_SEVERITIES}
-        counts = " · ".join(f"{SEVERITY_ICON[s]} {n}" for s, n in per_sev.items() if n)
-        lines.append(f'  F{fi}["<b>{_mermaid_text(path, 40)}</b><br/>{counts}"]')
-        lines.append(f"  PR --> F{fi}")
+        lines.append(f'  subgraph S{fi}["{_mermaid_text(path, 36)}"]')
         # Worst-severity lines first when capping, then back to line order.
         picked = sorted(by_line.items(), key=lambda kv: (rank(kv[1]), kv[0]))[:_MAX_NODES_PER_FILE]
         picked.sort()
+        ids = []
         for ni, (line_no, items) in enumerate(picked):
             items = sorted(items, key=lambda x: SEVERITY_ORDER.index(x["severity"]))
-            top = items[0]
-            more = f" +{len(items) - 1} more" if len(items) > 1 else ""
-            label = f"{SEVERITY_ICON[top['severity']]} L{line_no} · {_mermaid_text(top['rule_id'].split('.')[-1])}{more}"
-            nid = f"N{fi}_{ni}"
-            lines.append(f'  {nid}("{label}")')
-            lines.append(f"  F{fi} --> {nid}")
+            more = f" +{len(items) - 1}" if len(items) > 1 else ""
+            rule = _mermaid_text(items[0]["rule_id"].split(".")[-1], 28)
+            lines.append(f'    N{fi}_{ni}["{SEVERITY_ICON[items[0]["severity"]]} {rule}{more}<br/>line {line_no}"]')
+            ids.append(f"N{fi}_{ni}")
         hidden = len(by_line) - len(picked)
         if hidden > 0:
-            lines.append(f'  M{fi}("… {hidden} more line(s)")')
-            lines.append(f"  F{fi} -.-> M{fi}")
+            lines.append(f'    M{fi}["… {hidden} more line(s)"]')
+            ids.append(f"M{fi}")
+        if len(ids) > 1:  # invisible links stack the boxes in one column
+            lines.append("    " + " ~~~ ".join(ids))
+        lines.append("  end")
 
     remaining = len(files) - _MAX_FILES_IN_DIAGRAM
     if remaining > 0:
-        lines.append(f'  MORE("… and {remaining} more file(s)")')
-        lines.append("  PR -.-> MORE")
+        lines.append(f'  MORE["… and {remaining} more file(s)"]')
 
     lines += ["```", "",
               f"{SEVERITY_ICON['CRITICAL']} Critical · {SEVERITY_ICON['HIGH']} High · "
-              f"{SEVERITY_ICON['MEDIUM']} Medium · {SEVERITY_ICON['LOW']} Low "
-              "— one box per flagged line, marked with its worst severity.",
+              f"{SEVERITY_ICON['MEDIUM']} Medium · {SEVERITY_ICON['LOW']} Low",
               "", "</details>", ""]
     return "\n".join(lines)
 
