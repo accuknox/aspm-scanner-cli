@@ -458,6 +458,13 @@ Filesystem SBOM (AccuKnox project classifier `application`; run from repo root i
 accuknox-aspm-scanner scan --skip-upload --keep-results --project-name demo-project container --command "filesystem ." --generate-sbom --container-mode
 ```
 
+Local mode (no Docker) works on Linux, macOS and Windows: install the scanner once with `accuknox-aspm-scanner tool install --type container`, then drop `--container-mode`:
+
+```bash
+accuknox-aspm-scanner scan --skip-upload --keep-results --project-name demo-project container --command "filesystem ." --generate-sbom
+accuknox-aspm-scanner scan --skip-upload --keep-results --project-name demo-project container --command "image nginx:latest" --generate-sbom
+```
+
 SBOM upload requires `--project-name` (or `ACCUKNOX_PROJECT_NAME`). `--project-name` is not required for vulnerability scans. Legacy env `ACCUKNOX_PROJECT` is also accepted.
 
 SBOM Phase-1 capabilities:
