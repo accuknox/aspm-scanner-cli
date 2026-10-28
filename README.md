@@ -14,6 +14,8 @@ It can upload results to the **AccuKnox ASPM Platform**, but it can also run in 
 - 🧰 Works in standalone and on-prem environments
 - 🧵 Supports environment-variable and flag-based configuration
 - 🧩 Supports pre-commit integration
+- 🚦 CI/CD quality gate (`gate`) that fails the pipeline on policy breaches
+- 💬 PR decorator (`decorate-pr`) that posts findings as a PR review with inline comments
 
 ## Installation
 
@@ -119,6 +121,7 @@ accuknox-aspm-scanner scan sq-sast --help
 accuknox-aspm-scanner tool --help
 accuknox-aspm-scanner pre-commit --help
 accuknox-aspm-scanner gate --help
+accuknox-aspm-scanner decorate-pr --help
 ```
 
 If you are running directly from local source code:
@@ -763,6 +766,24 @@ Notes:
 
 A ready-to-use pipeline template is in
 [`examples/github-actions-quality-gate.yml`](examples/github-actions-quality-gate.yml).
+
+## PR Decorator
+
+`decorate-pr` posts scan findings as a pull-request review: one summary comment
+(severity table, quality gate, findings map, AI impact analysis / top fixes) plus
+inline comments on the exact changed lines. Run it right after a scan in a
+`pull_request` job; on any other trigger it logs and exits `0`.
+
+```bash
+accuknox-aspm-scanner decorate-pr   --result-file results.json,results_json.json --scan-type sast,iac   --mode blocking --max-critical 0 --max-high 0
+```
+
+- `--mode advisory` (default) only comments; `blocking` requests changes when a `--max-*` threshold is exceeded.
+- `--llm-api-key` (optional) adds AI remediation and analysis; unset skips it entirely.
+- `--dry-run` previews the comments without a token or network calls.
+
+Providers: GitHub, GitLab, Bitbucket, Azure DevOps. Full flag reference and
+workflow examples: [`docs/pr-decorator.md`](docs/pr-decorator.md).
 
 ## Quickstart
 
