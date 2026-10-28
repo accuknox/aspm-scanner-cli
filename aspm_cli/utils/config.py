@@ -27,7 +27,7 @@ class AccuknoxConfig(BaseModel):
     accuknox_project_name: Optional[str] = Field(
         None,
         env="ACCUKNOX_PROJECT_NAME",
-        description="AccuKnox project name (optional; auto-created in AccuKnox when omitted)",
+        description="AccuKnox project name (required for SBOM uploads)",
     )
 
     @model_validator(mode='after') 
@@ -318,6 +318,12 @@ class ConfigValidator:
 
         if generate_sbom:
             validate_sbom_command(command)
+            if not self.skip_upload and not self.accuknox_config.accuknox_project_name:
+                raise ValueError(
+                    "AccuKnox project name is required for SBOM uploads. "
+                    "Provide --project-name or set ACCUKNOX_PROJECT_NAME (or legacy ACCUKNOX_PROJECT), "
+                    "or use --skip-upload if you only need a local SBOM file."
+                )
 
         self._log_validation_success("Container")
 

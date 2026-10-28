@@ -138,7 +138,7 @@ AccuKnox upload variables are optional when `--skip-upload` is used.
 - `ACCUKNOX_LABEL`: Label used to associate uploaded results
 - `ACCUKNOX_TOKEN`: Bearer token for upload
 - `ACCUKNOX_CLI_ID`: CI/CD quality-gate run id (uuid) shared by every scanner and the `gate` step in one pipeline run. Falls back for `--cli-id`. See [CI/CD Quality Gate](#cicd-quality-gate).
-- `ACCUKNOX_PROJECT_NAME`: Project name for SBOM uploads (optional; auto-created if unset)
+- `ACCUKNOX_PROJECT_NAME`: Project name used for SBOM uploads
 - `ACCUKNOX_PROJECT`: Legacy fallback for project name
 - `DEBUG`: Set to `TRUE` for verbose debug logs
 - `SOFT_FAIL`: Set to `TRUE` to enable soft-fail by default
@@ -465,7 +465,7 @@ accuknox-aspm-scanner scan --skip-upload --keep-results --project-name demo-proj
 accuknox-aspm-scanner scan --skip-upload --keep-results --project-name demo-project container --command "image nginx:latest" --generate-sbom
 ```
 
-`--project-name` (or `ACCUKNOX_PROJECT_NAME`) is optional for SBOM uploads: when omitted, AccuKnox auto-creates the project. Legacy env `ACCUKNOX_PROJECT` is also accepted.
+SBOM upload requires `--project-name` (or `ACCUKNOX_PROJECT_NAME`). `--project-name` is not required for vulnerability scans. Legacy env `ACCUKNOX_PROJECT` is also accepted.
 
 SBOM Phase-1 capabilities:
 
