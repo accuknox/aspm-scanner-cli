@@ -1,3 +1,12 @@
+aspm-scanner-cli (0.16.1) unstable; urgency=medium
+
+  * Add PR decorator (decorate-pr), pipeline command and quality gate, SBOM license enrichment,
+    sq-sast 2.0.3, and local-mode SBOM without container mode
+  * Fix Windows container-mode image scans (docker socket mount) and zip path validation
+  * Align CLI, wheel, and package version metadata to 0.16.1
+
+ -- AccuKnox <accuknox@accuknox.com>  Wed, 28 Oct 2026 22:40:00 +0530
+
 aspm-scanner-cli (0.15.2-rc.3) unstable; urgency=medium
 
   * Include main: Windows sast rules copy, install hint, --all skip (#78)
