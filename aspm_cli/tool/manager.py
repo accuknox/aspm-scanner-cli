@@ -43,6 +43,7 @@ class ToolManager:
         "codeassure": Path("codeassure") / "codeassure",
         "gitleaks": Path("gitleaks"),
         "api-discovery": Path("code2api"),
+        "syft": Path("syft"),
     }
 
     @staticmethod
