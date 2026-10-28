@@ -30,7 +30,7 @@ class ScanCommand(BaseCommand):
         parser.add_argument(
             "--project-name",
             dest="project_name",
-            help="Project name (AccuKnox entity) - Required for SBOM uploads",
+            help="Project name (AccuKnox entity) - Optional for SBOM uploads (auto-created in AccuKnox if omitted)",
         )
         parser.add_argument('--softfail', action='store_true', help='Enable soft fail mode for scanning')
         parser.add_argument('--skip-upload', action='store_true', help='Skip control plane upload')
