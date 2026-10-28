@@ -342,6 +342,8 @@ With AI analysis (CLI flag or per-repo env var):
 accuknox-aspm-scanner scan --skip-upload --keep-results sast --command "scan ." --ai-analysis --aiscan-severity "HIGH,CRITICAL"
 ```
 
+AI analysis is **off by default**; `--ai-analysis` (or the variable below) turns it on, and `--no-ai-analysis` forces it off even when the variable is set.
+
 Per-repo AI-SAST via environment variable (e.g. GitLab CI variable):
 
 ```bash
@@ -690,121 +692,114 @@ ACCUKNOX_TOKEN=abcd1234 \
 accuknox-aspm-scanner scan sq-sast --command "-Dsonar.projectKey=<PROJECT_KEY> -Dsonar.host.url=<HOST_URL> -Dsonar.token=<TOKEN> -Dsonar.organization=<ORG_ID>" --container-mode
 ```
 
-## CI/CD Quality Gate
+## Quality Gates
 
-Evaluate a pipeline run's scan findings against AccuKnox gate policies and **fail the
-build** when a policy is breached. Two pieces work together:
+A quality gate lets the **policy thresholds configured in AccuKnox** decide the build. The CLI uploads every
+scan as part of one run, waits for AccuKnox to evaluate them, and then passes, warns or fails the build from
+the verdict. The thresholds live in AccuKnox (policy service), not in the CLI.
 
-1. Each `scan` upload is **stamped** with a shared run id (`cli_id`) plus the gate
-   scope (`repository` / `branch` / `commit_sha`), so the backend can group the run's
-   scanners and evaluate them.
-2. After the scanners finish, the `gate` command **polls** the verdict for that
-   `cli_id` and exits non-zero when the gate is blocking.
+### Unified run: `pipeline`
 
-The pipeline supplies every value — the CLI does **no** detection. Generate one
-`cli_id` at the start of the run and pass the same scope to every scan.
+```bash
+export ACCUKNOX_ENDPOINT=cspm.accuknox.com ACCUKNOX_LABEL=POC ACCUKNOX_TOKEN=<token>
+export ACCUKNOX_GATE_TOKEN=<user token>   # see "Tokens" below
 
-### What participates in the gate
+accuknox-aspm-scanner pipeline --scans sast,sca,secret,iac,sbom --quality-gate
+```
 
-The gate is implemented for a fixed set of artifact **prefixes** only. `cli_id` and
-the gate-scope params (`repository` / `branch` / `commit_sha`) are attached to the
-artifact upload **only when the scan's upload prefix is gate-supported** — every
-other scan uploads exactly as before, with no gate params. You do not need to gate
-this yourself; the CLI skips the params for unsupported prefixes automatically.
+`pipeline` runs the scans in order, uploads them under one run id, then waits for the verdict (default 5 minutes).
 
-| Scan command | Upload prefix | In the gate? |
+- `--scans`: any of `sast`, `sq-sast`, `sca`, `secret`, `iac`, `sbom` (container/filesystem SBOM).
+- Per-scan options: `--sast-command` (default `scan .`), `--sca-command` (`fs .`), `--secret-command`
+  (`filesystem .`), `--secret-engine`, `--iac-command` (`-d .`), `--sbom-command` (`filesystem .`),
+  `--sq-sast-command`, `--container-mode`.
+- Only scans that produced a result are declared to the gate, so a clean secret scan (nothing to upload)
+  never leaves the gate waiting.
+- With `--quality-gate`, findings no longer fail a scan step: the policy decides. Scans that cannot run or
+  upload still fail the build. Without it, `pipeline` simply runs the scans one after another.
+- `--fail-fast` stops at the first scan that cannot run.
+- `--ai-analysis` runs AI analysis on the scans that support it (today: `sast`; off by default), with
+  `--aiscan-severity`, `--codeassure-config`, `--context-graph-config` and `--graph-no-joern`. These options
+  need `--ai-analysis`. Other scan types ignore it until they gain an AI step.
+
+### Separate steps: `scan --quality-gate` + `gate`
+
+When each scan is its own workflow step, tie them to one run and finish with `gate`:
+
+```bash
+accuknox-aspm-scanner scan --quality-gate --gate-scanners SG,TR,IAC sast --command "scan ."
+accuknox-aspm-scanner scan --quality-gate --gate-scanners SG,TR,IAC sca  --command "fs ."
+accuknox-aspm-scanner scan --quality-gate --gate-scanners SG,TR,IAC iac  --command "-d ."
+accuknox-aspm-scanner gate
+```
+
+`--gate-scanners` must list every scan type the run uploads (`SG` sast, `SQ` sq-sast, `TR` sca/container,
+`IAC`, `TruffleHog`/`DS` secret, `SBOM`). A scan that produces no result (for example a clean secret scan)
+must not be listed, or the gate waits for it. Use `pipeline` to have this handled for you.
+
+All steps of one CI run share a run id automatically (derived from the CI run on GitHub Actions, GitLab,
+Bitbucket, Azure DevOps and Jenkins). Outside CI, or to override it, set `ACCUKNOX_CLI_ID` / `--cli-id`.
+`scan --quality-gate` prints the run id it used.
+
+### Outcome and exit codes
+
+| AccuKnox verdict | Result | Exit code |
 |---|---|---|
-| `sast` | `SG` | ✅ |
-| `sq-sast` | `SQ` | ✅ |
-| `sca` | `TR` | ✅ |
-| `container` (vuln) | `TR` | ✅ |
-| `iac` | `IAC` | ✅ |
-| `secret` (TruffleHog, default) | `TruffleHog` | ✅ |
-| `secret --engine gitleaks` | `DS` | ✅ |
-| `container --generate-sbom` | `SBOM` | ❌ |
-| `ml-scan` | `MLC` | ❌ |
-| `api-discovery` | `API` | ❌ |
-| `dast` | `ZAP` | ❌ |
+| passed | build continues | 0 |
+| warning (a `warn` policy action) | build continues, warning printed | 0 |
+| failed (a `block` policy action) | build fails | 1 |
+| a scan could not be evaluated (unparsable scan, policy service unavailable) | build fails | 2 |
+| no verdict before `--gate-timeout` | `--gate-on-timeout fail` (default) fails, `pass` continues | 2 / 0 |
 
-Gate-supported prefixes: **`SG`, `SQ`, `TR`, `IAC`, `TruffleHog`, `DS`**.
+`--softfail` reports a policy failure without failing the build. It does not hide scans that could not be
+evaluated. The CLI prints a per-scanner table and every breached threshold, adds GitHub annotations, and
+writes a summary to `$GITHUB_STEP_SUMMARY` when available.
 
-### Stamping scans for the gate
+### Options
 
-Pass `--cli-id` (or `ACCUKNOX_CLI_ID`) plus `--repository` / `--branch` /
-`--commit-sha` **before** the scan name. `repository` and `branch` are required for
-a scan to be gated — the backend rejects a `cli_id` without them, so the CLI drops
-the gate params if either is missing.
+- `--quality-gate` (or `ACCUKNOX_QUALITY_GATE=true`): enable the gate.
+- `--gate-timeout <seconds>`: how long to wait for the verdict (default 300).
+- `--gate-on-timeout fail|pass`: what to do if the verdict does not arrive in time (default `fail`).
+- `--cli-id`, `--repository`: override the run id / the `owner/name` that policy scopes match.
+- `--gate-json-file <path>` (or `ACCUKNOX_GATE_JSON_FILE`): also save the gate response to a file.
 
-```bash
-export ACCUKNOX_ENDPOINT=cspm.accuknox.com
-export ACCUKNOX_TOKEN=abcd1234   # must be a tenant-scoped token
-export ACCUKNOX_LABEL=POC
+### Machine-readable result
 
-# 1. one id for the whole run, generated before any scan and reused by all steps
-export ACCUKNOX_CLI_ID=$(uuidgen)
+After the verdict the CLI prints the gate response as JSON on **stdout** (logs go to stderr), between the
+lines `----- quality gate response (json) -----` and `----- end quality gate response -----`:
 
-# 2. run the scanners; gate scope is passed in by the pipeline
-accuknox-aspm-scanner scan --softfail \
-  --repository "org/repo" --branch "main" --commit-sha "$GIT_SHA" \
-  sast --command "scan ." --container-mode
-
-accuknox-aspm-scanner scan --softfail \
-  --repository "org/repo" --branch "main" --commit-sha "$GIT_SHA" \
-  iac --command "-d ." --container-mode
+```json
+{"cli_id": "…", "state": "resolved", "exit_code": 1, "softfail": false, "detail": null,
+ "response": { "status": "failed", "blocking": true, "results": {"SG": {"status": "fail", "counts": {…}, "reasons": […]}}, "overall": […] }}
 ```
 
-A gated upload logs the prefix it stamped, e.g.
-`CI/CD gate: stamped cli_id=... for prefix 'SG'. Pass 'SG' to gate --scanner-prefixes`.
-An unsupported scan logs `Prefix 'ZAP' has no quality-gate support; uploading without
-gate correlation` and is unaffected.
+`response` is the backend's poll response verbatim (empty when no verdict arrived); `state` is
+`resolved | timeout | unsupported | rejected`. Use `--gate-json-file` for automations that should not parse stdout.
 
-### Polling the gate
+The repository and branch are detected from the CI environment or git. Policy scopes are matched against
+`owner/name:branch`; set `ACCUKNOX_REPO_URL` / `ACCUKNOX_BRANCH` when they cannot be detected.
 
-After the scans, run `gate` with the **same** `cli_id` and the list of prefixes you
-uploaded. It waits for evaluation, prints the per-scanner verdict, and sets the exit
-code.
+### Tokens
 
-```bash
-accuknox-aspm-scanner gate --scanner-prefixes SG,IAC,TruffleHog
+Uploads use `ACCUKNOX_TOKEN`. The gate API identifies a *user*, which that token may not, so `gate` and
+`pipeline` use `ACCUKNOX_GATE_TOKEN` (or `--gate-token`) for polling and fall back to `ACCUKNOX_TOKEN`. If the
+fallback is rejected the error says so. Keep both as CI secrets.
+
+### GitHub Actions example
+
+```yaml
+- uses: actions/checkout@v4
+- name: AccuKnox scans and quality gate
+  env:
+    ACCUKNOX_ENDPOINT: cspm.accuknox.com
+    ACCUKNOX_LABEL: my-label
+    ACCUKNOX_TOKEN: ${{ secrets.ACCUKNOX_TOKEN }}
+    ACCUKNOX_GATE_TOKEN: ${{ secrets.ACCUKNOX_GATE_TOKEN }}
+  run: accuknox-aspm-scanner pipeline --scans sast,sca,secret,iac --quality-gate
 ```
 
-Key `gate` flags:
-
-- `--scanner-prefixes` (alias `--scanners`): comma-separated prefixes uploaded this run (`SG,SQ,TR,IAC,TruffleHog,DS`). Also reads `ACCUKNOX_SCANNER_PREFIXES`.
-- `--cli-id` (or `ACCUKNOX_CLI_ID`): the shared run id used by the scans.
-- `--endpoint` / `--token` / `--tenant`: same as scans (env: `ACCUKNOX_ENDPOINT` / `ACCUKNOX_TOKEN` / `ACCUKNOX_TENANT`). `--tenant` is optional.
-- `--gate-timeout` (default `300`) / `--gate-interval` (default `5`): how long to wait for evaluation and how often to poll.
-- `--gate-on-timeout` (`fail` | `pass`, default `fail`): verdict when evaluation does not finish in time (fail-closed).
-- `--softfail` (or `SOFT_FAIL=TRUE`): report a gate **breach** but exit `0`. Does **not** mask a timeout or an auth error.
-
-Exit codes: `0` = gate passed (or breach soft-failed), `1` = gate blocked, timed out fail-closed, or auth failed.
-
-Notes:
-
-- **Always pass `--scanner-prefixes` explicitly** with the prefixes you uploaded. Omitting it lets the backend evaluate only the scanners that happen to have finished, which can pass the gate prematurely while others are still uploading.
-- **Every prefix you list must actually upload** for this `cli_id`. A scanner that produces no artifact never reaches the backend, so the gate waits for it until `--gate-timeout` and then fails fail-closed.
-- The `gate` token must be **tenant-scoped** and should target the same tenant the scanners uploaded to.
-
-A ready-to-use pipeline template is in
-[`examples/github-actions-quality-gate.yml`](examples/github-actions-quality-gate.yml).
-
-## PR Decorator
-
-`decorate-pr` posts scan findings as a pull-request review: one summary comment
-(severity table, quality gate, findings map, AI impact analysis / top fixes) plus
-inline comments on the exact changed lines. Run it right after a scan in a
-`pull_request` job; on any other trigger it logs and exits `0`.
-
-```bash
-accuknox-aspm-scanner decorate-pr   --result-file results.json,results_json.json --scan-type sast,iac   --mode blocking --max-critical 0 --max-high 0
-```
-
-- `--mode advisory` (default) only comments; `blocking` requests changes when a `--max-*` threshold is exceeded.
-- `--llm-api-key` (optional) adds AI remediation and analysis; unset skips it entirely.
-- `--dry-run` previews the comments without a token or network calls.
-
-Providers: GitHub, GitLab, Bitbucket, Azure DevOps. Full flag reference and
-workflow examples: [`docs/pr-decorator.md`](docs/pr-decorator.md).
+The first run for a tenant can be slow while AccuKnox downloads reference data for a scan type, so raise
+`--gate-timeout` if the gate times out on first use.
 
 ## Quickstart
 
@@ -908,3 +903,63 @@ Enable verbose debug mode:
 ```bash
 DEBUG=TRUE accuknox-aspm-scanner scan --skip-upload iac --command "-d ."
 ```
+### Scan compiled artifacts, manifests and existing SBOMs
+
+Install the native inventory and vulnerability engines, or pass `--container-mode`:
+
+```sh
+accuknox-aspm-scanner tool install --type syft
+accuknox-aspm-scanner tool install --type container
+
+# Existing --command workflows remain supported.
+accuknox-aspm-scanner scan --skip-upload --keep-results sca --target ./dist/service
+accuknox-aspm-scanner scan --skip-upload --keep-results sca --target ./dist/application.jar
+accuknox-aspm-scanner scan --skip-upload --keep-results sca --target ./package-lock.json
+accuknox-aspm-scanner scan --skip-upload --keep-results sca --target ./dependencies.cdx.json
+accuknox-aspm-scanner scan --skip-upload --keep-results sbom --target ./dist/service
+
+# Upload results using existing ACCUKNOX_ENDPOINT/TOKEN/LABEL/TENANT settings.
+accuknox-aspm-scanner scan --project-name payments sca --target ./dist/service --asset-name payment-service
+```
+
+`--target-type auto|directory|manifest|binary|archive|sbom` controls input detection.
+`--target` and legacy `--command` are mutually exclusive. Use a directory to include
+companion manifests/lockfiles while preserving relative paths. Standalone manifest
+scans select only that file. No dependency installation or build execution occurs.
+Existing CycloneDX and SPDX **JSON** SBOMs are supported; XML/tag-value are excluded.
+For reproducible disconnected scans, populate `--cache-dir` first, then use
+`--offline`. Container mode mounts the selected input read-only and maps input,
+result and cache paths explicitly; it does not require a Docker socket mount.
+
+Native Syft 1.42.3 downloads are verified against pinned SHA-256 checksums on Linux,
+macOS and Windows. Trivy remains pinned to 0.69.3. `SYFT_IMAGE` and `SCAN_IMAGE`
+override the corresponding container images.
+
+Use `--output-dir` outside the target directory to retain `result.json`,
+`sbom.json`, and `vulnerabilities.json`. Otherwise a temporary result directory is
+used; `--keep-results` retains it. Operational failures retain diagnostics/results.
+Exit codes for these new workflows are `0` success, `1` severity gate, `2`
+operational/incomplete inventory failure. `--softfail` applies to severity gates.
+Limited nonempty inventory can still match advisories; it does not establish that
+all embedded dependencies were identified. Stripped binaries may have no usable
+metadata and cannot be declared vulnerability-free.
+
+### Mobile scanning from CI/CD
+
+Full APK/IPA analysis runs on the backend's existing mobile services:
+
+```sh
+accuknox-aspm-scanner scan --project-name mobile-app mobile --target ./app.apk --asset-name android-app
+accuknox-aspm-scanner scan --project-name mobile-app mobile --target ./app.apk --mode static_dynamic
+accuknox-aspm-scanner scan --project-name mobile-app mobile --target ./app.ipa --mode static
+accuknox-aspm-scanner scan --project-name mobile-app mobile --target ./app.apk --no-wait --idempotency-key build-123
+accuknox-aspm-scanner scan --keep-results mobile --run-id RUN_UUID --output-dir ./mobile-results
+```
+
+Default static mode includes SBOM and dependency vulnerability matching. Dynamic
+mode requires an Android analyzer; IPA supports static/SBOM modes. `--mode sbom`
+uses the backend's mobile inventory and dependency pipeline. Mobile analysis cannot
+use `--skip-upload`. Commands wait by default (`--timeout`, default 3600 seconds),
+or return a run ID with `--no-wait`. Resume a wait/download with `--run-id`.
+A timeout does not cancel the backend run. Backend capability checks report missing
+services or an incompatible deployment before starting work.

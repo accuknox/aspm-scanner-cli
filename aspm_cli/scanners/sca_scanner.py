@@ -11,10 +11,13 @@ class SCAScanner(BaseScanner):
     data_type_identifier = "TR"
 
     def add_arguments(self, parser: argparse.ArgumentParser):
-        parser.add_argument(
+        from aspm_cli.scanners.artifact_scanner import add_target_arguments
+        target = parser.add_mutually_exclusive_group(required=True)
+        target.add_argument("--target", help="Manifest, directory, executable, archive or SBOM")
+        add_target_arguments(parser)
+        target.add_argument(
             "--command",
             type=str,
-            required=True,
             help="Trivy filesystem args (e.g. 'fs .')",
         )
         parser.add_argument(
