@@ -16,6 +16,7 @@ from aspm_cli.utils.sbom_license_merge import (
     should_enrich_filesystem_licenses,
     syft_scan_source,
 )
+from aspm_cli.scan.trivy_runner import _fix_result_file_permissions_if_docker
 from aspm_cli.utils.docker_runtime import build_docker_run_prefix, trivy_scan_needs_docker_socket
 from colorama import Fore
 
@@ -76,6 +77,9 @@ class ContainerScanner:
             if self.generate_sbom:
                 # SBOM mode: Always use self.result_file (forced to ./results.json)
                 if os.path.exists(self.result_file):
+                    # Trivy ran as root in Docker, so the host cannot rewrite its output (project_name/classifier
+                    # enrichment would silently fail); hand the file back first.
+                    _fix_result_file_permissions_if_docker(self.container_mode, self.result_file)
                     if self.enrich_licenses:
                         enrich_rc = self._enrich_licenses_from_syft()
                         if enrich_rc != 0:
