@@ -179,3 +179,7 @@ test.py
 utils/container.tar.gz
 utils/iac
 utils/secret
+
+# Real scan output samples used to verify pr_decorator adapters - large,
+# and carries real repo names/URLs, so never committed.
+sample_results/

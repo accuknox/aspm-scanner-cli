@@ -1,0 +1,40 @@
+name: Test Binary Build (Linux)
+
+# Manual-only, pre-production build of the Linux binary as a downloadable
+# workflow artifact. No tags, no GitHub Release, no other OS - entirely
+# separate from release.yml (the real release pipeline shared with
+# upstream), so a test build here can never touch it.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build-linux-binary:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Linux executable (Debian 11 / glibc 2.31)
+        run: |
+          docker run --rm \
+            -v "$PWD":/src \
+            -w /src \
+            python:3.10-bullseye \
+            bash -euo pipefail -c '
+              python -m pip install --upgrade pip pipenv
+              pipenv install
+              pipenv run pip install pyinstaller
+              pipenv run pyinstaller accuknox-aspm-scanner.spec
+            '
+
+      - name: Test Binary
+        run: ./dist/accuknox-aspm-scanner --help
+
+      - name: Upload Linux binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: accuknox-aspm-scanner-linux-amd64
+          retention-days: 7
+          path: dist/accuknox-aspm-scanner
