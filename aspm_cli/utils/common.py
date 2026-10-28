@@ -24,6 +24,19 @@ ALLOWED_SCAN_TYPES = [
     "api-discovery",
 ]
 
+# Artifact data_type prefixes the CI/CD quality gate can evaluate. Must stay in
+# sync with the backend's PREFIX_TO_BUCKET (cicd/buckets.py). Only uploads whose
+# prefix is in this set are stamped with the gate correlation params; every other
+# prefix (e.g. SBOM, MLC, API, ZAP) uploads ungated as before.
+GATE_SUPPORTED_PREFIXES = {
+    "SG",          # sast
+    "SQ",          # sq-sast
+    "TR",          # sca / container (vuln)
+    "IAC",         # iac
+    "TruffleHog",  # secret (trufflehog, default)
+    "DS",          # secret --engine gitleaks
+}
+
 def _build_endpoint_url(endpoint, api_path):
     """
     Build the full URL for API requests.
@@ -52,7 +65,8 @@ def print_banner():
         # Skipping if there are any issues with Unicode chars
         print(Fore.BLUE + "ACCUKNOX ASPM SCANNER")
 
-def upload_results(file_path, endpoint, label, token, tenant_id, data_type, keep_file=False):
+def upload_results(file_path, endpoint, label, token, tenant_id, data_type, keep_file=False,
+                   cli_id=None, repository=None, branch=None, commit_sha=None):
     upload_exit_code = 1
     """Uploads scan results to the AccuKnox endpoint."""
     logger = Logger.get_logger()
@@ -79,6 +93,30 @@ def upload_results(file_path, endpoint, label, token, tenant_id, data_type, keep
     }
     if tenant_id:
         params["tenant_id"] = tenant_id
+
+    # CI/CD quality gate correlation. Only stamp the gate params when this
+    # scanner's prefix is one the gate actually supports (GATE_SUPPORTED_PREFIXES)
+    # AND repository+branch are present (the backend rejects cli_id without them).
+    # Unsupported prefixes (ZAP, MLC, API, DS, ...) upload ungated, exactly as before.
+    if cli_id and data_type in GATE_SUPPORTED_PREFIXES and repository and branch:
+        params["cli_id"] = cli_id
+        params["repository"] = repository
+        params["branch"] = branch
+        if commit_sha:
+            params["commit_sha"] = commit_sha
+        logger.info(
+            f"CI/CD gate: stamped cli_id={cli_id} for prefix '{data_type}'. "
+            f"Pass '{data_type}' to `gate --scanner-prefixes`."
+        )
+    elif cli_id and data_type not in GATE_SUPPORTED_PREFIXES:
+        logger.info(
+            f"Prefix '{data_type}' has no quality-gate support; uploading without gate correlation."
+        )
+    elif cli_id:
+        logger.warning(
+            "cli_id provided but repository/branch missing; uploading without gate "
+            "correlation (this scan will not be evaluated by the CI/CD gate)."
+        )
 
     # Log request details when DEBUG is enabled
     if logger.level == logging.DEBUG:
@@ -151,6 +189,27 @@ def upload_results(file_path, endpoint, label, token, tenant_id, data_type, keep
                 logger.info(f"Results file kept at: {file_path}")
     
     return upload_exit_code
+
+def poll_gate_status(endpoint, token, cli_id, prefixes, tenant_id=None):
+    """Poll the CI/CD quality-gate verdict for a pipeline run.
+
+    GET /api/v1/cicd/scan-status/?cli_id=<uuid>&scanner_prefix=<comma-list>.
+    Returns the parsed JSON verdict; raises requests.HTTPError on a non-2xx so the
+    caller can distinguish auth (401/403) and not-ready (404) from a real result.
+    tenant_id is optional: when present it is stamped on the header and query, else ignored.
+    """
+    headers = {"Authorization": f"Bearer {token}"}
+    if tenant_id:
+        headers["Tenant-Id"] = tenant_id
+    params = {"cli_id": cli_id}
+    if prefixes:
+        params["scanner_prefix"] = ",".join(prefixes)
+    if tenant_id:
+        params["tenant_id"] = tenant_id
+    url = _build_endpoint_url(endpoint, "/api/v1/cicd/scan-status/")
+    response = requests.get(url, headers=headers, params=params, verify=False, timeout=30)
+    response.raise_for_status()
+    return response.json()
 
 def handle_failure(exit_code: int, softfail: bool, allow_softfail: bool = True):
     """
