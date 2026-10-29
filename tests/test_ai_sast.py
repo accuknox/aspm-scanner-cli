@@ -33,6 +33,14 @@ class AiSastTests(unittest.TestCase):
         self.assertEqual([r["is_false_positive"] for r in data["results"]], [False, True, None, None])
         self.assertNotIn("severity_by_ai", data["results"][2])
 
+    def test_partial_with_only_unanchored_or_skipped_findings_is_not_a_failed_analysis(self):
+        partial = SASTScanner._partial_is_only_unanchored
+        self.assertTrue(partial({"total": 7, "analyzed": 5, "unanchored": 2, "skipped": 0, "fallback": 0}))
+        self.assertTrue(partial({"total": 7, "analyzed": 3, "unanchored": 2, "skipped": 2, "fallback": 0}))
+        self.assertFalse(partial({"total": 7, "analyzed": 4, "unanchored": 2, "skipped": 0, "fallback": 0}))  # one finding unaccounted for
+        self.assertFalse(partial({"total": 7, "analyzed": 5, "unanchored": 2, "skipped": 0, "fallback": 1}))  # LLM fell back
+        self.assertFalse(partial({}))
+
     def test_ai_process_failure_preserves_base_report_and_returns_operational_error(self):
         with tempfile.TemporaryDirectory() as directory:
             scanner = SASTScanner(container_mode=False, ai_analysis=True)
