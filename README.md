@@ -351,7 +351,7 @@ accuknox-aspm-scanner tool install --type codeassure
 ```
 
 They are downloaded from the matching aspm-scanner-cli release (`codeassure-<os>-<arch>`, `context-graph-<os>-<arch>` and an
-`ai-sast-SHA256SUMS` file) and every file is verified against that checksum list before it is installed. Supported: Linux amd64,
+`ai-sast-SHA256SUMS` file; the release workflow attaches them automatically from the pinned codeassure-cli and code-context-graph releases) and every file is verified against that checksum list before it is installed. Supported: Linux amd64,
 macOS arm64, Windows amd64. Set `AI_SAST_BASE_URL` to download from another location, or `CODEASSURE_EXECUTABLE` to use a binary you
 already have. The LLM settings come from `--codeassure-config` (a `codeassure.json`) or `CODEASSURE_*` environment variables.
 
