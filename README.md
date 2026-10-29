@@ -26,7 +26,7 @@ It can upload results to the **AccuKnox ASPM Platform**, but it can also run in 
 Install from the GitHub release wheel:
 
 ```bash
-pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.16.1/accuknox_aspm_scanner-0.16.1-py3-none-any.whl
+pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.16.2/accuknox_aspm_scanner-0.16.2-py3-none-any.whl
 ```
 
 ### 2. Restricted or on-prem environment
@@ -50,7 +50,7 @@ Install the cross-platform Python wheel (same as connected environment above), o
 ```bash
 # Linux x86_64
 curl -fL -o accuknox-aspm-scanner \
-  https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.16.1/accuknox-aspm-scanner-linux-amd64
+  https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.16.2/accuknox-aspm-scanner-linux-amd64
 chmod +x accuknox-aspm-scanner
 ```
 
@@ -343,6 +343,17 @@ accuknox-aspm-scanner scan --skip-upload --keep-results sast --command "scan ." 
 ```
 
 AI analysis is **off by default**; `--ai-analysis` (or the variable below) turns it on, and `--no-ai-analysis` forces it off even when the variable is set.
+
+Local mode needs two standalone binaries installed side by side, `codeassure` and `context-graph`:
+
+```bash
+accuknox-aspm-scanner tool install --type codeassure
+```
+
+They are downloaded from the matching aspm-scanner-cli release (`codeassure-<os>-<arch>`, `context-graph-<os>-<arch>` and an
+`ai-sast-SHA256SUMS` file) and every file is verified against that checksum list before it is installed. Supported: Linux amd64,
+macOS arm64, Windows amd64. Set `AI_SAST_BASE_URL` to download from another location, or `CODEASSURE_EXECUTABLE` to use a binary you
+already have. The LLM settings come from `--codeassure-config` (a `codeassure.json`) or `CODEASSURE_*` environment variables.
 
 Per-repo AI-SAST via environment variable (e.g. GitLab CI variable):
 

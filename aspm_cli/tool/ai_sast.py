@@ -1,35 +1,76 @@
-"""Install the matching local CodeAssure and context-graph sources together."""
+"""Checksum-verified install of the AI SAST binaries (codeassure + context-graph), side by side.
+
+codeassure looks for ``context-graph`` next to its own executable first, so both go in one folder.
+The binaries and an ``ai-sast-SHA256SUMS`` file are hosted on the matching aspm-scanner-cli release
+(context-graph's own repo is private); set ``AI_SAST_BASE_URL`` to fetch them from somewhere else.
+"""
+import hashlib
 import os
+import platform
+import shutil
+import urllib.request
 from pathlib import Path
-import subprocess
-import sys
 
 from aspm_cli.utils.logger import Logger
+from aspm_cli.utils.version import get_version
+
+SUMS_NAME = "ai-sast-SHA256SUMS"
+TOOLS = ("codeassure", "context-graph")
+PLATFORMS = {("Linux", "amd64"): "linux-amd64", ("Darwin", "arm64"): "darwin-arm64", ("Windows", "amd64"): "windows-amd64"}
+
+
+def _base_url():
+    override = (os.getenv("AI_SAST_BASE_URL") or "").strip().rstrip("/")
+    return override or f"https://github.com/accuknox/aspm-scanner-cli/releases/download/v{get_version()}"
+
+
+def _download(url):
+    with urllib.request.urlopen(url, timeout=120) as response:  # timeout is per read, so big files still finish
+        return response.read()
+
+
+def _parse_sums(text):
+    sums = {}
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) == 2:
+            sums[parts[1].lstrip("*")] = parts[0].lower()
+    return sums
 
 
 def install_ai_sast(install_dir, overwrite=False):
-    if getattr(sys, "frozen", False) or sys.version_info < (3, 11):
-        Logger.get_logger().error("AI SAST source installation requires Python 3.11+; install both CLIs in a Python environment and set CODEASSURE_EXECUTABLE.")
+    system = platform.system()
+    machine = platform.machine().lower()
+    arch = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(machine, machine)
+    target = PLATFORMS.get((system, arch))
+    if not target:
+        Logger.get_logger().error(f"AI SAST binaries are not available for {system} {arch} (Linux amd64, macOS arm64, Windows amd64).")
         return False
-    root = Path(__file__).resolve().parents[3]
-    codeassure = Path(os.getenv("CODEASSURE_SOURCE", str(root / "codeassure-cli"))).expanduser().resolve()
-    graph = Path(os.getenv("CONTEXT_GRAPH_SOURCE", str(root / "code-context-graph"))).expanduser().resolve()
-    if not all((path / "pyproject.toml").is_file() for path in (codeassure, graph)):
-        Logger.get_logger().error("Set CODEASSURE_SOURCE and CONTEXT_GRAPH_SOURCE to the matching source checkouts before installing AI SAST.")
-        return False
-    environment = Path(install_dir) / "codeassure" / "venv"
-    python = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-    try:
-        if not python.is_file():
-            subprocess.run([sys.executable, "-m", "venv", str(environment)], check=True)
-        subprocess.run([str(python), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"], check=True)
-        subprocess.run([str(python), "-m", "pip", "install", "-e", str(graph), "-e", str(codeassure)], check=True)
-        # Joern gives real data-flow graphs; without it context-graph falls back to tree-sitter.
-        # Best effort: a missing JDK or offline install must not fail the AI SAST setup.
-        joern = subprocess.run([str(python), "-m", "context_graph.cli", "install-joern"], check=False)
-        if joern.returncode != 0:
-            Logger.get_logger().warning("Joern was not installed; AI SAST will use degraded tree-sitter graphs. Run `context-graph install-joern` once a JDK 17+ is available.")
+    suffix = ".exe" if system == "Windows" else ""
+    folder = Path(install_dir) / "codeassure"
+    destinations = {tool: folder / f"{tool}{suffix}" for tool in TOOLS}
+    if not overwrite and all(path.exists() for path in destinations.values()):
         return True
-    except (OSError, subprocess.CalledProcessError):
-        Logger.get_logger().error("AI SAST environment installation failed; see pip output above.")
+    base = _base_url()
+    try:
+        sums = _parse_sums(_download(f"{base}/{SUMS_NAME}").decode("utf-8"))
+        staged = {}
+        for tool in TOOLS:
+            name = f"{tool}-{target}{suffix}"
+            expected = sums.get(name)
+            if not expected:
+                raise ValueError(f"{name} is not listed in {SUMS_NAME}")
+            data = _download(f"{base}/{name}")
+            if hashlib.sha256(data).hexdigest() != expected:
+                raise ValueError(f"{name} checksum mismatch")
+            staged[tool] = data
+        folder.mkdir(parents=True, exist_ok=True)
+        for tool, data in staged.items():  # only after every file verified, so a bad download never leaves half an install
+            temporary = destinations[tool].with_name(destinations[tool].name + ".installing")
+            temporary.write_bytes(data)
+            temporary.chmod(0o755)
+            os.replace(temporary, destinations[tool])
+        return True
+    except (OSError, ValueError) as exc:
+        Logger.get_logger().error(f"AI SAST installation failed: {exc}")
         return False

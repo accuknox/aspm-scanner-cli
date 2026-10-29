@@ -1,3 +1,11 @@
+aspm-scanner-cli (0.16.2) unstable; urgency=medium
+
+  * AI SAST: install the standalone codeassure and context-graph binaries (checksum verified)
+    instead of building them from source; fix SBOM project name/classifier in Linux container mode
+  * Align CLI, wheel, and package version metadata to 0.16.2
+
+ -- AccuKnox <accuknox@accuknox.com>  Thu, 29 Oct 2026 12:00:00 +0530
+
 aspm-scanner-cli (0.16.1) unstable; urgency=medium
 
   * Add PR decorator (decorate-pr), pipeline command and quality gate, SBOM license enrichment,
