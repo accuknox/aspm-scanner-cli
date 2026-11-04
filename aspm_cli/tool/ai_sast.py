@@ -25,10 +25,11 @@ def install_ai_sast(install_dir, overwrite=False):
         subprocess.run([str(python), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"], check=True)
         subprocess.run([str(python), "-m", "pip", "install", "-e", str(graph), "-e", str(codeassure)], check=True)
         # Joern gives real data-flow graphs; without it context-graph falls back to tree-sitter.
-        # Best effort: a missing JDK or offline install must not fail the AI SAST setup.
+        # install-joern also fetches a private Java runtime when the host has none. Best effort:
+        # an offline install must not fail the AI SAST setup (the first scan retries it).
         joern = subprocess.run([str(python), "-m", "context_graph.cli", "install-joern"], check=False)
         if joern.returncode != 0:
-            Logger.get_logger().warning("Joern was not installed; AI SAST will use degraded tree-sitter graphs. Run `context-graph install-joern` once a JDK 17+ is available.")
+            Logger.get_logger().warning("Joern was not installed; AI SAST will use degraded tree-sitter graphs. Check network access and rerun `context-graph install-joern`.")
         return True
     except (OSError, subprocess.CalledProcessError):
         Logger.get_logger().error("AI SAST environment installation failed; see pip output above.")
