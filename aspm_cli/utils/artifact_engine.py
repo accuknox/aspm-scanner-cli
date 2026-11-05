@@ -252,6 +252,14 @@ def scan_artifact(target, output_dir, target_type="auto", asset_name=None, proje
         root = bom.setdefault("metadata", {}).setdefault("component", {})
         root.update({"type": "application", "name": artifact["name"], "version": sha256[:12],
                      "hashes": [{"alg": "SHA-256", "content": sha256}]})
+        try:
+            # Author, lifecycle, per-component CERT-In fields and the conformance attestation.
+            from aspm_cli.certin.augment import augment_cyclonedx
+            from aspm_cli.utils.certin_sbom import resolve_sbom_author
+            report = augment_cyclonedx(bom, author=resolve_sbom_author(), lifecycle="analyzed", level="complete")
+            result["certin"] = {"status": report["status"], "populated_pct": report["populated_pct"]}
+        except Exception as exc:  # the SBOM is still valid without them
+            result["coverage_reasons"].append(f"CERT-In fields were not added: {exc}")
         bom_path.write_text(json.dumps(bom), encoding="utf-8")
         return bom
     result["sbom"] = stage("inventory", inventory)

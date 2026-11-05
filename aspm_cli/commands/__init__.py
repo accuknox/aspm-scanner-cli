@@ -1,3 +1,4 @@
+from .cert_in_command import CertInCheckCommand
 from .gate_command import GateCommand
 from .pipeline_command import PipelineCommand
 from .precommit_command import PreCommitCommand
@@ -5,6 +6,7 @@ from .scan_command import ScanCommand
 from .tool_command import ToolCommand
 
 command_registry = {
+    "cert-in-check": CertInCheckCommand,
     "gate": GateCommand,
     "pipeline": PipelineCommand,
     "pre-commit": PreCommitCommand,

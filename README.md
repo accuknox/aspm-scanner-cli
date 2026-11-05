@@ -425,6 +425,7 @@ Flags used after `container`:
 
 - `--container-mode`
 - `--generate-sbom`
+- `--sbom-format`, `--sbom-author`, `--sbom-output`, `--cert-in-check` (see [SBOM standard, author and the CERT-In check](#sbom-standard-author-and-the-cert-in-check))
 
 Typical `--command` values:
 
@@ -471,6 +472,33 @@ ACCUKNOX_LABEL=POC \
 ACCUKNOX_TOKEN=abcd1234 \
 accuknox-aspm-scanner scan container --command "image nginx:latest" --container-mode
 ```
+
+#### SBOM standard, author and the CERT-In check
+
+Flags used after `container` with `--generate-sbom` (also accepted by `pipeline --scans sbom`):
+
+- `--sbom-format cyclonedx|spdx` — the standard to generate (default `cyclonedx`; `spdx` writes SPDX 2.3 JSON).
+- `--sbom-author NAME` — the "author of SBOM data". Default: `ACCUKNOX_SBOM_AUTHOR`, then the CI actor (`GITLAB_USER_EMAIL`, `GITHUB_ACTOR`, ...), then `git config user.email`, then `AccuKnox ASPM Scanner`.
+- `--sbom-output FILE` — also write the finished SBOM to `FILE`. This copy leaves out the platform-only top-level fields (`project_name`, `project_classifier`), so it passes strict CycloneDX/SPDX validators. The uploaded file keeps them.
+- `--cert-in-check` — check the SBOM against the CERT-In minimum data fields (21 fields, CERT-In Technical Guidelines on SBOM v2.0) and exit `1` unless it is conformant.
+
+Every SBOM the scanner generates now carries the author, assembly time, lifecycle (`source` for a repository, `analyzed` for an image) and SBOM level, the fields that can be worked out automatically on each component (origin, criticality, patch status, usage restrictions, executable/archive/structured, unique identifier), and a conformance attestation (`accuknox:cert-in:*` properties in CycloneDX, annotations in SPDX).
+
+A field the scanner cannot know (a supplier a lockfile does not name, for example) is written as an explicit unknown with a reason code (`certin:unknown:<field>`), not left out and not guessed. The check reports how much of the data is real: `Conformant (34 components, 59.5% of fields populated, 40.5% declared unknown)`.
+
+```bash
+accuknox-aspm-scanner scan --skip-upload --project-name demo container \
+  --command "filesystem ." --generate-sbom --sbom-format spdx --cert-in-check --sbom-output sbom.spdx.json
+```
+
+Notes on what the check means:
+
+- The guideline defines no pass/fail rule. "Conformant" here is AccuKnox's reading of it: every field is populated on every component, or declared unknown with a reason. It is not a CERT-In certification.
+- The 21 fields are mandatory for software supplied to government and public-sector bodies; for others they are recommended.
+- The platform and this package use the same rules; independent open tools (`cyclonedx-cli validate`, `pyspdxtools -i`) check the file format only, not CERT-In conformance.
+- To check a file you already have, run `accuknox-aspm-scanner cert-in-check sbom.json` (add `--json` for the full report). It exits 0 when conformant, 1 when partially or not conformant, 2 when the file cannot be read, and it says whether the file's own attestation still matches its content.
+- VEX/CSAF statements are not generated.
+- `aspm_cli/certin/` is a copy of the platform's `xbom/certin`; do not edit it here.
 
 ### ML Scan
 

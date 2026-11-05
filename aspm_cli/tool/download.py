@@ -1,3 +1,4 @@
+import hashlib
 import os
 import platform
 import shutil
@@ -51,6 +52,31 @@ WINDOWS_SUPPORTED_TOOLS = frozenset({
     "sq-sast",
     "codeassure",
 })
+
+
+# SHA-256 of the pinned release assets. Change a version or URL together with its hash: a download
+# that does not match is deleted and the install fails, so a swapped or truncated file never runs.
+# Trivy: from the release's own trivy_<version>_checksums.txt.
+TRIVY_SHA256 = {
+    f"trivy_{TRIVY_VERSION}_macOS-64bit.tar.gz": "fec4a9f7569b624dd9d044fca019e5da69e032700edbb1d7318972c448ec2f4e",
+    f"trivy_{TRIVY_VERSION}_macOS-ARM64.tar.gz": "a2f2179afd4f8bb265ca3c7aefb56a666bc4a9a411663bc0f22c3549fbc643a5",
+    f"trivy_{TRIVY_VERSION}_windows-64bit.zip": "74362dc711383255308230ecbeb587eb1e4e83a8d332be5b0259afac6e0c2224",
+}
+# AccuKnox Linux tool bundles (the URLs in ToolDownloader.TOOL_URLS), hashed when pinned.
+LINUX_TARBALL_SHA256 = {
+    "iac": "9dfa1541d16aa5d0817db36c43c30b57ba508ae1b22bdf8813dc9384fd9b1090",
+    "container": "55c0750f30fdbf59e8c8b6b8874f60bad1f503499ba3cc8422c99203b7a52792",
+    "secret": "2fe0c40502796fab0e2b544d13d48bf97e68b053f3e131ede5962753f6aa4891",
+    "sq-sast": "22daa837206167d7836f389d03614737c84fb6df6ca30c4ad2b2b42e841a76bb",
+    "sast": "5a4eabcfcde94755de2dddee1fda36e40d3e6141a2a671e329c46c9de6b4e2e5",
+    "dast": "3fcfe4f6a121f3edcc0c2fbaef74bfcd4c3f5ecc2fcb348d00fe9bf483605607",
+    "codeassure": "83a5d92bbe1552c7f08bf86d7112e341103c173d64c0f7da453cf3ad8281596f",
+    "gitleaks": "d1647c79e6892e71405d96d5d08d8e2b4d7fa9e19cb9fc25ff628b5efffcd6a6",
+}
+
+
+class ChecksumMismatch(ValueError):
+    """A downloaded file does not match its pinned SHA-256."""
 
 
 class ToolDownloader:
@@ -177,17 +203,25 @@ class ToolDownloader:
                 return True
         return True
 
-    def _download_file(self, url: str, dest: Path):
+    def _download_file(self, url: str, dest: Path, sha256: str = None):
         Logger.get_logger().debug(f"Downloading {url}")
         # timeout is per socket read, so slow-but-moving big downloads still finish
         with urllib.request.urlopen(url, timeout=60) as r, open(dest, "wb") as f:
             shutil.copyfileobj(r, f)
+        if sha256:
+            digest = hashlib.sha256()
+            with open(dest, "rb") as f:
+                for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            if digest.hexdigest() != sha256:
+                Path(dest).unlink(missing_ok=True)
+                raise ChecksumMismatch(f"Checksum mismatch for {url}; the download was discarded")
 
     def _download_and_extract_tar_gz(self, url: str, extract_to: Path, tool_type: str) -> bool:
         with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
             tmp_name = tmp.name
         try:
-            self._download_file(url, Path(tmp_name))
+            self._download_file(url, Path(tmp_name), LINUX_TARBALL_SHA256.get(tool_type))
             with tarfile.open(tmp_name, "r:gz") as tar:
                 members = tar.getmembers()
                 if not members:
@@ -333,7 +367,7 @@ class ToolDownloader:
         url = f"https://github.com/aquasecurity/trivy/releases/download/v{TRIVY_VERSION}/{tar_name}"
         with tempfile.TemporaryDirectory() as tmp:
             tar_path = Path(tmp) / tar_name
-            self._download_file(url, tar_path)
+            self._download_file(url, tar_path, TRIVY_SHA256.get(tar_name))
             with tarfile.open(tar_path, "r:gz") as tar:
                 tar.extractall(path=tmp)
             src = Path(tmp) / "trivy"
@@ -519,7 +553,7 @@ class ToolDownloader:
         url = f"https://github.com/aquasecurity/trivy/releases/download/v{TRIVY_VERSION}/{zip_name}"
         with tempfile.TemporaryDirectory() as tmp:
             zip_path = Path(tmp) / zip_name
-            self._download_file(url, zip_path)
+            self._download_file(url, zip_path, TRIVY_SHA256.get(zip_name))
             with zipfile.ZipFile(zip_path, "r") as zf:
                 zf.extractall(tmp)
             src = self._find_extracted_file(Path(tmp), ["trivy.exe", "trivy"])

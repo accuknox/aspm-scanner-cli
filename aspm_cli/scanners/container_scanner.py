@@ -27,6 +27,35 @@ class ContainerScanner(BaseScanner):
             action="store_true",
             help="Generate SBOM instead of running a vulnerability scan"
         )
+        parser.add_argument(
+            "--sbom-format",
+            choices=("cyclonedx", "spdx"),
+            default="cyclonedx",
+            help="SBOM standard to generate with --generate-sbom (default: cyclonedx)"
+        )
+        parser.add_argument(
+            "--sbom-author",
+            type=str,
+            default=None,
+            help=(
+                "Author recorded in the SBOM (CERT-In 'Author of SBOM data'). "
+                "Default: ACCUKNOX_SBOM_AUTHOR, the CI actor, the git identity, then the scanner."
+            )
+        )
+        parser.add_argument(
+            "--sbom-output",
+            type=str,
+            default=None,
+            help="Also write the finished SBOM to this file (the upload still uses ./results.json)"
+        )
+        parser.add_argument(
+            "--cert-in-check",
+            action="store_true",
+            help=(
+                "Check the generated SBOM against the CERT-In minimum data fields and exit 1 "
+                "unless it is conformant"
+            )
+        )
 
     def validate_config(self, args: argparse.Namespace, validator: ConfigValidator):
         validator.validate_container_scan(
@@ -38,5 +67,10 @@ class ContainerScanner(BaseScanner):
     def run_scan(self, args: argparse.Namespace) -> tuple[int, str]:
         # Instantiate and run the original scanner logic
         generate_sbom = getattr(args, "generate_sbom", False)
-        scanner = OriginalContainerScanner(args.command, args.container_mode, generate_sbom=generate_sbom)
+        scanner = OriginalContainerScanner(
+            args.command,
+            args.container_mode,
+            generate_sbom=generate_sbom,
+            sbom_format=getattr(args, "sbom_format", "cyclonedx"),
+        )
         return scanner.run()

@@ -20,7 +20,7 @@ from typing import Callable, Mapping
 import requests
 from colorama import Fore
 
-from aspm_cli.utils.common import _build_endpoint_url
+from aspm_cli.utils.common import _build_endpoint_url, tls_verify
 from aspm_cli.utils.ingest_identity import derive_repository
 from aspm_cli.utils.logger import Logger
 
@@ -163,7 +163,7 @@ def poll_gate(
     last_pending = None
     while True:
         try:
-            response = http_get(url, headers=headers, params={"cli_id": cli_id}, timeout=(10, 30), verify=False)
+            response = http_get(url, headers=headers, params={"cli_id": cli_id}, timeout=(10, 30), verify=tls_verify())
         except requests.RequestException as exc:
             detail = f"{type(exc).__name__}: {exc}"
             logger.debug(f"Quality gate poll failed, retrying: {detail}")

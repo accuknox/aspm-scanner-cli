@@ -11,6 +11,13 @@ import os
 from dataclasses import dataclass
 
 from aspm_cli.scanners import scanner_registry
+from aspm_cli.utils.certin_sbom import (
+    copy_output,
+    finalize_sbom_file,
+    is_conformant,
+    print_report,
+    resolve_sbom_author,
+)
 from aspm_cli.utils.common import upload_results
 from aspm_cli.utils.config import ConfigValidator
 from aspm_cli.utils.logger import Logger
@@ -32,6 +39,8 @@ class ScanRun:
     exit_code: int
     result_file: str | None
     is_sbom: bool = False
+    # --cert-in-check was asked for and the SBOM is not conformant.
+    certin_failed: bool = False
 
 
 @dataclass
@@ -99,13 +108,38 @@ def run_scan(args, accuknox_config: dict, softfail: bool, skip_upload: bool) -> 
         except Exception as exc:
             Logger.get_logger().debug(f"Failed to enrich SBOM results.json: {exc}")
 
+    certin_failed = False
+    if is_sbom and result_file and os.path.exists(result_file):
+        certin_failed = _finalize_certin(args, result_file)
+
     return ScanRun(
         scantype=scantype,
         data_type="SBOM" if is_sbom else scanner.get_data_type_identifier(),
         exit_code=exit_code,
         result_file=result_file,
         is_sbom=is_sbom,
+        certin_failed=certin_failed,
     )
+
+
+def _finalize_certin(args, result_file: str) -> bool:
+    """Stamp the CERT-In fields on the SBOM, report the verdict, and say whether --cert-in-check failed."""
+    check = getattr(args, "cert_in_check", False)
+    try:
+        report = finalize_sbom_file(
+            result_file,
+            resolve_sbom_author(getattr(args, "sbom_author", None)),
+            derive_sbom_classifier(getattr(args, "command", "") or ""),
+        )
+    except Exception as exc:
+        Logger.get_logger().warning(f"Could not add the CERT-In fields to the SBOM: {exc}")
+        return check
+    copy_output(result_file, getattr(args, "sbom_output", None))
+    if check:
+        print_report(report)
+        return not is_conformant(report)
+    Logger.get_logger().debug(f"CERT-In SBOM data fields: {report['status_label']}")
+    return False
 
 
 def discard_result(run: ScanRun, keep_results: bool) -> None:

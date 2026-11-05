@@ -36,7 +36,12 @@ SCAN_BUILDERS = {
     "sca": ("SCA", lambda a: ["--command", a.sca_command]),
     "secret": ("SECRET", lambda a: ["--command", a.secret_command, "--engine", a.secret_engine]),
     "iac": ("IAC", lambda a: ["--command", a.iac_command]),
-    "sbom": ("CONTAINER", lambda a: ["--command", a.sbom_command, "--generate-sbom"]),
+    "sbom": (
+        "CONTAINER",
+        lambda a: ["--command", a.sbom_command, "--generate-sbom", "--sbom-format", a.sbom_format]
+        + (["--sbom-author", a.sbom_author] if a.sbom_author else [])
+        + (["--cert-in-check"] if a.cert_in_check else []),
+    ),
 }
 
 
@@ -97,6 +102,9 @@ class PipelineCommand(BaseCommand):
         parser.add_argument("--secret-engine", choices=["trufflehog", "gitleaks"], default="trufflehog")
         parser.add_argument("--iac-command", default="-d .", help="IaC scanner arguments (default: '-d .')")
         parser.add_argument("--sbom-command", default="filesystem .", help="SBOM arguments (default: 'filesystem .')")
+        parser.add_argument("--sbom-format", choices=("cyclonedx", "spdx"), default="cyclonedx", help="SBOM standard (default: cyclonedx)")
+        parser.add_argument("--sbom-author", default=None, help="Author recorded in the SBOM (default: CI actor or git identity)")
+        parser.add_argument("--cert-in-check", action="store_true", help="Fail unless the SBOM meets the CERT-In minimum data fields")
         parser.set_defaults(func=self.execute)
 
     def execute(self, args):
@@ -202,6 +210,8 @@ class PipelineCommand(BaseCommand):
         worst = 0
         for scan, run in runs:
             code = gate_exit_code(run, scan in uploaded) if quality_gate else run.exit_code
+            if run.certin_failed:
+                code = max(code, 1)
             if code != 0 and not (softfail and not (run.scantype.upper() == "SAST" and code == 2)):
                 worst = max(worst, code)
 

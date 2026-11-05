@@ -8,6 +8,7 @@ from aspm_cli.utils.logger import Logger
 from aspm_cli.utils import docker_pull
 from aspm_cli.utils import config
 from aspm_cli.utils.subprocess_utils import utf8_text
+from aspm_cli.utils.certin_sbom import TRIVY_FORMAT
 from aspm_cli.utils.sbom import append_sbom_scanner_flags, normalize_sbom_args_for_docker
 from aspm_cli.utils.docker_runtime import build_docker_run_prefix, trivy_scan_needs_docker_socket
 from colorama import Fore
@@ -16,10 +17,11 @@ class ContainerScanner:
     ak_container_image = os.getenv("SCAN_IMAGE", "public.ecr.aws/k9v9d5v2/accuknox/trivy:0.69.3")
     result_file = './results.json'
 
-    def __init__(self, command, container_mode=False, generate_sbom: bool = False):
+    def __init__(self, command, container_mode=False, generate_sbom: bool = False, sbom_format: str = "cyclonedx"):
         self.command = command
         self.container_mode = container_mode
         self.generate_sbom = generate_sbom
+        self.sbom_format = sbom_format
 
     def run(self):
         try:
@@ -55,7 +57,12 @@ class ContainerScanner:
                     result.stderr,
                     flags=re.IGNORECASE,
                 )
-                Logger.get_logger().error(sanitized_stderr)
+                # The scanner writes its progress and warnings to stderr on success too; only a
+                # failed run is an error.
+                if result.returncode == 0:
+                    Logger.get_logger().warning(sanitized_stderr)
+                else:
+                    Logger.get_logger().error(sanitized_stderr)
 
             if self.generate_sbom:
                 # SBOM mode: Always use self.result_file (forced to ./results.json)
@@ -83,7 +90,7 @@ class ContainerScanner:
         reliably find the JSON output for vulnerability scans.
         """
         if self.generate_sbom:
-            # SBOM mode: Force cyclonedx format and JSON output
+            # SBOM mode: force the chosen SBOM standard (JSON) and the fixed output file
             original_args = shlex.split(self.command or "")
             # Strip any existing format/output flags
             flags_to_strip = {"-o", "--output", "-f", "--format"}
@@ -97,7 +104,7 @@ class ContainerScanner:
                 sanitized_args.append(arg)
                 i += 1
             # Force cyclonedx format and JSON output
-            sanitized_args.extend(["-f", "cyclonedx", "-o", self.result_file])
+            sanitized_args.extend(["-f", TRIVY_FORMAT.get(self.sbom_format, "cyclonedx"), "-o", self.result_file])
             sanitized_args = append_sbom_scanner_flags(sanitized_args)
             if self.container_mode:
                 sanitized_args = normalize_sbom_args_for_docker(

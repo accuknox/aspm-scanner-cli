@@ -148,6 +148,8 @@ class ScanCommand(BaseCommand):
                 handle_failure(upload_exit_code, softfail=False, allow_softfail=False)
             else:
                 exit_code = gate_exit_code(run, outcome.uploaded) if quality_gate else run.exit_code
+                if run.certin_failed:
+                    exit_code = max(exit_code, 1)
                 handle_failure(exit_code, softfail, allow_softfail=not (args.scantype.lower() == "sast" and exit_code == 2))
 
         except ValidationError as e:

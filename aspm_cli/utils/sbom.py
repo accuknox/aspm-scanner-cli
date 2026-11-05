@@ -170,6 +170,19 @@ def enrich_sbom_payload(
     project_classifier: str,
 ) -> None:
     """Apply AccuKnox SBOM fields, human-readable paths, and branding sanitization."""
+    if "spdxVersion" in data:
+        # SPDX carries the project fields PascalCase (the platform reads ProjectName/ProjectClassifier).
+        if project_name:
+            data["ProjectName"] = project_name
+        data["ProjectClassifier"] = project_classifier
+        creation = data.get("creationInfo")
+        if isinstance(creation, dict):
+            # Same branding rule as the CycloneDX path: name the AccuKnox scanner, not the upstream tool.
+            creation["creators"] = [
+                f"Organization: {ACCUKNOX_SCANNER_VENDOR}",
+                f"Tool: {ACCUKNOX_SCANNER_TOOL_NAME}",
+            ]
+        return
     if project_name:
         data["project_name"] = project_name
     data["project_classifier"] = project_classifier
@@ -233,6 +246,8 @@ def is_sbom_payload_empty(data: Any) -> bool:
     """Return True when CycloneDX payload has no meaningful BOM content."""
     if not isinstance(data, dict) or not data:
         return True
+    if "spdxVersion" in data:
+        return not data.get("packages")
     components = data.get("components")
     if isinstance(components, list) and len(components) > 0:
         return False
