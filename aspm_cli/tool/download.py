@@ -103,8 +103,8 @@ class ToolDownloader:
             "sq-sast": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.10.1/sq-sast.tar.gz",
             "sast": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.10.1/sast.tar.gz",
             "dast": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.10.1/dast.tar.gz",
-            "codeassure": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.16.2/codeassure.tar.gz",
-            "gitleaks": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.16.2/gitleaks.tar.gz",
+            "codeassure": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.16.3/codeassure.tar.gz",
+            "gitleaks": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.16.3/gitleaks.tar.gz",
         },
     }
 

@@ -1,3 +1,10 @@
+aspm-scanner-cli (0.16.3) unstable; urgency=medium
+
+  * Add CERT-In SBOM generation/checks and --sbom-vex/--sbom-version
+  * Align CLI, wheel, and package version metadata to 0.16.3
+
+ -- AccuKnox <accuknox@accuknox.com>  Fri, 06 Nov 2026 12:00:00 +0530
+
 aspm-scanner-cli (0.16.2) unstable; urgency=medium
 
   * AI SAST: install the standalone codeassure and context-graph binaries (checksum verified)
