@@ -76,7 +76,7 @@ jobs:
             ext: '.exe'
             asset: accuknox-aspm-scanner-windows-amd64.exe
             compat_asset: accuknox-aspm-scanner.exe
-          - os: macos-14
+          - os: macos-latest
             name: macos
             suffix: ''
             ext: ''
