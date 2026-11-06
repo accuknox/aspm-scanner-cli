@@ -148,7 +148,7 @@ def extract_archive(path, destination):
         with zipfile.ZipFile(path) as archive:
             members = []
             for item in archive.infolist():
-                target = check(item.filename, item.file_size)
+                target = check(item.orig_filename, item.file_size)  # raw name: zipfile rewrites "\\" to "/" on Windows
                 if stat.S_ISLNK(item.external_attr >> 16) or item.flag_bits & 1:
                     raise ArtifactError("Encrypted archives and symbolic links are unsupported.")
                 members.append((item, target))

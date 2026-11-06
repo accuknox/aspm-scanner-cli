@@ -143,10 +143,19 @@ class SASTScanner:
             if verified.get("ai_sast", {}).get("status") not in {"completed", "partial"}:
                 raise RuntimeError("CodeAssure output is missing analysis status; install the current CLI")
             Path(self.result_file).write_text(json.dumps(verified, indent=2), encoding="utf-8")
-            if verified["ai_sast"]["status"] != "completed":
+            if verified["ai_sast"]["status"] != "completed" and not self._partial_is_only_unanchored(verified["ai_sast"]):
                 raise RuntimeError("AI analysis is partial; inspect ai_sast in results.json")
             if verified.get("graph_analysis", {}).get("status") != "completed":
                 raise RuntimeError("Required context graphs are incomplete; inspect graph_analysis in results.json")
+
+    @staticmethod
+    def _partial_is_only_unanchored(summary):
+        # Findings with no code to anchor to (or filtered by severity) cannot be verified; that is not a failed analysis.
+        # An LLM fallback or error still is, and stays an operational failure.
+        total = summary.get("total", 0)
+        accounted = summary.get("analyzed", 0) + summary.get("unanchored", 0) + summary.get("skipped", 0)
+        return total > 0 and not summary.get("fallback", 0) and accounted >= total
+
 
     def _record_ai_failure(self):
         data = json.loads(Path(self.result_file).read_text(encoding="utf-8"))

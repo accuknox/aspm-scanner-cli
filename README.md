@@ -14,6 +14,8 @@ It can upload results to the **AccuKnox ASPM Platform**, but it can also run in 
 - 🧰 Works in standalone and on-prem environments
 - 🧵 Supports environment-variable and flag-based configuration
 - 🧩 Supports pre-commit integration
+- 🚦 CI/CD quality gate (`gate`) that fails the pipeline on policy breaches
+- 💬 PR decorator (`decorate-pr`) that posts findings as a PR review with inline comments
 
 ## Installation
 
@@ -24,7 +26,7 @@ It can upload results to the **AccuKnox ASPM Platform**, but it can also run in 
 Install from the GitHub release wheel:
 
 ```bash
-pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.15.2-rc.3/accuknox_aspm_scanner-0.15.2rc3-py3-none-any.whl
+pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.16.2/accuknox_aspm_scanner-0.16.2-py3-none-any.whl
 ```
 
 ### 2. Restricted or on-prem environment
@@ -48,7 +50,7 @@ Install the cross-platform Python wheel (same as connected environment above), o
 ```bash
 # Linux x86_64
 curl -fL -o accuknox-aspm-scanner \
-  https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.15.2-rc.3/accuknox-aspm-scanner-linux-amd64
+  https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.16.2/accuknox-aspm-scanner-linux-amd64
 chmod +x accuknox-aspm-scanner
 ```
 
@@ -118,6 +120,8 @@ accuknox-aspm-scanner scan dast --help
 accuknox-aspm-scanner scan sq-sast --help
 accuknox-aspm-scanner tool --help
 accuknox-aspm-scanner pre-commit --help
+accuknox-aspm-scanner gate --help
+accuknox-aspm-scanner decorate-pr --help
 ```
 
 If you are running directly from local source code:
@@ -133,12 +137,14 @@ AccuKnox upload variables are optional when `--skip-upload` is used.
 - `ACCUKNOX_ENDPOINT`: Control plane URL for result upload
 - `ACCUKNOX_LABEL`: Label used to associate uploaded results
 - `ACCUKNOX_TOKEN`: Bearer token for upload
-- `ACCUKNOX_PROJECT_NAME`: Project name used for SBOM uploads
+- `ACCUKNOX_CLI_ID`: CI/CD quality-gate run id (uuid) shared by every scanner and the `gate` step in one pipeline run. Falls back for `--cli-id`. See [CI/CD Quality Gate](#cicd-quality-gate).
+- `ACCUKNOX_PROJECT_NAME`: Project name for SBOM uploads (required; created automatically if it does not exist)
 - `ACCUKNOX_PROJECT`: Legacy fallback for project name
 - `DEBUG`: Set to `TRUE` for verbose debug logs
 - `SOFT_FAIL`: Set to `TRUE` to enable soft-fail by default
 - `KEEP_RESULTS`: Set to `TRUE` to keep result files after scan completion
 - `SCAN_IMAGE`: Override the scanner image used in container mode
+- `SYFT_IMAGE`: Override the Syft image used with `--enrich-licenses` in container mode (default: `anchore/syft:v1.42.3`)
 - `CODEASSURE_IMAGE`: Override the AI analysis image used by SAST AI analysis
 - `ACCUKNOX_ENABLE_AI_SAST`: Set to `TRUE` to enable AI-SAST per repo (alternative to `--ai-analysis`)
 - `GITLEAKS_IMAGE`: Override the Gitleaks image when `--engine gitleaks`
@@ -174,6 +180,7 @@ Supported tool types:
 - `dast`
 - `codeassure`
 - `gitleaks`
+- `syft`
 
 User-level tool installs are placed under:
 
@@ -230,6 +237,10 @@ Common flags used before the scan name:
 - `--skip-upload`
 - `--keep-results`
 - `--softfail`
+- `--cli-id` — CI/CD quality-gate run id (see [CI/CD Quality Gate](#cicd-quality-gate))
+- `--repository` — CI/CD gate scope repository (e.g. `org/repo`)
+- `--branch` — CI/CD gate scope branch
+- `--commit-sha` — CI/CD gate scope commit SHA
 
 If you do not use `--skip-upload`, you must provide:
 
@@ -333,6 +344,17 @@ accuknox-aspm-scanner scan --skip-upload --keep-results sast --command "scan ." 
 
 AI analysis is **off by default**; `--ai-analysis` (or the variable below) turns it on, and `--no-ai-analysis` forces it off even when the variable is set.
 
+Local mode needs two standalone binaries installed side by side, `codeassure` and `context-graph`:
+
+```bash
+accuknox-aspm-scanner tool install --type codeassure
+```
+
+They are downloaded from the matching aspm-scanner-cli release (`codeassure-<os>-<arch>`, `context-graph-<os>-<arch>` and an
+`ai-sast-SHA256SUMS` file; the release workflow attaches them automatically from the pinned codeassure-cli and code-context-graph releases) and every file is verified against that checksum list before it is installed. Supported: Linux amd64,
+macOS arm64, Windows amd64. Set `AI_SAST_BASE_URL` to download from another location, or `CODEASSURE_EXECUTABLE` to use a binary you
+already have. The LLM settings come from `--codeassure-config` (a `codeassure.json`) or `CODEASSURE_*` environment variables.
+
 Per-repo AI-SAST via environment variable (e.g. GitLab CI variable):
 
 ```bash
@@ -426,6 +448,7 @@ Flags used after `container`:
 - `--container-mode`
 - `--generate-sbom`
 - `--sbom-format`, `--sbom-author`, `--sbom-output`, `--cert-in-check` (see [SBOM standard, author and the CERT-In check](#sbom-standard-author-and-the-cert-in-check))
+- `--enrich-licenses` (filesystem/fs SBOM only; default off)
 
 Typical `--command` values:
 
@@ -452,7 +475,25 @@ Filesystem SBOM (AccuKnox project classifier `application`; run from repo root i
 accuknox-aspm-scanner scan --skip-upload --keep-results --project-name demo-project container --command "filesystem ." --generate-sbom --container-mode
 ```
 
-SBOM upload requires `--project-name` (or `ACCUKNOX_PROJECT_NAME`). `--project-name` is not required for vulnerability scans. Legacy env `ACCUKNOX_PROJECT` is also accepted.
+Local mode (no Docker) works on Linux, macOS and Windows: install the scanner once with `accuknox-aspm-scanner tool install --type container`, then drop `--container-mode`:
+
+```bash
+accuknox-aspm-scanner scan --skip-upload --keep-results --project-name demo-project container --command "filesystem ." --generate-sbom
+accuknox-aspm-scanner scan --skip-upload --keep-results --project-name demo-project container --command "image nginx:latest" --generate-sbom
+```
+
+Optional license enrich for filesystem/fs SBOM only. Trivy remains the SBOM engine (components + CVEs). With `--enrich-licenses`, Syft scans the same tree and copies normalized SPDX licenses onto matching Trivy packages (purl, then name@version). Existing Trivy licenses are not overwritten; Syft-only file components are not added. Image/rootfs SBOM and SCA are unchanged. `--enrich-licenses` on `image` / `rootfs` logs a warning and skips Syft.
+
+```bash
+accuknox-aspm-scanner tool install --type syft
+
+accuknox-aspm-scanner scan --project-name fs-test --keep-results --softfail \
+  container --command "filesystem ." --generate-sbom --enrich-licenses
+```
+
+`--container-mode` still works: Trivy image unchanged; Syft runs as `anchore/syft:v1.42.3` (override with `SYFT_IMAGE`) using the same `/workdir` mount.
+
+SBOM upload requires `--project-name` (or `ACCUKNOX_PROJECT_NAME`). The project does not need to exist beforehand: if it is missing, AccuKnox creates it automatically from this name. `--project-name` is not required for vulnerability scans. Legacy env `ACCUKNOX_PROJECT` is also accepted.
 
 SBOM Phase-1 capabilities:
 

@@ -118,7 +118,9 @@ class ArtifactScanTests(unittest.TestCase):
         for name in ["../outside", "/outside", "C:/outside", "x\\outside"]:
             archive = self.root / "bad.zip"
             with zipfile.ZipFile(archive, "w") as output:
-                output.writestr(name, "bad")
+                info = zipfile.ZipInfo("placeholder")
+                info.filename = name  # ZipInfo() rewrites "\\" to "/" on Windows; keep the raw name
+                output.writestr(info, "bad")
             with self.assertRaises(ArtifactError):
                 extract_archive(archive, self.root / "extract")
         archive = self.root / "link.zip"

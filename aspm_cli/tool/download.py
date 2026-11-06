@@ -20,6 +20,7 @@ CHECKOV_VERSION = "3.2.458"
 TRUFFLEHOG_VERSION = "3.90.3"
 TRIVY_VERSION = "0.69.3"
 GITLEAKS_VERSION = "8.24.2"
+SYFT_VERSION = "1.42.3"
 SONAR_SCANNER_VERSION = "7.1.0.4889"
 OPENGREP_VERSION_LINUX = "v1.0.0-alpha.14"
 OPENGREP_VERSION_DARWIN = "v1.22.0"
@@ -39,6 +40,7 @@ DARWIN_SUPPORTED_TOOLS = frozenset({
     "syft",
     "gitleaks",
     "sq-sast",
+    "syft",
 })
 
 # Tools with native Windows installers (x86_64 / amd64).
@@ -51,6 +53,7 @@ WINDOWS_SUPPORTED_TOOLS = frozenset({
     "gitleaks",
     "sq-sast",
     "codeassure",
+    "syft",
 })
 
 
@@ -79,6 +82,15 @@ class ChecksumMismatch(ValueError):
     """A downloaded file does not match its pinned SHA-256."""
 
 
+def syft_release_asset(system: str, arch: str) -> str:
+    """GitHub release filename for Anchore Syft (v{SYFT_VERSION})."""
+    syft_arch = "arm64" if arch == "arm64" else "amd64"
+    if system == "Windows":
+        return f"syft_{SYFT_VERSION}_windows_amd64.zip"
+    os_name = "darwin" if system == "Darwin" else "linux"
+    return f"syft_{SYFT_VERSION}_{os_name}_{syft_arch}.tar.gz"
+
+
 class ToolDownloader:
     TOOL_URLS = {
         "Windows": {
@@ -91,8 +103,8 @@ class ToolDownloader:
             "sq-sast": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.10.1/sq-sast.tar.gz",
             "sast": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.10.1/sast.tar.gz",
             "dast": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.10.1/dast.tar.gz",
-            "codeassure": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.15.2-rc.3/codeassure.tar.gz",
-            "gitleaks": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.15.2-rc.3/gitleaks.tar.gz",
+            "codeassure": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.16.2/codeassure.tar.gz",
+            "gitleaks": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.16.2/gitleaks.tar.gz",
         },
     }
 
@@ -121,6 +133,9 @@ class ToolDownloader:
                 "Install Docker and run scans with --container-mode."
             )
             return False
+
+        if tool_type == "syft":
+            return self._install_syft(overwrite=overwrite)
 
         if self.is_windows:
             return self._download_windows_tool(tool_type, overwrite=overwrite)
@@ -239,6 +254,36 @@ class ToolDownloader:
 
     def _chmod_x(self, path: Path):
         path.chmod(path.stat().st_mode | 0o111)
+
+    def _install_syft(self, overwrite=False) -> bool:
+        dest = self.install_dir / ("syft.exe" if self.is_windows else "syft")
+        if not self._prepare_destination(dest, "syft", overwrite):
+            return False
+        try:
+            arch = cpu_arch()
+        except ValueError as e:
+            Logger.get_logger().error(str(e))
+            return False
+        asset = syft_release_asset(self.system, arch)
+        url = f"https://github.com/anchore/syft/releases/download/v{SYFT_VERSION}/{asset}"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                archive_path = Path(tmp) / asset
+                self._download_file(url, archive_path)
+                if asset.endswith(".zip"):
+                    with zipfile.ZipFile(archive_path, "r") as zf:
+                        zf.extractall(tmp)
+                else:
+                    with tarfile.open(archive_path, "r:gz") as tar:
+                        tar.extractall(path=tmp)
+                src = self._find_extracted_file(Path(tmp), ["syft.exe", "syft"])
+                shutil.copy2(src, dest)
+                if not self.is_windows:
+                    self._chmod_x(dest)
+            return True
+        except Exception as e:
+            Logger.get_logger().error(f"Failed to install syft: {e}")
+            return False
 
     def _install_darwin_iac(self, arch: str) -> bool:
         """
