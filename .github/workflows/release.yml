@@ -374,8 +374,8 @@ jobs:
     permissions:
       contents: write
     env:
-      CODEASSURE_TAG: v1.0.0
-      CONTEXT_GRAPH_TAG: v1.0.0
+      CODEASSURE_TAG: v1.0.1
+      CONTEXT_GRAPH_TAG: v1.0.1
 
     steps:
       - name: Download and verify the binaries
