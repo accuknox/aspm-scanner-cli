@@ -57,8 +57,17 @@ def vulnerabilities_from_cyclonedx(doc: Dict[str, Any], limit: int = 20000) -> L
         rating = next((r for r in ratings if r.get("severity")), ratings[0] if ratings else {})
         rec = v.get("recommendation") or ""
         match = _VERSION.search(rec)
+        analysis = v.get("analysis") if isinstance(v.get("analysis"), dict) else {}
+        vex = {k: str(analysis[k]) for k in ("state", "justification", "detail") if analysis.get(k)}
+        if analysis.get("response"):
+            vex["response"] = (
+                [str(r) for r in analysis["response"]]
+                if isinstance(analysis["response"], list)
+                else [str(analysis["response"])]
+            )
         out.append(
             {
+                **({"analysis": vex} if vex else {}),
                 "id": v["id"],
                 "severity": str(rating.get("severity") or "unknown").lower(),
                 "cvss": rating.get("score"),
@@ -85,6 +94,10 @@ def _cdx_component(raw: Dict[str, Any], is_root: bool, analysed: bool) -> Compon
         elif isinstance(entry.get("license"), dict):
             lics.append(entry["license"].get("id") or entry["license"].get("name") or "")
     ref = raw.get("bom-ref") or raw.get("purl") or "{}@{}".format(raw.get("name", ""), raw.get("version", ""))
+    extra: Dict[str, Any] = {}
+    for prop in raw.get("properties", []) or []:
+        if prop.get("name") == "certin:supplier-source":
+            extra["supplier_source"] = prop.get("value")  # e.g. purl-namespace: a proxy, not a declared supplier
     return Component(
         ref=ref,
         name=raw.get("name", ""),
@@ -101,6 +114,7 @@ def _cdx_component(raw: Dict[str, Any], is_root: bool, analysed: bool) -> Compon
         ],
         is_root=is_root,
         vulnerabilities_checked=analysed and bool(raw.get("purl")),
+        extra=extra,
     )
 
 

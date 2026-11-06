@@ -7,6 +7,10 @@ from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 
 
+# CycloneDX ``analysis.state`` values that say the component is not exposed to the vulnerability.
+VEX_SUPPRESSED_STATES = frozenset({"not_affected", "false_positive", "resolved", "resolved_with_pedigree"})
+
+
 @dataclass
 class Vulnerability:
     id: str
@@ -17,6 +21,13 @@ class Vulnerability:
     fixed_versions: List[str] = field(default_factory=list)
     url: str = ""
     source: str = ""
+    # CycloneDX VEX ``analysis`` ({state, justification, response, detail}) when the file carried one.
+    analysis: Optional[Dict[str, Any]] = None
+
+    @property
+    def suppressed(self) -> bool:
+        """True when a VEX statement says this component is not exposed (not affected / resolved)."""
+        return str((self.analysis or {}).get("state") or "").lower() in VEX_SUPPRESSED_STATES
 
 
 @dataclass
@@ -35,6 +46,8 @@ class Component:
     end_of_life_date: Optional[str] = None
     latest_version: Optional[str] = None
     vulnerabilities: List[Vulnerability] = field(default_factory=list)
+    # Vulnerabilities a VEX statement marks not affected / resolved: kept for the export, not counted as open.
+    vex_statements: List[Vulnerability] = field(default_factory=list)
     # False when no vulnerability lookup was possible for this component.
     vulnerabilities_checked: bool = False
     depth: int = 1  # 0 root, 1 direct, 2+ transitive
@@ -55,6 +68,10 @@ class DocumentMeta:
     authors: List[str] = field(default_factory=list)
     tools: List[Dict[str, str]] = field(default_factory=list)  # {"name", "version"}
     manufacturer: Optional[str] = None
+    supplier: Optional[str] = None  # CycloneDX metadata.supplier
+    comments: str = ""  # free-text note, exported as the certin:comments property
+    # metadata.component fields the user filled in: name, version, group, publisher, description, copyright.
+    subject: Dict[str, str] = field(default_factory=dict)
     lifecycle: str = ""  # CERT-In: design/source/build/analyzed/deployed/runtime
     level: str = ""  # CERT-In: top/n/delivery/transitive/complete
     has_nested_dependencies: bool = True

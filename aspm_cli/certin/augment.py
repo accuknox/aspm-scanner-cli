@@ -18,7 +18,55 @@ from .rules import PROPERTY_PREFIX
 from .validate import validate_document
 
 
-def _stamp_cyclonedx(doc: Dict[str, Any], author: Optional[str], lifecycle: str, level: str) -> None:
+SUPPLIER_SOURCE = PROPERTY_PREFIX + "supplier-source"
+_FORGES = ("github.com", "gitlab.com", "bitbucket.org")
+
+
+def supplier_from_purl(purl: str) -> Optional[str]:
+    """The organisation a package URL's namespace names, where the namespace really is one.
+
+    Maven group ids, npm scopes and forge owners (github.com/<owner>/...) name who publishes the package.
+    Other ecosystems have no such namespace, and a distribution name (pkg:deb/debian/...) is not a supplier
+    the scanner can vouch for, so those return None and the field stays declared unknown.
+    """
+    text = str(purl).split("#", 1)[0].split("?", 1)[0]
+    if not text.startswith("pkg:"):
+        return None
+    kind, _, rest = text[4:].partition("/")
+    parts = rest.rpartition("@")[0].split("/") if "@" in rest.split("/")[-1] else rest.split("/")
+    namespace = parts[:-1]
+    if not namespace:
+        return None
+    if kind == "maven":
+        return namespace[0]
+    if kind == "npm":
+        scope = namespace[0].replace("%40", "@")
+        return scope.lstrip("@") if scope.startswith("@") else None
+    if kind in ("github", "gitlab", "bitbucket"):
+        return namespace[0]
+    if kind == "golang" and len(namespace) >= 2 and namespace[0].lower() in _FORGES:
+        return namespace[1]
+    return None
+
+
+def _fill_suppliers(doc: Dict[str, Any]) -> None:
+    """Give components that name no supplier the one their package URL implies, and say so in a property."""
+    for comp in doc.get("components", []) or []:
+        if not isinstance(comp, dict) or comp.get("supplier") or comp.get("publisher") or not comp.get("purl"):
+            continue
+        name = supplier_from_purl(comp["purl"])
+        if not name:
+            continue
+        comp["supplier"] = {"name": name}
+        props = [p for p in comp.get("properties", []) if p.get("name") != SUPPLIER_SOURCE]
+        comp["properties"] = props + [{"name": SUPPLIER_SOURCE, "value": "purl-namespace"}]
+
+
+def _stamp_cyclonedx(
+    doc: Dict[str, Any], author: Optional[str], lifecycle: str, level: str, bom_version: Optional[int] = None
+) -> None:
+    if bom_version:
+        doc["version"] = int(bom_version)
     md = doc.setdefault("metadata", {})
     md.setdefault("timestamp", now_iso())
     if author and not md.get("authors"):
@@ -38,10 +86,19 @@ def _stamp_cyclonedx(doc: Dict[str, Any], author: Optional[str], lifecycle: str,
 
 
 def augment_cyclonedx(
-    doc: Dict[str, Any], author: Optional[str] = None, lifecycle: str = "", level: str = ""
+    doc: Dict[str, Any],
+    author: Optional[str] = None,
+    lifecycle: str = "",
+    level: str = "",
+    bom_version: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Mutate a CycloneDX document and return its conformance report."""
-    _stamp_cyclonedx(doc, author, lifecycle, level)
+    """Mutate a CycloneDX document and return its conformance report.
+
+    ``bom_version`` sets the document's revision number (CycloneDX ``version``); without it the
+    scanner's own value stays.
+    """
+    _stamp_cyclonedx(doc, author, lifecycle, level, bom_version)
+    _fill_suppliers(doc)
     model = model_from_cyclonedx(doc)
     derived = derive_all(model)
     raw: List[Dict[str, Any]] = (
@@ -54,7 +111,11 @@ def augment_cyclonedx(
         comp = by_ref.get(ref)
         if comp is None:
             continue
-        kept = [p for p in comp.get("properties", []) if not str(p.get("name", "")).startswith(PROPERTY_PREFIX)]
+        kept = [
+            p
+            for p in comp.get("properties", [])
+            if not str(p.get("name", "")).startswith(PROPERTY_PREFIX) or p.get("name") == SUPPLIER_SOURCE
+        ]
         comp["properties"] = kept + [{"name": PROPERTY_PREFIX + k, "value": v} for k, v in component_properties(fields)]
         if not comp.get("bom-ref"):
             comp["bom-ref"] = ref

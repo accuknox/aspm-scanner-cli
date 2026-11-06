@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from colorama import Fore
 
@@ -12,6 +12,7 @@ from aspm_cli.certin.augment import augment_cyclonedx, augment_spdx
 from aspm_cli.certin.rules import CONFORMANT
 from aspm_cli.certin.validate import validate_document
 from aspm_cli.utils.logger import Logger
+from aspm_cli.utils.vex import VexError, apply_vex, load_vex
 
 SBOM_FORMATS = ("cyclonedx", "spdx")
 TRIVY_FORMAT = {"cyclonedx": "cyclonedx", "spdx": "spdx-json"}
@@ -60,13 +61,24 @@ def lifecycle_and_level(classifier: str) -> Tuple[str, str]:
     return ("analyzed", "complete") if classifier == "container" else ("source", "transitive")
 
 
-def finalize_sbom_file(path: str, author: Optional[str], classifier: str) -> Dict[str, Any]:
-    """Add the CERT-In fields to the SBOM at ``path`` in place and return the conformance report."""
+def finalize_sbom_file(
+    path: str,
+    author: Optional[str],
+    classifier: str,
+    bom_version: Optional[int] = None,
+    vex_files: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Add the CERT-In fields to the SBOM at ``path`` in place and return the conformance report.
+
+    ``vex_files`` are recorded in a CycloneDX SBOM as ``vulnerabilities[].analysis`` first, so the
+    conformance report sees them. SPDX has no place for VEX statements.
+    """
     with open(path, "r", encoding="utf-8") as handle:
         doc = json.load(handle)
     lifecycle, level = lifecycle_and_level(classifier)
     if doc.get("bomFormat") == "CycloneDX":
-        report = augment_cyclonedx(doc, author=author, lifecycle=lifecycle, level=level)
+        _apply_vex_files(doc, vex_files)
+        report = augment_cyclonedx(doc, author=author, lifecycle=lifecycle, level=level, bom_version=bom_version)
     elif "spdxVersion" in doc:
         report = augment_spdx(doc, author=author, lifecycle=lifecycle, level=level)
     else:
@@ -74,6 +86,20 @@ def finalize_sbom_file(path: str, author: Optional[str], classifier: str) -> Dic
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(doc, handle, indent=2)
     return report
+
+
+def _apply_vex_files(doc: Dict[str, Any], vex_files: Optional[List[str]]) -> None:
+    log = Logger.get_logger()
+    for vex_path in vex_files or []:
+        try:
+            result = apply_vex(doc, load_vex(vex_path))
+        except VexError as exc:
+            log.warning(f"VEX file skipped: {exc}")
+            continue
+        log.info(
+            f"VEX {os.path.basename(vex_path)}: {result['applied']} statement(s) recorded in the SBOM, "
+            f"{result['skipped']} matched no component"
+        )
 
 
 def check_file(path: str) -> Dict[str, Any]:

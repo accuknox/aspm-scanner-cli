@@ -68,7 +68,7 @@ def _component(comp: Component, fields: Dict[str, FieldValue], with_ref: bool = 
 def _vulnerabilities(sbom: SbomModel) -> List[Dict[str, Any]]:
     grouped: Dict[str, Dict[str, Any]] = {}
     for comp in ([sbom.root] if sbom.root else []) + sbom.components:
-        for v in comp.vulnerabilities:
+        for v in comp.vulnerabilities + comp.vex_statements:
             entry = grouped.setdefault(
                 v.id,
                 {
@@ -79,6 +79,7 @@ def _vulnerabilities(sbom: SbomModel) -> List[Dict[str, Any]]:
                     "_cvss": v.cvss,
                     "_url": v.url,
                     "_src": v.source,
+                    "_analysis": v.analysis,
                 },
             )
             entry["affects"].append({"ref": comp.ref})
@@ -100,6 +101,8 @@ def _vulnerabilities(sbom: SbomModel) -> List[Dict[str, Any]]:
             item["ratings"] = [rating]
         if e["_fixed"]:
             item["recommendation"] = "Upgrade to " + ", ".join(sorted(e["_fixed"])[:3])
+        if e["_analysis"]:
+            item["analysis"] = e["_analysis"]
         item["affects"] = e["affects"]
         out.append(item)
     return out
@@ -128,9 +131,15 @@ def build_cyclonedx(
         }
     if meta.manufacturer:
         metadata["manufacturer"] = {"name": meta.manufacturer}
+    if meta.supplier:
+        metadata["supplier"] = {"name": meta.supplier}
     if sbom.root:
         metadata["component"] = _component(sbom.root, derived.get(sbom.root.ref, {}))
+        # Fields the user entered for the described component win over what was derived.
+        metadata["component"].update({k: v for k, v in meta.subject.items() if v})
     props: List[Dict[str, str]] = []
+    if meta.comments and profile != PUBLIC:  # a user's note may be internal; the public copy omits it
+        props.append({"name": PROPERTY_PREFIX + "comments", "value": meta.comments})
     if meta.level:
         props.append({"name": PROPERTY_PREFIX + "sbom-level", "value": meta.level})
     if meta.lifecycle:
@@ -181,6 +190,10 @@ def _xml_component(parent: ET.Element, comp: Dict[str, Any], tag: str = "compone
     el = _sub(parent, tag, **{"type": comp.get("type", "library"), "bom-ref": comp.get("bom-ref")})
     if "supplier" in comp:
         _sub(_sub(el, "supplier"), "name", comp["supplier"]["name"])
+    if comp.get("publisher"):
+        _sub(el, "publisher", comp["publisher"])
+    if comp.get("group"):
+        _sub(el, "group", comp["group"])
     _sub(el, "name", comp["name"])
     if comp.get("version"):
         _sub(el, "version", comp["version"])
@@ -201,6 +214,8 @@ def _xml_component(parent: ET.Element, comp: Dict[str, Any], tag: str = "compone
                     _sub(lic, "id", entry["license"]["id"])
                 else:
                     _sub(lic, "name", entry["license"]["name"])
+    if comp.get("copyright"):
+        _sub(el, "copyright", comp["copyright"])
     if comp.get("purl"):
         _sub(el, "purl", comp["purl"])
     if comp.get("properties"):
@@ -238,6 +253,8 @@ def cyclonedx_json_to_xml(doc: Dict[str, Any]) -> str:
         _xml_component(md, m["component"])
     if m.get("manufacturer"):
         _sub(_sub(md, "manufacturer"), "name", m["manufacturer"]["name"])
+    if m.get("supplier"):
+        _sub(_sub(md, "supplier"), "name", m["supplier"]["name"])
     if m.get("properties"):
         ps = _sub(md, "properties")
         for p in m["properties"]:
@@ -279,6 +296,17 @@ def cyclonedx_json_to_xml(doc: Dict[str, Any]) -> str:
                         _sub(re_, "severity", r["severity"])
             if v.get("recommendation"):
                 _sub(ve, "recommendation", v["recommendation"])
+            if v.get("analysis"):
+                an = _sub(ve, "analysis")
+                for key in ("state", "justification"):
+                    if v["analysis"].get(key):
+                        _sub(an, key, v["analysis"][key])
+                if v["analysis"].get("response"):
+                    responses = _sub(an, "responses")
+                    for resp in v["analysis"]["response"]:
+                        _sub(responses, "response", resp)
+                if v["analysis"].get("detail"):
+                    _sub(an, "detail", v["analysis"]["detail"])
             af = _sub(ve, "affects")
             for a in v["affects"]:
                 _sub(_sub(af, "target"), "ref", a["ref"])

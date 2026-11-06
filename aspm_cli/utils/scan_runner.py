@@ -130,6 +130,8 @@ def _finalize_certin(args, result_file: str) -> bool:
             result_file,
             resolve_sbom_author(getattr(args, "sbom_author", None)),
             derive_sbom_classifier(getattr(args, "command", "") or ""),
+            bom_version=getattr(args, "sbom_version", None),
+            vex_files=getattr(args, "sbom_vex", None),
         )
     except Exception as exc:
         Logger.get_logger().warning(f"Could not add the CERT-In fields to the SBOM: {exc}")

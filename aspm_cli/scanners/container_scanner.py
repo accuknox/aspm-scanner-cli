@@ -49,6 +49,22 @@ class ContainerScanner(BaseScanner):
             help="Also write the finished SBOM to this file (the upload still uses ./results.json)"
         )
         parser.add_argument(
+            "--sbom-version",
+            type=int,
+            default=None,
+            help="Revision number written as the SBOM's version (CycloneDX 'version'); the scanner always writes 1"
+        )
+        parser.add_argument(
+            "--sbom-vex",
+            action="append",
+            default=None,
+            metavar="FILE",
+            help=(
+                "VEX file (OpenVEX, CycloneDX VEX or CSAF) to apply; repeatable. Trivy drops the CVEs it marks "
+                "not affected or fixed, and the statements are recorded in the SBOM as vulnerabilities[].analysis"
+            )
+        )
+        parser.add_argument(
             "--cert-in-check",
             action="store_true",
             help=(
@@ -72,5 +88,6 @@ class ContainerScanner(BaseScanner):
             args.container_mode,
             generate_sbom=generate_sbom,
             sbom_format=getattr(args, "sbom_format", "cyclonedx"),
+            vex_files=getattr(args, "sbom_vex", None),
         )
         return scanner.run()

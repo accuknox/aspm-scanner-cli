@@ -480,9 +480,13 @@ Flags used after `container` with `--generate-sbom` (also accepted by `pipeline 
 - `--sbom-format cyclonedx|spdx` — the standard to generate (default `cyclonedx`; `spdx` writes SPDX 2.3 JSON).
 - `--sbom-author NAME` — the "author of SBOM data". Default: `ACCUKNOX_SBOM_AUTHOR`, then the CI actor (`GITLAB_USER_EMAIL`, `GITHUB_ACTOR`, ...), then `git config user.email`, then `AccuKnox ASPM Scanner`.
 - `--sbom-output FILE` — also write the finished SBOM to `FILE`. This copy leaves out the platform-only top-level fields (`project_name`, `project_classifier`), so it passes strict CycloneDX/SPDX validators. The uploaded file keeps them.
+- `--sbom-version N` — the SBOM's revision number (CycloneDX `version`). The scanner always writes `1`; the platform also bumps it by itself when the same BOM is re-uploaded with different content.
+- `--sbom-vex FILE` (repeatable) — a VEX file (OpenVEX, CycloneDX VEX or CSAF). It is passed to Trivy (`--vex`), which drops the CVEs the file marks not affected or fixed, and every statement that matches a component is recorded in the SBOM as `vulnerabilities[].analysis`, so the file shows that the CVE was assessed. Statements for products that are not in the SBOM are ignored. In `--container-mode` Trivy only sees files under the current directory; others are still recorded in the SBOM. SPDX has no place for VEX statements.
 - `--cert-in-check` — check the SBOM against the CERT-In minimum data fields (21 fields, CERT-In Technical Guidelines on SBOM v2.0) and exit `1` unless it is conformant.
 
 Every SBOM the scanner generates now carries the author, assembly time, lifecycle (`source` for a repository, `analyzed` for an image) and SBOM level, the fields that can be worked out automatically on each component (origin, criticality, patch status, usage restrictions, executable/archive/structured, unique identifier), and a conformance attestation (`accuknox:cert-in:*` properties in CycloneDX, annotations in SPDX).
+
+A component with no supplier gets the organisation its package URL names where the namespace is one (Maven group id, npm scope, `github.com/<owner>`), marked with `certin:supplier-source=purl-namespace` so it is not mistaken for a declared supplier. Other ecosystems stay declared unknown.
 
 A field the scanner cannot know (a supplier a lockfile does not name, for example) is written as an explicit unknown with a reason code (`certin:unknown:<field>`), not left out and not guessed. The check reports how much of the data is real: `Conformant (34 components, 59.5% of fields populated, 40.5% declared unknown)`.
 

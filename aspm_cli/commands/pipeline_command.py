@@ -40,6 +40,8 @@ SCAN_BUILDERS = {
         "CONTAINER",
         lambda a: ["--command", a.sbom_command, "--generate-sbom", "--sbom-format", a.sbom_format]
         + (["--sbom-author", a.sbom_author] if a.sbom_author else [])
+        + (["--sbom-version", str(a.sbom_version)] if a.sbom_version else [])
+        + [x for path in (a.sbom_vex or []) for x in ("--sbom-vex", path)]
         + (["--cert-in-check"] if a.cert_in_check else []),
     ),
 }
@@ -104,6 +106,8 @@ class PipelineCommand(BaseCommand):
         parser.add_argument("--sbom-command", default="filesystem .", help="SBOM arguments (default: 'filesystem .')")
         parser.add_argument("--sbom-format", choices=("cyclonedx", "spdx"), default="cyclonedx", help="SBOM standard (default: cyclonedx)")
         parser.add_argument("--sbom-author", default=None, help="Author recorded in the SBOM (default: CI actor or git identity)")
+        parser.add_argument("--sbom-version", type=int, default=None, help="Revision number written as the SBOM's version (the scanner always writes 1)")
+        parser.add_argument("--sbom-vex", action="append", default=None, metavar="FILE", help="VEX file (OpenVEX, CycloneDX VEX or CSAF) to apply; repeatable")
         parser.add_argument("--cert-in-check", action="store_true", help="Fail unless the SBOM meets the CERT-In minimum data fields")
         parser.set_defaults(func=self.execute)
 

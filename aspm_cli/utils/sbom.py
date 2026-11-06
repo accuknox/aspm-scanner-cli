@@ -257,6 +257,25 @@ def is_sbom_payload_empty(data: Any) -> bool:
     return True
 
 
+def append_vex_flags(sanitized_args: List[str], vex_files: Optional[List[str]], container_mode: bool = False) -> List[str]:
+    """Hand each VEX file to Trivy (``--vex``) so it drops what the statements mark not affected or fixed.
+
+    In container mode Trivy only sees the working directory (mounted at /workdir), so a file outside it
+    cannot be passed; it is still written into the SBOM afterwards, just not filtered by Trivy.
+    """
+    result = list(sanitized_args)
+    cwd = os.path.realpath(os.getcwd())
+    for path in vex_files or []:
+        real = os.path.realpath(path)
+        if container_mode:
+            if not real.startswith(cwd + os.sep):
+                continue
+            result.extend(["--vex", DOCKER_WORKDIR + "/" + os.path.relpath(real, cwd)])
+        else:
+            result.extend(["--vex", real])
+    return result
+
+
 def append_sbom_scanner_flags(sanitized_args: List[str]) -> List[str]:
     """Ensure SBOM scans request package + license analysis for richer CycloneDX output."""
     if "--scanners" in sanitized_args:

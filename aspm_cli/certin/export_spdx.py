@@ -71,6 +71,8 @@ def build_spdx(
     creators = [tool_label] + ["Person: " + a for a in meta.authors]
     if meta.manufacturer:
         creators.append("Organization: " + meta.manufacturer)
+    if meta.supplier and meta.supplier != meta.manufacturer:
+        creators.append("Organization: " + meta.supplier)
     namespace_id = meta.serial.replace("urn:uuid:", "") if meta.serial else str(uuid.uuid4())
 
     used: Dict[str, str] = {}
@@ -164,6 +166,8 @@ def build_spdx(
         doc_annotations.append(
             _annotation(tool_label, created, "{}lifecycle={}".format(PROPERTY_PREFIX, meta.lifecycle))
         )
+    if meta.comments and profile != PUBLIC:
+        doc_annotations.append(_annotation(tool_label, created, PROPERTY_PREFIX + "comments=" + meta.comments))
     if meta.vulnerability_analysis and profile != PUBLIC:
         doc_annotations.append(_annotation(tool_label, created, PROPERTY_PREFIX + "vulnerability-analysis=performed"))
     if not meta.has_nested_dependencies:
