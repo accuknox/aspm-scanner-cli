@@ -735,6 +735,36 @@ ACCUKNOX_TOKEN=abcd1234 \
 accuknox-aspm-scanner scan sq-sast --command "-Dsonar.projectKey=<PROJECT_KEY> -Dsonar.host.url=<HOST_URL> -Dsonar.token=<TOKEN> -Dsonar.organization=<ORG_ID>" --container-mode
 ```
 
+## Incremental scans (`--changed-only`)
+
+On a pull/merge request, scan only what the PR changed. Off by default: without the flag every scan is a full scan.
+
+```bash
+accuknox-aspm-scanner scan --changed-only sast --command "scan ."
+accuknox-aspm-scanner pipeline --changed-only --scans sast,secret,iac,sca,sbom --quality-gate
+accuknox-aspm-scanner scan --changed-only --base-ref origin/main iac --command "-d ."   # any CI
+```
+
+The changed files are the diff from the merge-base with the PR's base (deleted files excluded). The base is the
+PR base on GitHub Actions, `--base-ref` / `ACCUKNOX_BASE_REF` anywhere else, or detected from GitLab, Bitbucket,
+Azure DevOps and Jenkins PR variables (the base branch must be fetched: `fetch-depth: 0` on GitHub).
+`ACCUKNOX_CHANGED_ONLY=true` is the same as the flag.
+
+| Scan | With `--changed-only` |
+|---|---|
+| `sast` (and AI analysis) | Scans only the changed files; AI analysis only verifies findings on them. |
+| `secret` | trufflehog `filesystem`: changed files. trufflehog `git`: `--since-commit <base>`. gitleaks: the PR's commits (`--log-opts`); `--no-git` stays full. |
+| `iac` | `-d <dir>` becomes `-f <file>` for each changed file. |
+| `sca`, `sbom` | Full scan, but only if a manifest or lockfile changed (`package-lock.json`, `requirements.txt`, `go.mod`, `pom.xml`, ...). |
+| `container`, `dast`, `api-discovery`, `ml-scan`, `mobile`, `sq-sast` | Not repo-file scans: the flag is ignored. |
+
+If nothing relevant changed, the scan is skipped (exit 0, nothing uploaded). With `--quality-gate`, `scan` runs a full
+scan instead of skipping (the gate waits for that upload); `pipeline` only declares scans that produced results, so a
+skip is safe there. The gate then judges only the uploaded (changed-file) findings.
+
+It falls back to a full scan, with a warning, when the diff can't be computed (shallow clone, missing base), when no
+base is known, or when more than `ACCUKNOX_INCREMENTAL_MAX_FILES` files changed (default 1000).
+
 ## Quality Gates
 
 A quality gate lets the **policy thresholds configured in AccuKnox** decide the build. The CLI uploads every

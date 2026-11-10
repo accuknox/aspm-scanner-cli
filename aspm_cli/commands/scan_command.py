@@ -6,6 +6,7 @@ from aspm_cli.commands.base_command import BaseCommand
 from aspm_cli.scanners import scanner_registry
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils.common import handle_failure, ALLOWED_SCAN_TYPES
+from aspm_cli.utils.incremental import INCREMENTAL_SCANS, resolve_changed_files, should_skip
 from aspm_cli.utils.ingest_identity import collect_ingest_identity
 from aspm_cli.utils.quality_gate import (
     EXIT_OPERATIONAL,
@@ -43,6 +44,12 @@ class ScanCommand(BaseCommand):
         parser.add_argument('--skip-upload', action='store_true', help='Skip control plane upload')
         parser.add_argument('--keep-results', action='store_true', help='Keep scan results file after completion')
         parser.add_argument(
+            "--changed-only", action="store_true",
+            help="Incremental scan: only scan files changed in the PR (or since --base-ref). "
+                 "Falls back to a full scan if the diff can't be computed. Also ACCUKNOX_CHANGED_ONLY=true.",
+        )
+        parser.add_argument("--base-ref", help="With --changed-only: base branch/commit to diff against (default: the PR base).")
+        parser.add_argument(
             "--quality-gate",
             action="store_true",
             help=(
@@ -79,6 +86,19 @@ class ScanCommand(BaseCommand):
             quality_gate = args.quality_gate or os.getenv("ACCUKNOX_QUALITY_GATE", "").lower() in ("1", "true", "yes")
 
             accuknox_config = build_accuknox_config(args)
+
+            args.changed_files = None
+            if args.scantype.lower() in INCREMENTAL_SCANS:
+                changed = resolve_changed_files(args)
+                if changed is not None:
+                    if not should_skip(args.scantype.lower(), changed):
+                        args.changed_files = changed
+                    elif quality_gate:
+                        # The gate is waiting for this scan's upload, so a skip would hang it: do a full scan instead.
+                        Logger.get_logger().info("Incremental scan: nothing relevant changed, but --quality-gate expects this scan's result; running a full scan.")
+                    else:
+                        Logger.get_logger().info(f"Incremental scan: nothing relevant changed for {args.scantype.lower()}; skipping.")
+                        raise SystemExit(0)
 
             if getattr(args, "target", None) or args.scantype.upper() in {"SBOM", "MOBILE"}:
                 if quality_gate:

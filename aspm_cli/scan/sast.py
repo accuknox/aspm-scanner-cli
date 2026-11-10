@@ -18,6 +18,7 @@ from pathlib import Path
 import shutil
 import sys
 import tempfile
+from aspm_cli.utils.incremental import within
 
 class SASTScanner:
     opengrep_image = os.getenv("SCAN_IMAGE", "public.ecr.aws/k9v9d5v2/accuknox/opengrepjob:0.1.0")
@@ -27,7 +28,7 @@ class SASTScanner:
     def __init__(self, command=None, container_mode=True, severity = None,
                  repo_url=None, commit_ref=None, commit_sha=None,
                  pipeline_id=None, job_url=None, ai_analysis=False, codeassure_config=None,aiscan_severity=None,
-                 graph_no_joern=False, context_graph_config=None):
+                 graph_no_joern=False, context_graph_config=None, changed_files=None):
         """
         :param command: Raw OpenGrep CLI args (string)
         :param container_mode: Run in Docker if True, else use local binary
@@ -39,6 +40,8 @@ class SASTScanner:
         :param ai_analysis: Enable AI analysis of results
         """
         self.command = command
+        self._incremental_targets = []
+        self.changed_files = changed_files  # None = full scan; list = scan only these
         self.container_mode = container_mode
         self.severity = [
             s.strip().upper()
@@ -63,6 +66,9 @@ class SASTScanner:
                 docker_pull(self.opengrep_image)
 
             args = self._build_sast_args()
+            if self.changed_files is not None and not self._incremental_targets:
+                Logger.get_logger().info("No changed files to scan; skipping SAST.")
+                return config.PASS_RETURN_CODE, None
             cmd = self._build_sast_command(args)
 
             Logger.get_logger().debug(f"Running SAST scan: {' '.join(cmd)}")
@@ -325,7 +331,10 @@ class SASTScanner:
             sanitized_options.extend(["--max-target-bytes", "5000000"])
 
         output_path = "/app/results.json" if self.container_mode else self.result_file
+        if self.changed_files is not None:
+            targets = self._incremental_targets = within(self.changed_files, targets)
         return ["scan", *sanitized_options, "--json", "--output", output_path, *targets]
+
         
         
     def _fix_file_permissions_if_docker(self):

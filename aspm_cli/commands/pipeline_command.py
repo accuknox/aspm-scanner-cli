@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from aspm_cli.commands.base_command import BaseCommand
 from aspm_cli.commands.gate_command import add_gate_arguments
 from aspm_cli.utils.common import handle_failure
+from aspm_cli.utils.incremental import INCREMENTAL_SCANS, resolve_changed_files, should_skip
 from aspm_cli.utils.ingest_identity import collect_ingest_identity
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils.quality_gate import (
@@ -76,6 +77,12 @@ class PipelineCommand(BaseCommand):
         parser.add_argument("--skip-upload", action="store_true", help="Run the scans without uploading (no quality gate)")
         parser.add_argument("--keep-results", action="store_true", help="Keep the result files after completion")
         parser.add_argument("--container-mode", action="store_true", help="Run the scanners in containers")
+        parser.add_argument(
+            "--changed-only", action="store_true",
+            help="Incremental scan: scan only what the PR (or --base-ref) changed; a scan with nothing relevant to scan is skipped "
+                 "and not declared to the quality gate. Falls back to full scans if the diff can't be computed. Also ACCUKNOX_CHANGED_ONLY=true.",
+        )
+        parser.add_argument("--base-ref", help="With --changed-only: base branch/commit to diff against (default: the PR base).")
         parser.add_argument("--fail-fast", action="store_true", help="Stop at the first scan that fails to run")
         parser.add_argument(
             "--quality-gate",
@@ -152,15 +159,22 @@ class PipelineCommand(BaseCommand):
         accuknox_config = build_accuknox_config(args)
         cli_id = resolve_cli_id(args.cli_id) if quality_gate else None
 
+        changed = resolve_changed_files(args) if any(s in INCREMENTAL_SCANS for s in scans) else None
+
         # Phase 1: run every scan. A scan that cannot run is a failure of the build, not of the others.
         runs, broken = [], []
         for scan in scans:
+            if changed is not None and scan in INCREMENTAL_SCANS and should_skip(scan, changed):
+                logger.info(f"{scan}: nothing relevant changed, skipping (incremental).")
+                continue
             registry_key, build_argv = SCAN_BUILDERS[scan]
             argv = build_argv(args) + (["--container-mode"] if args.container_mode else [])
             if args.ai_analysis and scan in AI_SCANS:
                 argv += AI_SCANS[scan](args)
             try:
                 scan_args = scanner_args(registry_key, argv)
+                scan_args.changed_files = changed if scan in INCREMENTAL_SCANS else None
+                scan_args.diff_range = getattr(args, "diff_range", None)
                 run = run_scan(scan_args, accuknox_config, softfail, args.skip_upload)
             except (ValidationError, ValueError, OSError) as exc:
                 logger.error(f"{scan} scan could not run: {exc}")

@@ -68,5 +68,6 @@ class SASTScanner(BaseScanner):
             codeassure_config=getattr(args, 'codeassure_config', None),
             graph_no_joern=getattr(args, 'graph_no_joern', False),
             context_graph_config=getattr(args, 'context_graph_config', None),
+            changed_files=getattr(args, "changed_files", None),
         )
         return scanner.run()
