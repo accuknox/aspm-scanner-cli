@@ -1,3 +1,17 @@
+aspm-scanner-cli (0.17.0-rc.1) unstable; urgency=medium
+
+  * Release candidate that brings the 0.16.x line to main: quality gates (pipeline and gate
+    commands, scan --quality-gate), AI SAST with standalone checksum-verified components,
+    CERT-In SBOM generation and check, --sbom-vex/--sbom-version, SBOM license enrichment
+    (--enrich-licenses), artifact scans, repository identity on upload, pinned tool checksums
+  * Opt-in: incremental scans (--changed-only/--base-ref) and PR decoration (decorate-pr);
+    nothing changes unless they are used
+  * Fixes: Windows Docker socket mount, raw zip member name validation, SBOM permissions in
+    container mode
+  * Align CLI, wheel, and package version metadata to 0.17.0-rc.1
+
+ -- AccuKnox <accuknox@accuknox.com>  Thu, 12 Nov 2026 12:00:00 +0530
+
 aspm-scanner-cli (0.16.4) unstable; urgency=medium
 
   * Add incremental scans: --changed-only/--base-ref on scan and pipeline scope SAST, secret and IaC to the
