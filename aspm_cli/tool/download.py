@@ -25,10 +25,6 @@ SONAR_SCANNER_VERSION = "7.1.0.4889"
 OPENGREP_VERSION_LINUX = "v1.0.0-alpha.14"
 OPENGREP_VERSION_DARWIN = "v1.22.0"
 OPENGREP_RULES_COMMIT = "f1d2b562b414783763fd02a6ed2736eaed622efa"
-# Same pin as utils/prepare-aspm-scanners.sh. Windows exe is built in CI and
-# uploaded as codeassure-windows-amd64.tar.gz on this scanner-cli release.
-CODEASSURE_GIT_TAG = "v0.1.1"
-CODEASSURE_WINDOWS_ASSET = "codeassure-windows-amd64.tar.gz"
 
 # Tools with native macOS installers (Intel x86_64 + Apple Silicon arm64).
 DARWIN_SUPPORTED_TOOLS = frozenset({
@@ -73,8 +69,7 @@ LINUX_TARBALL_SHA256 = {
     "sq-sast": "22daa837206167d7836f389d03614737c84fb6df6ca30c4ad2b2b42e841a76bb",
     "sast": "5a4eabcfcde94755de2dddee1fda36e40d3e6141a2a671e329c46c9de6b4e2e5",
     "dast": "3fcfe4f6a121f3edcc0c2fbaef74bfcd4c3f5ecc2fcb348d00fe9bf483605607",
-    "codeassure": "83a5d92bbe1552c7f08bf86d7112e341103c173d64c0f7da453cf3ad8281596f",
-    "gitleaks": "d1647c79e6892e71405d96d5d08d8e2b4d7fa9e19cb9fc25ff628b5efffcd6a6",
+    "gitleaks":"d1647c79e6892e71405d96d5d08d8e2b4d7fa9e19cb9fc25ff628b5efffcd6a6",
 }
 
 
@@ -96,15 +91,19 @@ class ToolDownloader:
         "Windows": {
             # Windows local install uses upstream vendor binaries (see _install_windows_*).
         },
+        # Each URL points at one fixed release asset whose SHA-256 is pinned in LINUX_TARBALL_SHA256.
+        # Do not move these to a new release when bumping the version: the release workflow rebuilds
+        # the bundles, so a new release's file has a different checksum even when its contents match.
+        # AI SAST (codeassure, context-graph) is not here: it installs from this release's
+        # ai-sast-SHA256SUMS (see tool/ai_sast.py).
         "Linux": {
-            "iac": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.10.1/iac.tar.gz",
+            "iac":"https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.10.1/iac.tar.gz",
             "container": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.10.1/container.tar.gz",
             "secret": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.10.1/secret.tar.gz",
             "sq-sast": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.10.1/sq-sast.tar.gz",
             "sast": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.10.1/sast.tar.gz",
             "dast": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.10.1/dast.tar.gz",
-            "codeassure": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.1/codeassure.tar.gz",
-            "gitleaks": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.1/gitleaks.tar.gz",
+            "gitleaks": "https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.15.2-rc.3/gitleaks.tar.gz",
         },
     }
 
@@ -484,10 +483,6 @@ class ToolDownloader:
             "gitleaks": [self.install_dir / "gitleaks.exe", self.install_dir / "gitleaks"],
             "sast": [self.install_dir / "sast"],
             "sq-sast": [self.install_dir / "sq-sast"],
-            "codeassure": [
-                self.install_dir / "codeassure" / "codeassure.exe",
-                self.install_dir / "codeassure" / "codeassure",
-            ],
         }
         for destination in dest_candidates[tool_type]:
             if destination.exists() and not self._prepare_destination(destination, tool_type, overwrite):
@@ -500,7 +495,6 @@ class ToolDownloader:
             "container": self._install_windows_container,
             "gitleaks": self._install_windows_gitleaks,
             "sq-sast": self._install_windows_sq_sast,
-            "codeassure": self._install_windows_codeassure,
         }
         try:
             return installers[tool_type]()
@@ -640,35 +634,4 @@ class ToolDownloader:
             if dest.exists():
                 shutil.rmtree(dest)
             shutil.copytree(extracted, dest)
-        return True
-
-    @staticmethod
-    def codeassure_windows_url() -> str:
-        """GitHub release URL for the Windows CodeAssure PyInstaller exe."""
-        override = (os.getenv("CODEASSURE_WINDOWS_URL") or "").strip()
-        if override:
-            return override
-        release = (os.getenv("CODEASSURE_WINDOWS_RELEASE") or "").strip()
-        if release:
-            return (
-                "https://github.com/accuknox/aspm-scanner-cli/releases/download/"
-                f"{release}/{CODEASSURE_WINDOWS_ASSET}"
-            )
-        return (
-            "https://github.com/accuknox/aspm-scanner-cli/releases/latest/download/"
-            f"{CODEASSURE_WINDOWS_ASSET}"
-        )
-
-    def _install_windows_codeassure(self) -> bool:
-        url = self.codeassure_windows_url()
-        dest_dir = self.install_dir / "codeassure"
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        dest = dest_dir / "codeassure.exe"
-        with tempfile.TemporaryDirectory() as tmp:
-            tar_path = Path(tmp) / CODEASSURE_WINDOWS_ASSET
-            self._download_file(url, tar_path)
-            with tarfile.open(tar_path, "r:gz") as tar:
-                tar.extractall(path=tmp)
-            src = self._find_extracted_file(Path(tmp), ["codeassure.exe", "codeassure"])
-            shutil.copy2(src, dest)
         return True

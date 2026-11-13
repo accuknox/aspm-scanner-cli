@@ -1,6 +1,8 @@
 """Incremental scans: resolve the files a PR/branch changed so a scanner can
 limit itself to them. Returns None (= scan everything) whenever the diff
 can't be trusted, so a failure here never turns into a silent pass."""
+from __future__ import annotations  # `str | None` annotations on Python 3.9
+
 import os
 
 from aspm_cli.pr_decorator.detect import detect_pr_context
