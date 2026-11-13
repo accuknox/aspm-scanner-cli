@@ -14,7 +14,9 @@ class ContainerSbomPermissionTests(unittest.TestCase):
             scanner = ContainerScanner("image alpine:3.18", container_mode=container_mode, generate_sbom=True)
             scanner.result_file = result
             completed = MagicMock(returncode=0, stdout="", stderr="")
+            # Local mode looks up the installed scanner; fake it so the test does not need one installed.
             with patch("aspm_cli.scan.container.subprocess.run", return_value=completed), \
+                 patch("aspm_cli.scan.container.ToolManager.get_path", return_value="container"), \
                  patch("aspm_cli.scan.container.docker_pull"), \
                  patch("aspm_cli.scan.container._fix_result_file_permissions_if_docker") as fix:
                 code, path = scanner.run()
