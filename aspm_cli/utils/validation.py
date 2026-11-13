@@ -6,10 +6,12 @@ ALLOWED_TOOL_TYPES = [
     "sast",
     "secret",
     "container",
+    "syft",
     "dast",
     "sq-sast",
     "codeassure",
     "gitleaks",
+    "syft",
 ]
 
 class ToolDownloadConfig(BaseModel):

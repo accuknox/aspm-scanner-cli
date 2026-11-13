@@ -17,7 +17,42 @@ env:
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
 
 jobs:
+  # Nothing is built or published unless the code being released says the same version as the tag
+  # and its tests pass. Every other job depends on `release`, which depends on this.
+  preflight:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Tag matches the version in the code
+        run: |
+          expected="${RELEASE_TAG#v}"
+          code=$(sed -nE "s/.*return '([^']+)'.*/\1/p" aspm_cli/utils/version.py)
+          cfg=$(sed -nE 's/^version = (.+)$/\1/p' setup.cfg)
+          deb=$(sed -nE '1s/^[^ ]+ \(([^)]+)\).*/\1/p' utils/package/debian/changelog)
+          echo "tag $RELEASE_TAG: version.py=$code setup.cfg=$cfg debian/changelog=$deb"
+          for found in "$code" "$cfg" "$deb"; do
+            if [ "$found" != "$expected" ]; then
+              echo "::error::Tag $RELEASE_TAG does not match the code (version.py=$code, setup.cfg=$cfg, debian/changelog=$deb). Bump the version before tagging."
+              exit 1
+            fi
+          done
+
+      - name: Run the tests
+        run: |
+          python -m pip install . pytest
+          python -m pytest -q tests
+
   release:
+    needs: preflight
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -76,7 +111,7 @@ jobs:
             ext: '.exe'
             asset: accuknox-aspm-scanner-windows-amd64.exe
             compat_asset: accuknox-aspm-scanner.exe
-          - os: macos-14
+          - os: macos-latest
             name: macos
             suffix: ''
             ext: ''
@@ -363,3 +398,37 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           files: |
             utils/codeassure-windows-amd64.tar.gz
+
+  ai-sast-binaries:
+    # Attaches the standalone AI SAST binaries (built and released in their own repos) to this release,
+    # plus the ai-sast-SHA256SUMS file that `tool install --type codeassure` verifies against.
+    # Needs the repo secret AI_SAST_RELEASE_TOKEN: a token that can read releases of accuknox/code-context-graph (private).
+    # To ship newer binaries, change the two tags below.
+    needs: [ release ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      CODEASSURE_TAG: v1.0.1
+      CONTEXT_GRAPH_TAG: v1.0.1
+
+    steps:
+      - name: Download and verify the binaries
+        env:
+          GH_TOKEN: ${{ secrets.AI_SAST_RELEASE_TOKEN }}
+        run: |
+          [ -n "$GH_TOKEN" ] || { echo "Secret AI_SAST_RELEASE_TOKEN is not set"; exit 1; }
+          mkdir -p ai-sast src-ca src-cg
+          gh release download "$CODEASSURE_TAG" --repo accuknox/codeassure-cli --dir src-ca
+          gh release download "$CONTEXT_GRAPH_TAG" --repo accuknox/code-context-graph --dir src-cg
+          # each repo publishes its own SHA256SUMS: check the files against it before re-publishing them
+          (cd src-ca && sha256sum -c SHA256SUMS)
+          (cd src-cg && sha256sum -c SHA256SUMS)
+          cp src-ca/codeassure-* src-cg/context-graph-* ai-sast/
+          ls ai-sast | wc -l | grep -qx 6 || { echo "expected 6 binaries (3 codeassure + 3 context-graph)"; ls ai-sast; exit 1; }
+          (cd ai-sast && sha256sum codeassure-* context-graph-* > ai-sast-SHA256SUMS && cat ai-sast-SHA256SUMS)
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$RELEASE_TAG" ai-sast/* --clobber --repo "$GITHUB_REPOSITORY"

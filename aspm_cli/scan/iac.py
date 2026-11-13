@@ -5,6 +5,7 @@ import shlex
 from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import docker_pull
 from aspm_cli.utils.docker_runtime import build_docker_run_prefix
+from aspm_cli.utils.incremental import scope_checkov
 from aspm_cli.utils.logger import Logger
 from colorama import Fore
 from aspm_cli.utils import config
@@ -16,7 +17,7 @@ class IaCScanner:
     output_file_path = '.'
     result_file = os.path.join(output_file_path, 'results_json.json')
 
-    def __init__(self, command, container_mode=False, repo_url=None, repo_branch=None, severity=None):
+    def __init__(self, command, container_mode=False, repo_url=None, repo_branch=None, severity=None, changed_files=None):
         """
         :param command: Raw command string passed by the user (e.g., "-d .")
         :param container_mode: If True, run ak_iac locally instead of in Docker
@@ -24,6 +25,7 @@ class IaCScanner:
         """
         self.command = command
         self.container_mode = container_mode
+        self.changed_files = changed_files  # None = full scan
         self.repo_url = repo_url
         self.repo_branch = repo_branch
         self.severity = [s.strip().upper() for s in (severity or "INFO,LOW,MEDIUM,HIGH,CRITICAL").split(',')]
@@ -89,6 +91,8 @@ class IaCScanner:
             sanitized_args.append(args[i])
             i += 1
 
+        if self.changed_files is not None:
+            sanitized_args = scope_checkov(sanitized_args, self.changed_files)
         sanitized_args.extend([
             "-o", self.output_format,
             "--output-file-path", self.output_file_path,

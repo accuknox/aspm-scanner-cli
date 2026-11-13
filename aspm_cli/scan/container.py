@@ -8,18 +8,40 @@ from aspm_cli.utils.logger import Logger
 from aspm_cli.utils import docker_pull
 from aspm_cli.utils import config
 from aspm_cli.utils.subprocess_utils import utf8_text
-from aspm_cli.utils.sbom import append_sbom_scanner_flags, normalize_sbom_args_for_docker
+from aspm_cli.utils.certin_sbom import TRIVY_FORMAT
+from aspm_cli.utils.sbom import append_sbom_scanner_flags, append_vex_flags, normalize_sbom_args_for_docker
+from aspm_cli.utils.sbom_license_merge import (
+    SYFT_SBOM_FILENAME,
+    merge_syft_licenses_into_trivy_file,
+    remove_syft_sbom_file,
+    should_enrich_filesystem_licenses,
+    syft_scan_source,
+)
+from aspm_cli.scan.trivy_runner import _fix_result_file_permissions_if_docker
 from aspm_cli.utils.docker_runtime import build_docker_run_prefix, trivy_scan_needs_docker_socket
 from colorama import Fore
 
 class ContainerScanner:
     ak_container_image = os.getenv("SCAN_IMAGE", "public.ecr.aws/k9v9d5v2/accuknox/trivy:0.69.3")
+    ak_syft_image = os.getenv("SYFT_IMAGE", "anchore/syft:v1.42.3")
     result_file = './results.json'
+    syft_result_file = f'./{SYFT_SBOM_FILENAME}'
 
-    def __init__(self, command, container_mode=False, generate_sbom: bool = False):
+    def __init__(
+        self,
+        command,
+        container_mode=False,
+        generate_sbom: bool = False,
+        sbom_format: str = "cyclonedx",
+        vex_files=None,
+        enrich_licenses: bool = False,
+    ):
+        self.vex_files = list(vex_files or [])
         self.command = command
         self.container_mode = container_mode
         self.generate_sbom = generate_sbom
+        self.sbom_format = sbom_format
+        self.enrich_licenses = enrich_licenses
 
     def run(self):
         try:
@@ -55,11 +77,23 @@ class ContainerScanner:
                     result.stderr,
                     flags=re.IGNORECASE,
                 )
-                Logger.get_logger().error(sanitized_stderr)
+                # The scanner writes its progress and warnings to stderr on success too; only a
+                # failed run is an error.
+                if result.returncode == 0:
+                    Logger.get_logger().warning(sanitized_stderr)
+                else:
+                    Logger.get_logger().error(sanitized_stderr)
 
             if self.generate_sbom:
                 # SBOM mode: Always use self.result_file (forced to ./results.json)
                 if os.path.exists(self.result_file):
+                    # Trivy ran as root in Docker, so the host cannot rewrite its output (project_name/classifier
+                    # enrichment would silently fail); hand the file back first.
+                    _fix_result_file_permissions_if_docker(self.container_mode, self.result_file)
+                    if self.enrich_licenses:
+                        enrich_rc = self._enrich_licenses_from_syft()
+                        if enrich_rc != 0:
+                            return enrich_rc, self.result_file
                     return result.returncode, self.result_file
                 return result.returncode, None
 
@@ -83,7 +117,7 @@ class ContainerScanner:
         reliably find the JSON output for vulnerability scans.
         """
         if self.generate_sbom:
-            # SBOM mode: Force cyclonedx format and JSON output
+            # SBOM mode: force the chosen SBOM standard (JSON) and the fixed output file
             original_args = shlex.split(self.command or "")
             # Strip any existing format/output flags
             flags_to_strip = {"-o", "--output", "-f", "--format"}
@@ -97,8 +131,9 @@ class ContainerScanner:
                 sanitized_args.append(arg)
                 i += 1
             # Force cyclonedx format and JSON output
-            sanitized_args.extend(["-f", "cyclonedx", "-o", self.result_file])
+            sanitized_args.extend(["-f", TRIVY_FORMAT.get(self.sbom_format, "cyclonedx"), "-o", self.result_file])
             sanitized_args = append_sbom_scanner_flags(sanitized_args)
+            sanitized_args = append_vex_flags(sanitized_args, self.vex_files, self.container_mode)
             if self.container_mode:
                 sanitized_args = normalize_sbom_args_for_docker(
                     self.command or "", sanitized_args
@@ -141,6 +176,78 @@ class ContainerScanner:
             cmd.append(self.ak_container_image)
         
         cmd.extend(container_scan_args)
+        return cmd
+
+    def _enrich_licenses_from_syft(self):
+        """
+        Opt-in filesystem SBOM path: run Syft and copy licenses onto Trivy packages.
+
+        Missing Syft fails the scan. Syft runtime errors keep the Trivy BOM.
+        """
+        if not self.enrich_licenses:
+            return 0
+        if not should_enrich_filesystem_licenses(self.command, True):
+            Logger.get_logger().warning(
+                "--enrich-licenses is only supported for filesystem/fs SBOM; skipping Syft."
+            )
+            return 0
+        try:
+            syft_rc = self._run_syft()
+        except FileNotFoundError:
+            Logger.get_logger().error(
+                "Syft is required for --enrich-licenses. "
+                "Run `accuknox-aspm-scanner tool install --type syft`."
+            )
+            return config.SOMETHING_WENT_WRONG_RETURN_CODE
+        except Exception as e:
+            Logger.get_logger().warning(
+                f"Syft license enrich failed ({e}); continuing with Trivy SBOM."
+            )
+            remove_syft_sbom_file(self.syft_result_file)
+            return 0
+
+        if syft_rc != 0 or not os.path.exists(self.syft_result_file):
+            Logger.get_logger().warning(
+                "Syft license enrich failed; continuing with Trivy SBOM."
+            )
+            remove_syft_sbom_file(self.syft_result_file)
+            return 0
+
+        try:
+            stats = merge_syft_licenses_into_trivy_file(self.result_file, self.syft_result_file)
+            Logger.get_logger().info(
+                f"Enriched {stats.get('enriched', 0)} package licenses from Syft."
+            )
+        except Exception as e:
+            Logger.get_logger().warning(
+                f"Failed to merge Syft licenses ({e}); continuing with Trivy SBOM."
+            )
+        finally:
+            remove_syft_sbom_file(self.syft_result_file)
+        return 0
+
+    def _run_syft(self):
+        if self.container_mode:
+            docker_pull(self.ak_syft_image)
+        scan_cmd = self._build_syft_command()
+        Logger.get_logger().debug(f"Running Syft license enrich: {' '.join(scan_cmd)}")
+        result = subprocess.run(scan_cmd, capture_output=True, text=True)
+        if result.stdout:
+            Logger.get_logger().debug(result.stdout)
+        if result.stderr:
+            Logger.get_logger().debug(result.stderr)
+        return result.returncode
+
+    def _build_syft_command(self):
+        source = syft_scan_source(self.command, self.container_mode)
+        output_spec = f"cyclonedx-json={self.syft_result_file}"
+        if self.container_mode:
+            output_spec = f"cyclonedx-json=/workdir/{SYFT_SBOM_FILENAME}"
+            cmd = build_docker_run_prefix(workdir="/workdir")
+            cmd.append(self.ak_syft_image)
+        else:
+            cmd = [ToolManager.get_path("syft")]
+        cmd.extend([source, "--enrich", "all", "-o", output_spec])
         return cmd
 
     def _severity_threshold_met(self, severity_threshold):

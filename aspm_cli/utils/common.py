@@ -2,14 +2,24 @@ import os
 import sys
 import requests
 import urllib3
-# Suppress SSL warnings
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import json
 import logging
 from colorama import Fore
 
 from aspm_cli.utils.logger import Logger
 from aspm_cli.utils.spinner import Spinner
+
+
+def tls_verify() -> bool:
+    """TLS certificate verification for calls to the AccuKnox endpoint.
+
+    On by default. Set ``ACCUKNOX_INSECURE=1`` (or ``true``/``yes``) to skip it for
+    a lab or self-signed endpoint; the urllib3 warning is only silenced then.
+    """
+    if os.environ.get("ACCUKNOX_INSECURE", "").strip().lower() in ("1", "true", "yes"):
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        return False
+    return True
 
 # Moved from original main.py
 ALLOWED_SCAN_TYPES = [
@@ -20,6 +30,8 @@ ALLOWED_SCAN_TYPES = [
     "sast",
     "dast",
     "sca",
+    "sbom",
+    "mobile",
     "ml-scan",
     "api-discovery",
 ]
@@ -52,7 +64,7 @@ def print_banner():
         # Skipping if there are any issues with Unicode chars
         print(Fore.BLUE + "ACCUKNOX ASPM SCANNER")
 
-def upload_results(file_path, endpoint, label, token, tenant_id, data_type, keep_file=False):
+def upload_results(file_path, endpoint, label, token, tenant_id, data_type, keep_file=False, extra_params=None):
     upload_exit_code = 1
     """Uploads scan results to the AccuKnox endpoint."""
     logger = Logger.get_logger()
@@ -79,6 +91,10 @@ def upload_results(file_path, endpoint, label, token, tenant_id, data_type, keep
     }
     if tenant_id:
         params["tenant_id"] = tenant_id
+    if extra_params:
+        # Repository identity (repo_url, branch, commit_sha, ...) places the scan under repository > branch.
+        params.update({k: v for k, v in extra_params.items() if v})
+        logger.debug(f"Attaching scan to repository: {extra_params.get('repo_url', 'unknown')} @ {extra_params.get('branch', 'unknown branch')}")
 
     # Log request details when DEBUG is enabled
     if logger.level == logging.DEBUG:
@@ -99,7 +115,7 @@ def upload_results(file_path, endpoint, label, token, tenant_id, data_type, keep
                 headers=headers,
                 params=params,
                 files={"file": file},
-                verify=False  # Bypass SSL verification
+                verify=tls_verify()
             )
             response.raise_for_status()
 
@@ -118,6 +134,7 @@ def upload_results(file_path, endpoint, label, token, tenant_id, data_type, keep
     except requests.exceptions.SSLError as e: 
         spinner.stop()
         logger.error(f"SSL error occurred during upload: {e}")
+        logger.error("TLS verification is on. For a self-signed endpoint, set ACCUKNOX_INSECURE=1 to skip it.")
         if logger.level == logging.DEBUG:
             logger.debug(f"SSL Error Type: {type(e).__name__}")
             logger.debug(f"Endpoint: {endpoint}")
