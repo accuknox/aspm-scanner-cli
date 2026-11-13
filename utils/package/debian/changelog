@@ -1,3 +1,15 @@
+aspm-scanner-cli (0.17.0-rc.2) unstable; urgency=medium
+
+  * Fix gitleaks install on Linux: download the bundle its pinned checksum belongs to; tool bundle
+    URLs no longer move with each release
+  * Fix the CLI not starting on Python 3.9 (incremental scan annotations)
+  * Remove unused Windows codeassure install code that downloaded from the latest release
+  * CI: tests and an install smoke test on every pull request (Python 3.9 and 3.12, Linux and
+    Windows); releases check the tag against the code version and run the tests before building
+  * Align CLI, wheel, and package version metadata to 0.17.0-rc.2
+
+ -- AccuKnox <accuknox@accuknox.com>  Fri, 13 Nov 2026 12:00:00 +0530
+
 aspm-scanner-cli (0.17.0-rc.1) unstable; urgency=medium
 
   * Release candidate that brings the 0.16.x line to main: quality gates (pipeline and gate
