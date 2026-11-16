@@ -1,3 +1,11 @@
+aspm-scanner-cli (0.16.5) unstable; urgency=medium
+
+  * DAST: add --scan-type baseline|full|api, --target and --options; rename --zap-plan to --dast-plan
+    (old --command/--zap-plan remain as hidden aliases) and keep the scan engine name out of CLI output
+  * Align CLI, wheel, and package version metadata to 0.16.5
+
+ -- AccuKnox <accuknox@accuknox.com>  Mon, 16 Nov 2026 12:00:00 +0530
+
 aspm-scanner-cli (0.16.3) unstable; urgency=medium
 
   * Add CERT-In SBOM generation/checks and --sbom-vex/--sbom-version
