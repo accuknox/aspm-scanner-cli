@@ -1,6 +1,7 @@
 import subprocess
 import json
 import os
+import re
 import shlex
 
 import yaml
@@ -54,6 +55,11 @@ class DASTScanner:
         self.auth_logged_out_regex = auth_logged_out_regex
         self.auth_login_fallback_url = auth_login_fallback_url
         self.plan_file = plan_file
+
+    @staticmethod
+    def _scrub(text):
+        """Keep the underlying engine's name out of user-visible output."""
+        return re.sub(r"zaproxy|zap", "dast", text or "", flags=re.I)
 
     @property
     def auth_enabled(self):
@@ -151,7 +157,7 @@ class DASTScanner:
         with open(self.plan_file, "r") as f:
             plan = yaml.safe_load(f)
         if not isinstance(plan, dict) or "jobs" not in plan:
-            raise ValueError(f"'{self.plan_file}' does not look like a ZAP automation plan (missing top-level 'jobs')")
+            raise ValueError(f"'{self.plan_file}' does not look like a DAST automation plan (missing top-level 'jobs')")
         plan["jobs"] = [job for job in plan["jobs"] if job.get("type") != "report"]
         plan["jobs"].append(self._report_job())
         with open(self.auth_plan_file, "w") as f:
@@ -164,20 +170,19 @@ class DASTScanner:
         return cmd
 
     def _check_automation_supported(self, is_baseline_or_full):
-        """Raise if --auth-*/--zap-plan were given a command/mode combo that can't use them."""
+        """Raise if --auth-*/--dast-plan were given a command/mode combo that can't use them."""
         if self.auth_enabled and self.plan_file:
-            raise ValueError("Use either --zap-plan or --auth-url/--auth-username/--auth-password, not both.")
+            raise ValueError("Use either --dast-plan or --auth-url/--auth-username/--auth-password, not both.")
         if self.auth_enabled and not self.plan_file and not is_baseline_or_full:
             raise ValueError(
                 "DAST authentication (--auth-url/--auth-username/--auth-password) requires "
-                "zap-baseline.py or zap-full-scan.py"
+                "--scan-type baseline or full"
             )
         uses_automation = bool(self.plan_file) or self.auth_enabled
         if uses_automation and not self.container_mode:
             raise NotImplementedError(
-                "--zap-plan and --auth-* require --container-mode (the automation framework needs "
-                "zap.sh, and browser-based auth needs the headless Firefox/geckodriver bundled in "
-                "the ZAP docker image)."
+                "--dast-plan and --auth-* require --container-mode (the automation framework and "
+                "browser-based auth need the tooling bundled in the DAST docker image)."
             )
 
     def run(self):
@@ -193,7 +198,7 @@ class DASTScanner:
                 Logger.get_logger().debug("Starting DAST scan...")
 
             if self.plan_file:
-                Logger.get_logger().debug(f"DAST scan: running user-supplied ZAP plan '{self.plan_file}'.")
+                Logger.get_logger().debug(f"DAST scan: running user-supplied plan '{self.plan_file}'.")
                 self._write_user_plan()
                 cmd = self._automation_command()
                 env = os.environ.copy()
@@ -206,23 +211,17 @@ class DASTScanner:
                 sanitized_args = self._build_dast_args(args, is_recognized_script)
                 cmd, env = self._build_dast_command(sanitized_args)
 
-            Logger.get_logger().debug(f"Running DAST scan: {' '.join(cmd)}")
+            Logger.get_logger().debug(f"Running DAST scan: {self._scrub(' '.join(cmd))}")
             result = subprocess.run(cmd, capture_output=True, env=env, **utf8_text())
 
-            if result.stdout:
-                Logger.get_logger().debug(result.stdout)
-            if result.stderr:
-                Logger.get_logger().error(result.stderr)
-
-            if result.stdout:
-                sanitized_stdout = result.stdout ##.replace("zap", "[scanner]")
-                Logger.get_logger().debug(sanitized_stdout)
-                if("-help" in self.command):
-                    Logger.log_with_color('INFO', sanitized_stdout, Fore.WHITE)
+            stdout, stderr = self._scrub(result.stdout), self._scrub(result.stderr)
+            if stdout:
+                Logger.get_logger().debug(stdout)
+                if "-help" in self.command:
+                    Logger.log_with_color('INFO', stdout, Fore.WHITE)
                     return config.PASS_RETURN_CODE, None
-            if result.stderr:
-                sanitized_stderr = result.stderr ##.replace("zap", "[scanner]")
-                Logger.get_logger().error(sanitized_stderr)
+            if stderr:
+                Logger.get_logger().error(stderr)
 
             if not os.path.exists(self.result_file):
                 return config.SOMETHING_WENT_WRONG_RETURN_CODE, None
@@ -241,7 +240,7 @@ class DASTScanner:
         """
         if not self.container_mode and is_recognized_script:
             raise NotImplementedError(
-                "DASTScanner currently supports zap.sh only"
+                "DAST scan types currently require --container-mode"
             )
 
         # ZAP conflicting report flags
