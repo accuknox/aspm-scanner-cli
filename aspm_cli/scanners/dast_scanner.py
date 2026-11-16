@@ -22,7 +22,7 @@ class DASTScanner(BaseScanner):
             help="DAST scan type: baseline (passive), full (active) or api (OpenAPI/SOAP/GraphQL). "
                  "Required with --target."
         )
-        parser.add_argument("--target", help="Target URL (or API definition file for --scan-type api)")
+        parser.add_argument("--target", dest="dast_target", help="Target URL (or API definition file for --scan-type api)")
         parser.add_argument(
             "--options",
             default="",
@@ -76,10 +76,10 @@ class DASTScanner(BaseScanner):
     def _command(args: argparse.Namespace) -> str:
         """Build the underlying scanner command from --scan-type/--target/--options (or legacy --command)."""
         if args.scan_type:
-            if not args.target:
+            if not args.dast_target:
                 raise ValueError("--scan-type requires --target.")
-            return shlex.join([SCRIPTS[args.scan_type], "-t", args.target]) + f" {args.options}".rstrip()
-        if args.target:
+            return shlex.join([SCRIPTS[args.scan_type], "-t", args.dast_target]) + f" {args.options}".rstrip()
+        if args.dast_target:
             raise ValueError("--target requires --scan-type.")
         return args.command
 
