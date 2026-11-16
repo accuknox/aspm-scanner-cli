@@ -1,5 +1,4 @@
-# accuknox-aspm-scanner scan dast --zap-plan ./zap.yaml --container-mode
-# https://www.zaproxy.org/docs/automate/automation-framework/
+# accuknox-aspm-scanner scan dast --dast-plan ./plan.yaml --container-mode
 #
 # For plain username/password login, --auth-url/--auth-username/--auth-password is simpler -
 # use this plan instead when you need more than that: spiderAjax, activeScan, a non-browser

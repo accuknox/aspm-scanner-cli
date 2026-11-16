@@ -627,49 +627,43 @@ Upload uses `data_type=API`. Output is code2api JSON (`internal_apis`, `external
 
 ### DAST Scan
 
-Use for OWASP ZAP-based scanning. Full guide, including authenticated scans and the ZAP
-Automation Framework plan format: [`docs/dast-scan.md`](docs/dast-scan.md).
+Use for DAST scanning. Full guide, including authenticated scans and the automation plan
+format: [`docs/dast-scan.md`](docs/dast-scan.md).
 
-Required: one of `--command` or `--zap-plan`.
+Required: `--scan-type` with `--target`, or `--dast-plan`.
 
 Flags used after `dast`:
 
+- `--scan-type`: `baseline` (passive), `full` (active) or `api` (OpenAPI/SOAP/GraphQL)
+- `--target`: target URL (or API definition file for `api`)
+- `--options`: extra scanner options, e.g. `"-m 5"` (spider minutes) or `"-I"`
 - `--severity-threshold`
-- `--container-mode` (required for `--auth-*` and `--zap-plan`)
-- `--zap-plan`: path to a ZAP Automation Framework plan (`zap.yaml`) to run as-is instead of
-  `--command`/`--auth-*` — full control over jobs (spiderAjax, activeScan, passive rule config,
-  auth or unauth). Mutually exclusive with `--auth-*`. Template: [`docs/examples/zap-plan-template.yaml`](docs/examples/zap-plan-template.yaml).
+- `--container-mode` (required for `--auth-*` and `--dast-plan`)
+- `--dast-plan`: path to an automation plan (YAML) to run as-is instead of
+  `--scan-type`/`--auth-*` - full control over jobs. Mutually exclusive with `--auth-*`.
+  Template: [`docs/examples/dast-plan-template.yaml`](docs/examples/dast-plan-template.yaml).
 - `--auth-url`, `--auth-username`, `--auth-password`: log in with a real headless browser before
   spidering/scanning (works for plain HTML forms and JS/SPA logins like OWASP Juice Shop).
 - `--auth-logged-in-regex`, `--auth-logged-out-regex`, `--auth-login-fallback-url`: optional
   session-verification settings for the authenticated flow above.
 
-Typical `--command` value:
-
-```bash
-zap-baseline.py -t http://example.com/ -I
-```
-
 Recommended example:
 
 ```bash
-accuknox-aspm-scanner scan --skip-upload --keep-results dast --command "zap-baseline.py -t http://example.com/ -I" --container-mode
+accuknox-aspm-scanner scan --skip-upload --keep-results dast --scan-type baseline --target http://example.com/ --options "-I" --container-mode
 ```
 
 Container mode with AccuKnox upload:
 
 ```bash
-ACCUKNOX_ENDPOINT=cspm.accuknox.com \
-ACCUKNOX_LABEL=POC \
-ACCUKNOX_TOKEN=abcd1234 \
-accuknox-aspm-scanner scan dast --command "zap-baseline.py -t http://example.com/ -I" --container-mode
+ACCUKNOX_ENDPOINT=cspm.accuknox.com ACCUKNOX_LABEL=POC ACCUKNOX_TOKEN=abcd1234 accuknox-aspm-scanner scan dast --scan-type baseline --target http://example.com/ --options "-I" --container-mode
 ```
 
 Authenticated scan:
 
 ```bash
 accuknox-aspm-scanner scan dast \
-  --command "zap-baseline.py -t https://example.com -m 5" \
+  --scan-type baseline --target https://example.com --options "-m 5" \
   --container-mode \
   --auth-url "https://example.com/login" \
   --auth-username "user@example.com" \
@@ -678,10 +672,10 @@ accuknox-aspm-scanner scan dast \
   --auth-logged-in-regex "user@example\.com"
 ```
 
-Bring-your-own ZAP plan (see [`docs/dast-scan.md`](docs/dast-scan.md) for the full job reference):
+Bring-your-own plan (see [`docs/dast-scan.md`](docs/dast-scan.md) for the full job reference):
 
 ```bash
-accuknox-aspm-scanner scan dast --zap-plan ./zap.yaml --container-mode
+accuknox-aspm-scanner scan dast --dast-plan ./plan.yaml --container-mode
 ```
 
 ### SonarQube SAST Scan
@@ -956,11 +950,11 @@ export SCAN_IMAGE=registry.local/accuknox/trivy:0.69.3
 accuknox-aspm-scanner scan --skip-upload --keep-results container --command "image nginx:latest" --container-mode
 ```
 
-DAST with mirrored ZAP image:
+DAST with mirrored scanner image:
 
 ```bash
-export SCAN_IMAGE=registry.local/zaproxy/zap-stable:2.16.1
-accuknox-aspm-scanner scan --skip-upload --keep-results dast --command "zap-baseline.py -t http://example.com/ -I" --container-mode
+export SCAN_IMAGE=registry.local/dast/scanner:2.16.1
+accuknox-aspm-scanner scan --skip-upload --keep-results dast --scan-type baseline --target http://example.com/ --options "-I" --container-mode
 ```
 
 SonarQube SAST against self-hosted SonarQube:
