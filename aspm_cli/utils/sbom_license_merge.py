@@ -23,19 +23,29 @@ LICENSE_ALIASES = {
 }
 
 
+MERGE_SUBCOMMANDS = frozenset({"filesystem", "fs", "rootfs", "image"})
+
+
 def should_enrich_filesystem_licenses(command: str, enrich_licenses: bool) -> bool:
-    """True when --enrich-licenses applies to a filesystem/fs SBOM command."""
+    """True when --enrich-licenses applies (kept for compatibility; every merge subcommand now qualifies)."""
     if not enrich_licenses:
         return False
-    return parse_trivy_subcommand(command) in FILESYSTEM_SUBCOMMANDS
+    return parse_trivy_subcommand(command) in MERGE_SUBCOMMANDS
+
+
+def should_merge_syft(command: str) -> bool:
+    """Syft's inventory is merged for filesystem, rootfs and image SBOMs."""
+    return parse_trivy_subcommand(command) in MERGE_SUBCOMMANDS
 
 
 def syft_scan_source(command: str, container_mode: bool) -> str:
-    """Syft ``dir:`` source for the same tree Trivy scanned."""
+    """Syft source for what Trivy scanned: ``dir:<path>`` for filesystem/rootfs, the reference for an image."""
+    subcommand = parse_trivy_subcommand(command) or "filesystem"
     target = scan_target_from_command(command) or "."
+    if subcommand == "image":
+        return target
     if container_mode:
-        subcommand = parse_trivy_subcommand(command) or "filesystem"
-        normalized = normalize_filesystem_args_for_docker([subcommand, target])
+        normalized = normalize_filesystem_args_for_docker(["fs", target])
         target = normalized[1] if len(normalized) > 1 else DOCKER_WORKDIR
     return f"dir:{target}"
 

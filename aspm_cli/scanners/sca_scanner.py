@@ -42,6 +42,15 @@ class SCAScanner(BaseScanner):
             help="Git repository branch (used for SCA asset identity; defaults from git)",
         )
 
+        parser.add_argument(
+            "--no-infer-deps",
+            action="store_true",
+            help=(
+                "Do not infer dependencies from source (C/C++ includes, CMake, submodules, vendored "
+                "trees) when no dependency tracker lists them"
+            ),
+        )
+
     def validate_config(self, args: argparse.Namespace, validator: ConfigValidator):
         validator.validate_sca_scan(
             args.command,
@@ -58,5 +67,6 @@ class SCAScanner(BaseScanner):
             severity=args.severity,
             repo_url=args.repo_url,
             repo_branch=args.repo_branch,
+            infer_deps=not getattr(args, "no_infer_deps", False),
         )
         return scanner.run()

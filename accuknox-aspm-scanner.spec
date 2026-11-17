@@ -5,7 +5,7 @@ a = Analysis(
     ['aspm_cli/cli.py'],
     pathex=[],
     binaries=[],
-    datas=[('aspm_cli/certin/cert_in_rules.json', 'aspm_cli/certin')],
+    datas=[('aspm_cli/certin/cert_in_rules.json', 'aspm_cli/certin'), ('aspm_cli/inference/header_map.json', 'aspm_cli/inference')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

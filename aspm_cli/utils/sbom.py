@@ -63,6 +63,14 @@ def scan_target_from_command(command: str) -> Optional[str]:
     return None
 
 
+def scan_root_from_command(command: str) -> str:
+    """Host directory a filesystem scan command covers (``/workdir`` maps back to the cwd)."""
+    target = scan_target_from_command(command) or "."
+    if target == DOCKER_WORKDIR or target.startswith(DOCKER_WORKDIR + "/"):
+        target = "." + target[len(DOCKER_WORKDIR):]
+    return os.path.abspath(target)
+
+
 def derive_filesystem_component_display_name(
     command: str,
     cwd: Optional[str] = None,
@@ -106,6 +114,8 @@ def _should_rewrite_component_name(name: str) -> bool:
 def _sanitize_property_name(name: str) -> str:
     if name.startswith("aquasecurity:trivy:"):
         return "accuknox:scanner:" + name[len("aquasecurity:trivy:") :]
+    if name.startswith("syft:"):
+        return "accuknox:scanner:" + name[len("syft:") :]
     return name
 
 

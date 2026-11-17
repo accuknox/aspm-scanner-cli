@@ -11,12 +11,14 @@ class SCAScanner:
         severity=None,
         repo_url=None,
         repo_branch=None,
+        infer_deps=True,
     ):
         self.command = command
         self.container_mode = container_mode
         self.severity = severity
         self.repo_url = repo_url
         self.repo_branch = repo_branch
+        self.infer_deps = infer_deps
 
     def run(self):
         return run_trivy_vuln_scan(
@@ -28,4 +30,5 @@ class SCAScanner:
             sca_mode=True,
             repo_url=self.repo_url,
             repo_branch=self.repo_branch,
+            infer_deps=self.infer_deps,
         )
