@@ -144,7 +144,7 @@ AccuKnox upload variables are optional when `--skip-upload` is used.
 - `SOFT_FAIL`: Set to `TRUE` to enable soft-fail by default
 - `KEEP_RESULTS`: Set to `TRUE` to keep result files after scan completion
 - `SCAN_IMAGE`: Override the scanner image used in container mode
-- `SYFT_IMAGE`: Override the Syft image used with `--enrich-licenses` in container mode (default: `anchore/syft:v1.42.3`)
+- `SYFT_IMAGE`: Override the Syft image used for the filesystem SBOM inventory in container mode (default: `anchore/syft:v1.42.3`)
 - `CODEASSURE_IMAGE`: Override the AI analysis image used by SAST AI analysis
 - `ACCUKNOX_ENABLE_AI_SAST`: Set to `TRUE` to enable AI-SAST per repo (alternative to `--ai-analysis`)
 - `GITLEAKS_IMAGE`: Override the Gitleaks image when `--engine gitleaks`
@@ -412,6 +412,7 @@ Flags used after `sca`:
 - `--severity`
 - `--repo-url` — used for SCA asset identity (`ArtifactName`); defaults from git
 - `--repo-branch` — branch used with `--repo-url`; defaults from git
+- `--no-infer-deps` — do not infer dependencies from source when no tracker lists them (see [SBOM: merged inventory and inferred dependencies](#sbom-merged-inventory-and-inferred-dependencies))
 
 Typical `--command` value:
 
@@ -448,7 +449,8 @@ Flags used after `container`:
 - `--container-mode`
 - `--generate-sbom`
 - `--sbom-format`, `--sbom-author`, `--sbom-output`, `--cert-in-check` (see [SBOM standard, author and the CERT-In check](#sbom-standard-author-and-the-cert-in-check))
-- `--enrich-licenses` (filesystem/fs SBOM only; default off)
+- `--no-syft-merge`, `--no-infer-deps` (see [SBOM: merged inventory and inferred dependencies](#sbom-merged-inventory-and-inferred-dependencies))
+- `--enrich-licenses` (deprecated; SBOMs now always merge Syft's inventory)
 
 Typical `--command` values:
 
@@ -482,16 +484,42 @@ accuknox-aspm-scanner scan --skip-upload --keep-results --project-name demo-proj
 accuknox-aspm-scanner scan --skip-upload --keep-results --project-name demo-project container --command "image nginx:latest" --generate-sbom
 ```
 
-Optional license enrich for filesystem/fs SBOM only. Trivy remains the SBOM engine (components + CVEs). With `--enrich-licenses`, Syft scans the same tree and copies normalized SPDX licenses onto matching Trivy packages (purl, then name@version). Existing Trivy licenses are not overwritten; Syft-only file components are not added. Image/rootfs SBOM and SCA are unchanged. `--enrich-licenses` on `image` / `rootfs` logs a warning and skips Syft.
+#### SBOM: merged inventory and inferred dependencies
+
+A `filesystem`/`fs`, `rootfs` or `image` SBOM is built from up to three sources and written as one document:
+
+1. **Trivy** is the primary document: components, vulnerabilities, licenses and the dependency graph.
+2. **Syft** scans the same target. Components both found are filled in from Syft where Trivy has gaps (licenses, hashes, CPE, evidence); components only Syft found (for example from `conanfile.txt`, or GitHub Actions in CI configs) are added. In a CycloneDX SBOM, advisories for the added components are looked up with a second Trivy pass over just those components. Syft `file` entries and components with an `UNKNOWN` version are not looked up. Added components carry `accuknox:found-by=inventory`.
+3. **Source inference** (filesystem only) covers trees that have no dependency tracker. For C/C++ it reads `#include`s, build files, Dockerfiles and CI configs and lists what they reference. Components carry `accuknox:inferred`, `accuknox:confidence` (A/B/C), `accuknox:source` and `accuknox:evidence` (file:line) properties and `accuknox:found-by=source-inference`.
+
+| Confidence | Evidence | Version | Advisory lookup |
+|---|---|---|---|
+| A | CMake `FetchContent`/`ExternalProject`/`CPM` with a release tag, `find_package(X EXACT n)`, `vcpkg.json` overrides, `.gitmodules` + gitlink commit, `MODULE.bazel` `bazel_dep`, Bazel `WORKSPACE` `http_archive`/`git_repository`, Meson wraps, autotools `PKG_CHECK_MODULES [pkg = x.y.z]`, `conan install pkg/x.y.z` in a Dockerfile or CI config | resolved | yes, when the package is a known registry package |
+| B | vendored tree (`third_party/`, `vendor/`, `extern/`, `deps/`, ...) with a `VERSION` file, `project(... VERSION n)` or a version macro in a header | sniffed | yes, when the package is a known registry package |
+| C | an `#include` of a known package; a version constraint only (Meson `dependency(... version: '>=1.2')`, autotools `>=`; `find_package(Boost 1.70)` means "at least 1.70", not a version); a distro/brew/vcpkg install in a Dockerfile or CI config (`apt-get install libssl-dev=3.0.2-0ubuntu1`: a distro version is a patched build, so it is kept as `accuknox:version-constraint`, never as an upstream version) | none | none |
+
+Private and internal dependencies (git submodules, `FetchContent` git URLs, vendored directories) are listed as components with a `pkg:github/...` or `pkg:generic/...` purl and are never sent for an advisory or license lookup. Credentials embedded in a remote URL are stripped. Nothing is written into the scanned tree (Syft's inventory is read from its stdout) and no network call is made for inference.
+
+Limits: an `#include` names a package, never a version, so include-only components have no findings. Inference is heuristic (conditional compilation, macros and generated headers can cause misses or over-reports), and the header-to-package map (`aspm_cli/inference/header_map.json`) is a curated list. Advisory coverage for C/C++ depends on the scanner's Conan advisory data, which is limited. Includes that match no known package are not added to the SBOM. Syft's own `--enrich all` can query public package registries for license data, as before.
+
+Opt-outs and behaviour:
+
+- `--no-syft-merge`: Trivy only for the inventory.
+- `--no-infer-deps`: skip source inference.
+- Syft is installed with `accuknox-aspm-scanner tool install --type syft`. If it is missing or fails, the scan warns and continues with the Trivy SBOM. `--enrich-licenses` (the previous opt-in) keeps its strictness: with it, a missing Syft fails the scan.
+- SPDX (`--sbom-format spdx`): the added packages and inferred dependencies are appended to Trivy's SPDX document (with `DEPENDS_ON` relationships and what found them in `comment`). SPDX cannot carry vulnerabilities, so there is no advisory pass.
+- `--container-mode`: the advisory lookup for the added components is a second Trivy container run. The two runs share one throw-away Docker volume (`accuknox-trivy-cache-<id>`, removed afterwards) so the vulnerability database is downloaded once. An `image` inventory mounts the Docker socket, as the Trivy image scan already does.
 
 ```bash
 accuknox-aspm-scanner tool install --type syft
 
 accuknox-aspm-scanner scan --project-name fs-test --keep-results --softfail \
-  container --command "filesystem ." --generate-sbom --enrich-licenses
+  container --command "filesystem ." --generate-sbom
 ```
 
-`--container-mode` still works: Trivy image unchanged; Syft runs as `anchore/syft:v1.42.3` (override with `SYFT_IMAGE`) using the same `/workdir` mount.
+`--container-mode` still works: Syft runs as `anchore/syft:v1.42.3` (override with `SYFT_IMAGE`) using the same `/workdir` mount.
+
+For `sca`, the same inference runs after the filesystem scan: dependencies with a resolved version are checked through a synthetic `conan.lock` kept in a temp directory outside the repository, and their advisories are appended to `results.json` under the target `inferred from source`, so they count toward `--severity`. SCA reports list only vulnerable packages, so versionless and clean inferred components appear in the SBOM only. Use `--no-infer-deps` to turn it off.
 
 SBOM upload requires `--project-name` (or `ACCUKNOX_PROJECT_NAME`). The project does not need to exist beforehand: if it is missing, AccuKnox creates it automatically from this name. `--project-name` is not required for vulnerability scans. Legacy env `ACCUKNOX_PROJECT` is also accepted.
 

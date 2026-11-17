@@ -1,0 +1,518 @@
+{
+  "_comment": "Header -> package map for C/C++ include inference. 'headers' entries ending in '/' match a directory prefix; others match the exact include path. 'conan' is the Conan Center recipe name (used for the purl / synthetic conan.lock), 'vcpkg' the vcpkg port name, 'aliases' other names seen in CMake find_package()/FetchContent.",
+  "packages": {
+    "zlib": {
+      "conan": "zlib",
+      "vcpkg": "zlib",
+      "headers": [
+        "zlib.h",
+        "zconf.h"
+      ],
+      "aliases": [
+        "ZLIB",
+        "zlib1g",
+        "zlib1g-dev"
+      ]
+    },
+    "openssl": {
+      "conan": "openssl",
+      "vcpkg": "openssl",
+      "headers": [
+        "openssl/"
+      ],
+      "aliases": [
+        "OpenSSL",
+        "libssl",
+        "ssl"
+      ]
+    },
+    "libcurl": {
+      "conan": "libcurl",
+      "vcpkg": "curl",
+      "headers": [
+        "curl/"
+      ],
+      "aliases": [
+        "CURL",
+        "curl",
+        "libcurl4",
+        "libcurl4-gnutls-dev",
+        "libcurl4-openssl-dev"
+      ]
+    },
+    "boost": {
+      "conan": "boost",
+      "vcpkg": "boost",
+      "headers": [
+        "boost/"
+      ],
+      "aliases": [
+        "Boost"
+      ]
+    },
+    "nlohmann_json": {
+      "conan": "nlohmann_json",
+      "vcpkg": "nlohmann-json",
+      "headers": [
+        "nlohmann/"
+      ],
+      "aliases": [
+        "nlohmann_json",
+        "nlohmann-json"
+      ]
+    },
+    "fmt": {
+      "conan": "fmt",
+      "vcpkg": "fmt",
+      "headers": [
+        "fmt/"
+      ],
+      "aliases": [
+        "fmt"
+      ]
+    },
+    "spdlog": {
+      "conan": "spdlog",
+      "vcpkg": "spdlog",
+      "headers": [
+        "spdlog/"
+      ],
+      "aliases": [
+        "spdlog"
+      ]
+    },
+    "gtest": {
+      "conan": "gtest",
+      "vcpkg": "gtest",
+      "headers": [
+        "gtest/",
+        "gmock/"
+      ],
+      "aliases": [
+        "GTest",
+        "googletest",
+        "gtest"
+      ]
+    },
+    "protobuf": {
+      "conan": "protobuf",
+      "vcpkg": "protobuf",
+      "headers": [
+        "google/protobuf/"
+      ],
+      "aliases": [
+        "Protobuf",
+        "protobuf"
+      ]
+    },
+    "grpc": {
+      "conan": "grpc",
+      "vcpkg": "grpc",
+      "headers": [
+        "grpc/",
+        "grpcpp/"
+      ],
+      "aliases": [
+        "gRPC",
+        "grpc"
+      ]
+    },
+    "sqlite3": {
+      "conan": "sqlite3",
+      "vcpkg": "sqlite3",
+      "headers": [
+        "sqlite3.h",
+        "sqlite3ext.h"
+      ],
+      "aliases": [
+        "SQLite3",
+        "sqlite3"
+      ]
+    },
+    "libpng": {
+      "conan": "libpng",
+      "vcpkg": "libpng",
+      "headers": [
+        "png.h",
+        "pngconf.h"
+      ],
+      "aliases": [
+        "PNG",
+        "libpng"
+      ]
+    },
+    "libjpeg": {
+      "conan": "libjpeg",
+      "vcpkg": "libjpeg-turbo",
+      "headers": [
+        "jpeglib.h",
+        "jerror.h"
+      ],
+      "aliases": [
+        "JPEG",
+        "libjpeg",
+        "libjpeg-turbo",
+        "libjpeg-turbo8"
+      ]
+    },
+    "libxml2": {
+      "conan": "libxml2",
+      "vcpkg": "libxml2",
+      "headers": [
+        "libxml/"
+      ],
+      "aliases": [
+        "LibXml2",
+        "libxml2"
+      ]
+    },
+    "yaml-cpp": {
+      "conan": "yaml-cpp",
+      "vcpkg": "yaml-cpp",
+      "headers": [
+        "yaml-cpp/"
+      ],
+      "aliases": [
+        "yaml-cpp"
+      ]
+    },
+    "eigen": {
+      "conan": "eigen",
+      "vcpkg": "eigen3",
+      "headers": [
+        "Eigen/",
+        "unsupported/Eigen/"
+      ],
+      "aliases": [
+        "Eigen3",
+        "eigen",
+        "eigen3"
+      ]
+    },
+    "opencv": {
+      "conan": "opencv",
+      "vcpkg": "opencv",
+      "headers": [
+        "opencv2/",
+        "opencv/"
+      ],
+      "aliases": [
+        "OpenCV",
+        "opencv"
+      ]
+    },
+    "rapidjson": {
+      "conan": "rapidjson",
+      "vcpkg": "rapidjson",
+      "headers": [
+        "rapidjson/"
+      ],
+      "aliases": [
+        "RapidJSON",
+        "rapidjson"
+      ]
+    },
+    "abseil": {
+      "conan": "abseil",
+      "vcpkg": "abseil",
+      "headers": [
+        "absl/"
+      ],
+      "aliases": [
+        "absl",
+        "abseil"
+      ]
+    },
+    "pcre2": {
+      "conan": "pcre2",
+      "vcpkg": "pcre2",
+      "headers": [
+        "pcre2.h"
+      ],
+      "aliases": [
+        "PCRE2",
+        "pcre2"
+      ]
+    },
+    "expat": {
+      "conan": "expat",
+      "vcpkg": "expat",
+      "headers": [
+        "expat.h"
+      ],
+      "aliases": [
+        "EXPAT",
+        "expat"
+      ]
+    },
+    "libssh2": {
+      "conan": "libssh2",
+      "vcpkg": "libssh2",
+      "headers": [
+        "libssh2.h"
+      ],
+      "aliases": [
+        "libssh2"
+      ]
+    },
+    "libuv": {
+      "conan": "libuv",
+      "vcpkg": "libuv",
+      "headers": [
+        "uv.h",
+        "uv/"
+      ],
+      "aliases": [
+        "libuv"
+      ]
+    },
+    "sdl": {
+      "conan": "sdl",
+      "vcpkg": "sdl2",
+      "headers": [
+        "SDL2/",
+        "SDL/",
+        "SDL.h",
+        "SDL_*"
+      ],
+      "aliases": [
+        "SDL2",
+        "sdl",
+        "sdl2"
+      ]
+    },
+    "glfw": {
+      "conan": "glfw",
+      "vcpkg": "glfw3",
+      "headers": [
+        "GLFW/"
+      ],
+      "aliases": [
+        "glfw3",
+        "glfw"
+      ]
+    },
+    "catch2": {
+      "conan": "catch2",
+      "vcpkg": "catch2",
+      "headers": [
+        "catch2/",
+        "catch.hpp"
+      ],
+      "aliases": [
+        "Catch2",
+        "catch2"
+      ]
+    },
+    "benchmark": {
+      "conan": "benchmark",
+      "vcpkg": "benchmark",
+      "headers": [
+        "benchmark/"
+      ],
+      "aliases": [
+        "benchmark"
+      ]
+    },
+    "lz4": {
+      "conan": "lz4",
+      "vcpkg": "lz4",
+      "headers": [
+        "lz4.h",
+        "lz4frame.h",
+        "lz4hc.h"
+      ],
+      "aliases": [
+        "lz4"
+      ]
+    },
+    "zstd": {
+      "conan": "zstd",
+      "vcpkg": "zstd",
+      "headers": [
+        "zstd.h"
+      ],
+      "aliases": [
+        "zstd"
+      ]
+    },
+    "bzip2": {
+      "conan": "bzip2",
+      "vcpkg": "bzip2",
+      "headers": [
+        "bzlib.h"
+      ],
+      "aliases": [
+        "BZip2",
+        "bzip2"
+      ]
+    },
+    "xz_utils": {
+      "conan": "xz_utils",
+      "vcpkg": "liblzma",
+      "headers": [
+        "lzma.h"
+      ],
+      "aliases": [
+        "LibLZMA",
+        "liblzma"
+      ]
+    },
+    "freetype": {
+      "conan": "freetype",
+      "vcpkg": "freetype",
+      "headers": [
+        "ft2build.h",
+        "freetype/"
+      ],
+      "aliases": [
+        "Freetype",
+        "freetype"
+      ]
+    },
+    "libtiff": {
+      "conan": "libtiff",
+      "vcpkg": "tiff",
+      "headers": [
+        "tiffio.h",
+        "tiff.h"
+      ],
+      "aliases": [
+        "TIFF",
+        "libtiff",
+        "tiff"
+      ]
+    },
+    "cjson": {
+      "conan": "cjson",
+      "vcpkg": "cjson",
+      "headers": [
+        "cJSON.h",
+        "cjson/"
+      ],
+      "aliases": [
+        "cJSON",
+        "cjson"
+      ]
+    },
+    "jsoncpp": {
+      "conan": "jsoncpp",
+      "vcpkg": "jsoncpp",
+      "headers": [
+        "json/json.h"
+      ],
+      "aliases": [
+        "jsoncpp"
+      ]
+    },
+    "mbedtls": {
+      "conan": "mbedtls",
+      "vcpkg": "mbedtls",
+      "headers": [
+        "mbedtls/"
+      ],
+      "aliases": [
+        "MbedTLS",
+        "mbedtls"
+      ]
+    },
+    "libevent": {
+      "conan": "libevent",
+      "vcpkg": "libevent",
+      "headers": [
+        "event2/",
+        "event.h"
+      ],
+      "aliases": [
+        "libevent"
+      ]
+    },
+    "poco": {
+      "conan": "poco",
+      "vcpkg": "poco",
+      "headers": [
+        "Poco/"
+      ],
+      "aliases": [
+        "Poco",
+        "poco"
+      ]
+    },
+    "libvorbis": {
+      "conan": "vorbis",
+      "vcpkg": "libvorbis",
+      "headers": [
+        "vorbis/"
+      ],
+      "aliases": [
+        "Vorbis",
+        "vorbis"
+      ]
+    },
+    "libogg": {
+      "conan": "ogg",
+      "vcpkg": "libogg",
+      "headers": [
+        "ogg/"
+      ],
+      "aliases": [
+        "Ogg",
+        "ogg"
+      ]
+    },
+    "opus": {
+      "conan": "opus",
+      "vcpkg": "opus",
+      "headers": [
+        "opus/",
+        "opus.h"
+      ],
+      "aliases": [
+        "Opus",
+        "opus"
+      ]
+    },
+    "opusfile": {
+      "conan": "opusfile",
+      "vcpkg": "opusfile",
+      "headers": [
+        "opusfile.h"
+      ],
+      "aliases": [
+        "opusfile"
+      ]
+    },
+    "flac": {
+      "conan": "flac",
+      "vcpkg": "libflac",
+      "headers": [
+        "FLAC/"
+      ],
+      "aliases": [
+        "FLAC",
+        "flac"
+      ]
+    },
+    "openal": {
+      "conan": "openal-soft",
+      "vcpkg": "openal-soft",
+      "headers": [
+        "AL/"
+      ],
+      "aliases": [
+        "OpenAL",
+        "openal-soft"
+      ]
+    },
+    "portaudio": {
+      "conan": "portaudio",
+      "vcpkg": "portaudio",
+      "headers": [
+        "portaudio.h"
+      ],
+      "aliases": [
+        "portaudio"
+      ]
+    }
+  }
+}

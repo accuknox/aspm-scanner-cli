@@ -3,6 +3,7 @@ import os
 import re
 import shlex
 import subprocess
+import tempfile
 from typing import List, Optional, Tuple
 
 from aspm_cli.tool.manager import ToolManager
@@ -18,6 +19,7 @@ from aspm_cli.utils.sbom import (
     FILESYSTEM_SUBCOMMANDS,
     normalize_filesystem_args_for_docker,
     parse_trivy_subcommand,
+    scan_root_from_command,
 )
 
 DEFAULT_TRIVY_IMAGE = "public.ecr.aws/k9v9d5v2/accuknox/trivy:0.69.3"
@@ -129,6 +131,76 @@ def severity_threshold_met(result_file: str, severity_threshold: List[str]) -> b
     return False
 
 
+INFERRED_TARGET = "inferred from source"
+
+
+def merge_inferred_results(command: str, container_mode: bool, result_file: str) -> int:
+    """SCA: look up advisories for dependencies inferred from source and append them to ``result_file``.
+
+    A synthetic ``conan.lock`` of the dependencies whose version could be resolved is written to a
+    temp directory outside the scanned tree and scanned by a second ``fs`` run; its results are
+    appended under the target ``inferred from source``. Anything already reported (same advisory,
+    package and version) is not repeated. Best effort: returns the number of results appended, and
+    leaves ``result_file`` as it was on any failure.
+    """
+    from aspm_cli.inference import infer_dependencies
+    from aspm_cli.inference.overlay import inferred_overlay
+
+    log = Logger.get_logger()
+    try:
+        with open(result_file, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        if not isinstance(data, dict):
+            return 0
+        reported = {
+            (v.get("VulnerabilityID"), v.get("PkgName"), v.get("InstalledVersion"))
+            for r in data.get("Results") or []
+            for v in r.get("Vulnerabilities") or []
+        }
+        inference = infer_dependencies(scan_root_from_command(command))
+        if not inference.eligible():
+            return 0
+        with inferred_overlay(inference.deps) as overlay:
+            if not overlay:
+                return 0
+            out_name = "inferred-results.json"
+            args = ["fs", "." if container_mode else overlay, "--quiet", "--scanners", "vuln", "-f", "json", "-o",
+                    out_name if container_mode else os.path.join(overlay, out_name)]
+            if container_mode:
+                cmd = build_docker_run_prefix(workdir="/workdir", host_path=overlay)
+                cmd.append(get_trivy_image())
+            else:
+                cmd = [ToolManager.get_path("container")]
+            cmd.extend(args)
+            done = run_scan_subprocess(cmd)
+            produced = os.path.join(overlay, out_name)
+            if done.returncode != 0 or not os.path.exists(produced):
+                log.warning("Advisory lookup for dependencies inferred from source failed; skipping them.")
+                return 0
+            with open(produced, "r", encoding="utf-8") as handle:
+                extra = json.load(handle)
+        appended = 0
+        for result in extra.get("Results") or []:
+            vulns = [
+                v for v in result.get("Vulnerabilities") or []
+                if (v.get("VulnerabilityID"), v.get("PkgName"), v.get("InstalledVersion")) not in reported
+            ]
+            if not vulns:
+                continue
+            result["Vulnerabilities"] = vulns
+            result["Target"] = INFERRED_TARGET
+            data.setdefault("Results", []).append(result)
+            appended += 1
+        if appended:
+            with open(result_file, "w", encoding="utf-8") as handle:
+                json.dump(data, handle, indent=2)
+            log.info(f"Added {appended} result set(s) from {len(inference.eligible())} dependencies inferred from source.")
+        return appended
+    except Exception as exc:
+        log.warning(f"Source dependency inference failed ({exc}); continuing without it.")
+        return 0
+
+
 def run_trivy_vuln_scan(
     command: str,
     container_mode: bool,
@@ -138,6 +210,7 @@ def run_trivy_vuln_scan(
     sca_mode: bool = False,
     repo_url: Optional[str] = None,
     repo_branch: Optional[str] = None,
+    infer_deps: bool = True,
 ) -> Tuple[int, Optional[str]]:
     if validate_command:
         validate_command(command)
@@ -178,6 +251,8 @@ def run_trivy_vuln_scan(
 
     if sca_mode:
         _fix_result_file_permissions_if_docker(container_mode, result_file)
+        if infer_deps and parse_trivy_subcommand(command) in FILESYSTEM_SUBCOMMANDS:
+            merge_inferred_results(command, container_mode, result_file)
         prepare_sca_report(
             result_file,
             repo_url=repo_url,
