@@ -313,3 +313,36 @@ class TestLinkAddedComponents(unittest.TestCase):
         first = json.dumps(base["dependencies"], sort_keys=True)
         link_added_components(base, original)
         self.assertEqual(first, json.dumps(base["dependencies"], sort_keys=True))
+
+
+class TestLicenseTextsNeverBecomeLicenseNames(unittest.TestCase):
+    """A merged ClickHouse SBOM failed to ingest: Syft passed pandas' 60 KB METADATA license text through."""
+
+    def test_full_license_text_maps_to_spdx_or_is_dropped(self):
+        from aspm_cli.utils.sbom_license_merge import normalize_license_id
+        bsd = "BSD 3-Clause License\n\nCopyright (c) 2008-2011, AQR Capital Management\n" + "x" * 60000
+        self.assertEqual(normalize_license_id(bsd), "BSD-3-Clause")
+        gpl = "GNU GENERAL PUBLIC LICENSE\n Version 2, June 1991\n" + "y" * 20000
+        self.assertEqual(normalize_license_id(gpl), "GPL-2.0-only")
+        self.assertEqual(normalize_license_id("Apache License\n Version 2.0, January 2004" + "z" * 500), "Apache-2.0")
+        self.assertIsNone(normalize_license_id("Copyright (c) 2005-2024, NumPy Developers.\nAll rights reserved.\n" + "q" * 5000))
+        self.assertIsNone(normalize_license_id("a" * 500))  # long single line, unrecognised
+        self.assertEqual(normalize_license_id("MIT"), "MIT")  # ordinary ids untouched
+        self.assertEqual(normalize_license_id("Apache 2.0"), "Apache-2.0")
+
+    def test_merge_never_copies_an_oversized_license_onto_a_component(self):
+        base = trivy_doc()
+        extra = {"components": [{"bom-ref": "s-zlib", "type": "library", "name": "zlib", "version": "1.2.11",
+                                 "purl": "pkg:conan/zlib@1.2.11",
+                                 "licenses": [{"license": {"name": "Copyright (c) NumPy Developers.\n" + "q" * 50000}}]}]}
+        merge_components(base, extra, "inventory")
+        self.assertFalse(base["components"][0].get("licenses"))
+        self.assertLess(len(json.dumps(base)), 5000)
+
+    def test_recognised_text_is_copied_as_an_spdx_id(self):
+        base = trivy_doc()
+        extra = {"components": [{"bom-ref": "s-zlib", "type": "library", "name": "zlib", "version": "1.2.11",
+                                 "purl": "pkg:conan/zlib@1.2.11",
+                                 "licenses": [{"license": {"name": "BSD 3-Clause License\n" + "x" * 9000}}]}]}
+        merge_components(base, extra, "inventory")
+        self.assertEqual(base["components"][0]["licenses"], [{"license": {"id": "BSD-3-Clause"}}])
