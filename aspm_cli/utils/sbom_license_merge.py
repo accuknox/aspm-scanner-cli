@@ -50,13 +50,48 @@ def syft_scan_source(command: str, container_mode: bool) -> str:
     return f"dir:{target}"
 
 
+MAX_LICENSE_LEN = 128
+
+# Header fragments of full license texts (Python's METADATA "License:" often holds the whole text).
+_TEXT_LICENSES = (
+    (("apache license", "version 2.0"), "Apache-2.0"),
+    (("mozilla public license", "2.0"), "MPL-2.0"),
+    (("gnu lesser general public license", "version 3"), "LGPL-3.0-only"),
+    (("gnu lesser general public license", "version 2.1"), "LGPL-2.1-only"),
+    (("gnu general public license", "version 3"), "GPL-3.0-only"),
+    (("gnu general public license", "version 2"), "GPL-2.0-only"),
+    (("bsd 3-clause",), "BSD-3-Clause"),
+    (("bsd 2-clause",), "BSD-2-Clause"),
+    (("mit license",), "MIT"),
+    (("permission is hereby granted, free of charge",), "MIT"),
+    (("isc license",), "ISC"),
+    (("the unlicense",), "Unlicense"),
+)
+
+
+def license_from_text(value: str) -> Optional[str]:
+    """SPDX id for a full license text from its header, else None (never the text itself)."""
+    head = " ".join(value[:600].lower().split())
+    for needles, spdx in _TEXT_LICENSES:
+        if all(n in head for n in needles):
+            return spdx
+    return None
+
+
 def normalize_license_id(value: Optional[str]) -> Optional[str]:
-    """Drop UNKNOWN/hash ids; map common aliases to SPDX; keep expressions."""
+    """Drop UNKNOWN/hash ids; map common aliases to SPDX; keep expressions.
+
+    A value that is a license *text* (long or multi-line) is not an id or a name: it is mapped to
+    an SPDX id when its header is recognised and dropped otherwise, so a 60 KB text can never end
+    up as a license node (graph stores cannot index values that large).
+    """
     if not value:
         return None
     stripped = value.strip()
     if not stripped:
         return None
+    if len(stripped) > MAX_LICENSE_LEN or "\n" in stripped:
+        return license_from_text(stripped)
     if stripped.upper() == "UNKNOWN":
         return None
     if stripped.lower().startswith("sha256:"):
