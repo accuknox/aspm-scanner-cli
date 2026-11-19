@@ -3,6 +3,7 @@ import os
 import json
 import re
 import shlex
+import sys
 import asyncio
 import requests
 from urllib.parse import urlparse
@@ -82,6 +83,10 @@ class SQSASTScanner:
                 cmd.extend(shlex.split(self.command))
             else:
                 cmd = [ToolManager.get_path("sq-sast")] + cmd
+                # macOS: the scanner's JVM fails reading the system keychain (posix_spawn of `security`).
+                # shortcut: skips the OS truststore, so a server with a private CA needs sonar.scanner.truststore*.
+                if sys.platform == "darwin" and not any("skipSystemTruststore" in a for a in cmd):
+                    cmd.append("-Dsonar.scanner.skipSystemTruststore=true")
 
             Logger.get_logger().debug(f"Running scan: {' '.join(cmd)}")
             result = subprocess.run(cmd, capture_output=True, **utf8_text())
