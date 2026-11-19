@@ -3,6 +3,7 @@ import os
 import json
 import shlex
 import asyncio
+import requests
 from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import docker_pull
 from aspm_cli.utils.docker_runtime import build_docker_run_prefix
@@ -43,11 +44,20 @@ class SQSASTScanner:
         self.sonar_host_url = self._extract_arg("-Dsonar.host.url")
         self.sonar_org_id = self._extract_arg("-Dsonar.organization")
 
+        # The backend parser needs a repo URL; same fallback convention as the sast scanner.
+        if not self.repo_url:
+            name = self.sonar_project_key or os.path.basename(os.getcwd())
+            self.repo_url = f"localhost/{name}"
+            Logger.get_logger().info(f"No git remote found, using '{self.repo_url}' as repo identifier")
+
     def run(self):
         try:
             returncode = 0
             if not self.skip_sonar_scan:
                 returncode = self._run_sq_scan()
+                if returncode != 0:
+                    # Nothing valid to fetch; surface the scanner error instead of a misleading fetch failure.
+                    raise RuntimeError(f"SonarScanner failed with exit code {returncode}; see the error above.")
             else:
                 Logger.get_logger().info("SQ SAST scan skipped.")
             result_file = self._run_ak_scan()
@@ -57,9 +67,6 @@ class SQSASTScanner:
                     f"Vulnerabilities matching severities: {', '.join(self.severity)} found."
                 )
                 return 1, result_file
-            # Prefer severity gating for findings; still surface scanner hard failures.
-            if returncode != 0:
-                return returncode, result_file
             return 0, result_file
         except subprocess.CalledProcessError as e:
             Logger.get_logger().error(f"SonarQube-based AccuKnox SAST scan failed: {e}")
@@ -110,7 +117,19 @@ class SQSASTScanner:
                 report_path=""
             )
             results = asyncio.run(fetcher.fetch_all())
-            return results[0]
+            # fetch_all() returns an error string (not a list) on failure.
+            if not isinstance(results, list) or not results:
+                raise RuntimeError(f"SonarQube fetch failed: {results or 'no result files produced'}")
+            if len(results) == 1:
+                return results[0]
+            # One file per SonarQube branch: upload the --branch one (files are SQ-<key>-<branch>.json), else the first.
+            chosen = next((r for r in results if r.endswith(f"-{self.branch}.json")), results[0])
+            skipped = [r for r in results if r != chosen]
+            Logger.get_logger().warning(
+                f"Project has {len(results)} SonarQube branches; uploading {chosen}, skipping {skipped}. "
+                "Run once per project key to cover the rest."
+            )
+            return chosen
         except Exception as e:
             Logger.get_logger().error(f"Error during AccuKnox SQ Fetcher: {e}")
             raise
@@ -121,10 +140,11 @@ class SQSASTScanner:
             with open(file_path, 'r') as file:
                 data = json.load(file)
 
+            # CLI/git values win; otherwise take them from SonarQube (result branch, latest analysis revision).
             repo_details = {
                 "repository_url": self.repo_url,
-                "commit": self.commit_sha,
-                "branch": self.branch,
+                "commit": self.commit_sha or self._analysis_revision(data.get("branch")),
+                "branch": self.branch or data.get("branch"),
                 "pipeline_url": self.pipeline_url
             }
 
@@ -138,6 +158,21 @@ class SQSASTScanner:
             Logger.get_logger().debug(f"Error processing result file: {e}")
             Logger.get_logger().error(f"Error during SQ SAST scan: {e}")
             raise
+
+    def _analysis_revision(self, branch):
+        """Commit SHA of the project's latest SonarQube analysis, or None if unavailable."""
+        try:
+            params = {"project": self.sonar_project_key, "ps": 1}
+            if branch:
+                params["branch"] = branch
+            r = requests.get(f"{self.sonar_host_url}/api/project_analyses/search", params=params,
+                             auth=(self.sonar_token, ""), timeout=30)
+            r.raise_for_status()
+            analyses = r.json().get("analyses") or []
+            return analyses[0].get("revision") if analyses else None
+        except Exception as e:
+            Logger.get_logger().debug(f"Could not read analysis revision from SonarQube: {e}")
+            return None
 
     def _severity_threshold_met(self, file_path):
         """
