@@ -44,13 +44,13 @@ class SQSASTScanner:
         self.sonar_host_url = self._extract_arg("-Dsonar.host.url")
         self.sonar_org_id = self._extract_arg("-Dsonar.organization")
 
-        # The backend parser needs a repo URL; same fallback convention as the sast scanner.
-        if not self.repo_url:
-            name = self.sonar_project_key or os.path.basename(os.getcwd())
-            self.repo_url = f"localhost/{name}"
-            Logger.get_logger().info(f"No git remote found, using '{self.repo_url}' as repo identifier")
-
     def run(self):
+        missing = [f for f, v in (("--repo-url", self.repo_url), ("--branch", self.branch)) if not v]
+        if missing:
+            raise ValueError(
+                f"{' and '.join(missing)} required (no git repository detected). "
+                "Pass them after sq-sast, or run from a git checkout."
+            )
         try:
             returncode = 0
             if not self.skip_sonar_scan:
@@ -144,7 +144,7 @@ class SQSASTScanner:
             repo_details = {
                 "repository_url": self.repo_url,
                 "commit": self.commit_sha or self._analysis_revision(data.get("branch")),
-                "branch": self.branch or data.get("branch"),
+                "branch": self.branch,
                 "pipeline_url": self.pipeline_url
             }
 
