@@ -26,7 +26,7 @@ It can upload results to the **AccuKnox ASPM Platform**, but it can also run in 
 Install from the GitHub release wheel:
 
 ```bash
-pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.2/accuknox_aspm_scanner-0.17.0rc2-py3-none-any.whl
+pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.3/accuknox_aspm_scanner-0.17.0rc3-py3-none-any.whl
 ```
 
 ### 2. Restricted or on-prem environment
@@ -50,7 +50,7 @@ Install the cross-platform Python wheel (same as connected environment above), o
 ```bash
 # Linux x86_64
 curl -fL -o accuknox-aspm-scanner \
-  https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.2/accuknox-aspm-scanner-linux-amd64
+  https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.3/accuknox-aspm-scanner-linux-amd64
 chmod +x accuknox-aspm-scanner
 ```
 
@@ -280,7 +280,7 @@ Flags used after `iac`:
 - `--container-mode`
 - `--severity` — Comma-separated severities that fail the scan. Allowed: `INFO,LOW,MEDIUM,HIGH,CRITICAL`. Defaults to all.
 - `--repo-url`
-- `--repo-branch`
+- `--repo-branch` — defaults to the CI branch (see [Branch in scan reports](#branch-in-scan-reports)), else git
 
 Typical `--command` value:
 
@@ -317,7 +317,7 @@ Flags used after `sast`:
 - `--severity` — Comma-separated severities that fail the scan (matched on finding impact). Allowed: `LOW,MEDIUM,HIGH,CRITICAL,UNKNOWN`. Defaults to all.
 - `--aiscan-severity`
 - `--repo-url`
-- `--commit-ref`
+- `--commit-ref` — defaults to the CI branch (see [Branch in scan reports](#branch-in-scan-reports)), else git
 - `--commit-sha`
 - `--pipeline-id`
 - `--job-url`
@@ -411,7 +411,7 @@ Flags used after `sca`:
 - `--container-mode`
 - `--severity`
 - `--repo-url` — used for SCA asset identity (`ArtifactName`); defaults from git
-- `--repo-branch` — branch used with `--repo-url`; defaults from git
+- `--repo-branch` — branch used with `--repo-url`; defaults to the CI branch, else git
 
 Typical `--command` value:
 
@@ -563,7 +563,7 @@ Flags used after `ml-scan`:
 
 - `--container-mode`
 - `--repo-url` — used for `model_id` / `model_path` metadata
-- `--commit-ref` — branch/ref in `model_path`
+- `--commit-ref` — branch/ref in `model_path`; defaults to the CI branch, else git
 - `--model-name` — optional collector name in upload payload
 - `--source-type` — default `github`
 
@@ -782,18 +782,38 @@ accuknox-aspm-scanner pipeline --scans sast,sca,secret,iac,sbom --quality-gate
 
 `pipeline` runs the scans in order, uploads them under one run id, then waits for the verdict (default 5 minutes).
 
-- `--scans`: any of `sast`, `sq-sast`, `sca`, `secret`, `iac`, `sbom` (container/filesystem SBOM).
-- Per-scan options: `--sast-command` (default `scan .`), `--sca-command` (`fs .`), `--secret-command`
-  (`filesystem .`), `--secret-engine`, `--iac-command` (`-d .`), `--sbom-command` (`filesystem .`),
-  `--sq-sast-command`, `--container-mode`.
+- `--scans`: any of `sast`, `sq-sast`, `sca`, `secret`, `iac`, `sbom` (container/filesystem SBOM), `ml`.
+- Per-scan options: `--sast-command` (default `scan .`), `--sca-command` (`fs .`), `--secret-command`,
+  `--secret-engine`, `--iac-command` (`-d .`), `--sbom-command` (`filesystem .`), `--ml-command`
+  (`scan -p . -r json`), `--sq-sast-command`, `--container-mode`.
+- `--secret-command` defaults to TruffleHog git mode, `git file://.` (the checked-out commits), and to
+  `filesystem .` outside a git checkout. AccuKnox cannot yet import TruffleHog `filesystem` results, and in CI
+  filesystem mode also reports the token `actions/checkout` stores in `.git/config`. With
+  `--secret-engine gitleaks` the default is `detect --source .`.
+- `ml` scans model files (`.pkl .pt .pth .h5 .keras .pb .ckpt .npy`). The quality gate does not cover it: its
+  result is uploaded outside the gate run, and model issues fail the build unless `--softfail`. In container
+  mode the scanner image is pulled only when model files are found.
 - Only scans that produced a result are declared to the gate, so a clean secret scan (nothing to upload)
   never leaves the gate waiting.
 - With `--quality-gate`, findings no longer fail a scan step: the policy decides. Scans that cannot run or
   upload still fail the build. Without it, `pipeline` simply runs the scans one after another.
+- A scan that passed only because no policy checked it (no policy matches the repository and branch, or the
+  matching policies do not gate that scan) is printed as a warning, and as an annotation on GitHub Actions
+  and Azure DevOps.
 - `--fail-fast` stops at the first scan that cannot run.
 - `--ai-analysis` runs AI analysis on the scans that support it (today: `sast`; off by default), with
   `--aiscan-severity`, `--codeassure-config`, `--context-graph-config` and `--graph-no-joern`. These options
   need `--ai-analysis`. Other scan types ignore it until they gain an AI step.
+
+### Branch in scan reports
+
+SAST, IaC, SCA, SonarQube and ML reports record a branch, and AccuKnox files SAST and IaC findings under
+repository + branch. Unless `--commit-ref` / `--repo-branch` / `--branch` is given, the branch comes from
+`ACCUKNOX_BRANCH`, then the CI (on pull requests, the source branch): `GITHUB_HEAD_REF` / `GITHUB_REF_NAME`,
+`CI_COMMIT_REF_NAME`, `BITBUCKET_BRANCH`, `SYSTEM_PULLREQUEST_SOURCEBRANCH` / `BUILD_SOURCEBRANCH`,
+`CHANGE_BRANCH` / `BRANCH_NAME`, `GIT_BRANCH`; and only then git. CI checkouts are often detached (GitHub pull
+requests, GitLab, Azure DevOps), where git can only answer `HEAD`, which would put every such build under one
+`HEAD` branch.
 
 ### Separate steps: `scan --quality-gate` + `gate`
 

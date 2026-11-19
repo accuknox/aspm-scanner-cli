@@ -3,6 +3,7 @@ import os
 from aspm_cli.scanners.base_scanner import BaseScanner
 from aspm_cli.utils.config import ConfigValidator
 from aspm_cli.utils.git_info import GitInfo
+from aspm_cli.utils.ingest_identity import detect_branch
 from aspm_cli.scan.sast import SASTScanner as OriginalSASTScanner 
 
 class SASTScanner(BaseScanner):
@@ -31,7 +32,7 @@ class SASTScanner(BaseScanner):
             help="Comma-separated list of severities to check for AI analysis. If any match, AI analysis will run on those findings."
         )
         parser.add_argument("--repo-url", default=GitInfo.get_repo_url(), help="Git repository URL")
-        parser.add_argument("--commit-ref", default=GitInfo.get_commit_ref(), help="Commit reference for scanning")
+        parser.add_argument("--commit-ref", default=detect_branch(), help="Commit reference for scanning")
         parser.add_argument("--commit-sha", default=GitInfo.get_commit_sha(), help="Commit SHA for scanning")
         parser.add_argument("--pipeline-id", help="Pipeline ID for scanning")
         parser.add_argument("--job-url", help="Job URL for scanning")

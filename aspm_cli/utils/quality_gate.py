@@ -250,6 +250,30 @@ def _counts_text(counts: Mapping) -> str:
     return " ".join(f"{name[0].upper()}:{counts.get(name, 0)}" for name in ("critical", "high", "medium", "low"))
 
 
+def _scope(payload: Mapping) -> str:
+    return f"{payload.get('repository') or '?'}:{payload.get('branch') or '?'}"
+
+
+# Notes that mean a scan passed only because no policy checked it. Easy to miss in the table, so
+# they are also raised as warnings.
+_UNCHECKED_NOTES = {
+    "no_policy_matched": lambda name, scope: f"No quality-gate policy applies to {scope}, so {name} passed without being checked.",
+    "bucket_not_gated": lambda name, scope: f"The policies for {scope} do not gate {name}, so it passed without being checked.",
+}
+
+
+def unchecked_warnings(result: GateResult) -> list[str]:
+    """One sentence per scan that passed only because no policy evaluated it."""
+    if result.state != "resolved":
+        return []
+    payload = result.payload
+    return [
+        _UNCHECKED_NOTES[row["note"]](name, _scope(payload))
+        for name, row in (payload.get("results") or {}).items()
+        if row.get("note") in _UNCHECKED_NOTES
+    ]
+
+
 def summary_lines(result: GateResult, exit_code: int, softfail: bool = False) -> list[str]:
     """Plain-text report of a poll result (also the body of the Markdown step summary)."""
     if result.state != "resolved":
@@ -267,7 +291,9 @@ def summary_lines(result: GateResult, exit_code: int, softfail: bool = False) ->
         lines.append(f"{name:<10} {str(row.get('status')).upper():<8} {_counts_text(row.get('counts') or {})}")
         lines.extend(f"    - {_reason_line(reason)}" for reason in row.get("reasons") or [])
         failure_codes = {failure.get("code") for failure in payload.get("failures") or []}
-        if row.get("note") and row["note"] not in failure_codes:
+        if row.get("note") in _UNCHECKED_NOTES:
+            lines.append(f"    - {_UNCHECKED_NOTES[row['note']](name, _scope(payload))}")
+        elif row.get("note") and row["note"] not in failure_codes:
             lines.append(f"    - {row['note']}")
     overall = payload.get("overall") or {}
     if overall.get("status") in ("fail", "warn"):
@@ -324,10 +350,18 @@ def report(
 
     emit_result_json(result_document(result, exit_code, cli_id, softfail), json_file)
 
+    unchecked = unchecked_warnings(result)
+    for warning in unchecked:
+        logger.warning(warning)
     if os.environ.get("GITHUB_ACTIONS") == "true":
         level = "error" if exit_code else "warning" if (warned or softfail and result.payload.get("status") == "failed") else None
         if level:
             print(f"::{level} title=AccuKnox quality gate::{lines[-1]}")
+        for warning in unchecked:
+            print(f"::warning title=AccuKnox quality gate::{warning}")
+    elif os.environ.get("TF_BUILD", "").lower() == "true":  # Azure DevOps shows these on the run summary
+        for warning in unchecked:
+            print(f"##vso[task.logissue type=warning]AccuKnox quality gate: {warning}")
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary_path:
         try:

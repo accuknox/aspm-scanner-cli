@@ -78,13 +78,8 @@ class MLScanScanner:
     def run(self):
         temp_files = []
         try:
-            if self.container_mode:
-                docker_pull(
-                    self.scan_image,
-                    platform=default_ml_scan_docker_platform(),
-                )
-
             if "--help" in (self.command or ""):
+                self._pull_image()
                 cmd = self._build_scan_command(["scan", "--help"], ".")
                 result = run_scan_subprocess(cmd)
                 Logger.log_with_color("INFO", result.stdout or result.stderr, Fore.WHITE)
@@ -107,6 +102,8 @@ class MLScanScanner:
                 self._write_payload([], scan_root)
                 return config.PASS_RETURN_CODE, self.result_file
 
+            # Only now: the scanner image is several GB, and most repositories have no model files.
+            self._pull_image()
             metadata = derive_model_metadata(
                 self.repo_url,
                 self.commit_ref,
@@ -202,6 +199,10 @@ class MLScanScanner:
                         os.remove(temp_file)
                 except OSError:
                     pass
+
+    def _pull_image(self):
+        if self.container_mode:
+            docker_pull(self.scan_image, platform=default_ml_scan_docker_platform())
 
     def _write_payload(self, modelscan_results, scan_root, metadata=None):
         metadata = metadata or derive_model_metadata(

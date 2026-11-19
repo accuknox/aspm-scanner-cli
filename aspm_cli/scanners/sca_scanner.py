@@ -4,6 +4,7 @@ from aspm_cli.scanners.base_scanner import BaseScanner
 from aspm_cli.scan.sca import SCAScanner as OriginalSCAScanner
 from aspm_cli.utils.config import ConfigValidator
 from aspm_cli.utils.git_info import GitInfo
+from aspm_cli.utils.ingest_identity import detect_branch
 
 
 class SCAScanner(BaseScanner):
@@ -37,7 +38,7 @@ class SCAScanner(BaseScanner):
         )
         parser.add_argument(
             "--repo-branch",
-            default=GitInfo.get_branch_name(),
+            default=detect_branch(),
             help="Git repository branch (used for SCA asset identity; defaults from git)",
         )
 

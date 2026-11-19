@@ -281,3 +281,40 @@ def test_json_is_printed_for_a_timeout_without_a_response(capsys):
     body = capsys.readouterr().out.split("-----\n", 1)[1].rsplit("\n-----", 1)[0]
     document = json.loads(body)
     assert document["state"] == "timeout" and document["response"] == {} and document["detail"] == "no verdict in 300s"
+
+
+# ------------------------------------------------------- scans no policy checked
+
+UNCHECKED = dict(
+    repository="acme/api", branch="main",
+    results={
+        "SG": {"status": "pass", "counts": {}, "reasons": []},
+        "TR": {"status": "pass", "counts": {}, "reasons": [], "note": "bucket_not_gated"},
+    },
+)
+
+
+def test_scans_that_no_policy_checked_are_named_in_plain_words():
+    result = resolved("passed", **UNCHECKED)
+    assert qg.unchecked_warnings(result) == [
+        "The policies for acme/api:main do not gate TR, so it passed without being checked."
+    ]
+    nothing_matched = resolved("passed", repository="acme/api", branch="dev",
+                               results={"SG": {"status": "pass", "note": "no_policy_matched"}})
+    assert qg.unchecked_warnings(nothing_matched) == [
+        "No quality-gate policy applies to acme/api:dev, so SG passed without being checked."
+    ]
+    assert not any("bucket_not_gated" in line for line in qg.summary_lines(result, qg.EXIT_PASS))
+
+
+def test_unchecked_scans_become_ci_warnings(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    qg.report(resolved("passed", **UNCHECKED), qg.EXIT_PASS)
+    out = capsys.readouterr().out
+    assert "::warning title=AccuKnox quality gate::The policies for acme/api:main do not gate TR" in out
+
+    monkeypatch.delenv("GITHUB_ACTIONS")
+    monkeypatch.setenv("TF_BUILD", "True")
+    qg.report(resolved("passed", **UNCHECKED), qg.EXIT_PASS)
+    assert "##vso[task.logissue type=warning]AccuKnox quality gate: The policies" in capsys.readouterr().out
