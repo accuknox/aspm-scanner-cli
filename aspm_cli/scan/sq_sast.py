@@ -1,9 +1,11 @@
 import subprocess
 import os
 import json
+import re
 import shlex
 import asyncio
 import requests
+from urllib.parse import urlparse
 from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import docker_pull
 from aspm_cli.utils.docker_runtime import build_docker_run_prefix
@@ -45,12 +47,7 @@ class SQSASTScanner:
         self.sonar_org_id = self._extract_arg("-Dsonar.organization")
 
     def run(self):
-        missing = [f for f, v in (("--repo-url", self.repo_url), ("--branch", self.branch)) if not v]
-        if missing:
-            raise ValueError(
-                f"{' and '.join(missing)} required (no git repository detected). "
-                "Pass them after sq-sast, or run from a git checkout."
-            )
+        self.repo_url = self._valid_repo_url(self.repo_url)
         try:
             returncode = 0
             if not self.skip_sonar_scan:
@@ -144,7 +141,7 @@ class SQSASTScanner:
             repo_details = {
                 "repository_url": self.repo_url,
                 "commit": self.commit_sha or self._analysis_revision(data.get("branch")),
-                "branch": self.branch,
+                "branch": self.branch or data.get("branch"),
                 "pipeline_url": self.pipeline_url
             }
 
@@ -158,6 +155,21 @@ class SQSASTScanner:
             Logger.get_logger().debug(f"Error processing result file: {e}")
             Logger.get_logger().error(f"Error during SQ SAST scan: {e}")
             raise
+
+    def _valid_repo_url(self, url):
+        """The backend parser needs a full URL with a host (e.g. https://github.com/org/repo.git)."""
+        url = (url or "").strip()
+        scp = re.match(r"^[\w.-]+@([\w.-]+):(.+)$", url)  # git@github.com:org/repo.git
+        if scp:
+            url = f"https://{scp.group(1)}/{scp.group(2)}"
+        if urlparse(url).hostname:
+            return url
+        fallback = f"https://localhost/{self.sonar_project_key or os.path.basename(os.getcwd())}"
+        Logger.get_logger().warning(
+            f"No repository URL from --repo-url or git; using '{fallback}'. "
+            "Pass --repo-url so findings link to the real repository."
+        )
+        return fallback
 
     def _analysis_revision(self, branch):
         """Commit SHA of the project's latest SonarQube analysis, or None if unavailable."""
