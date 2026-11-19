@@ -2,7 +2,7 @@ import argparse
 from aspm_cli.scanners.base_scanner import BaseScanner
 from aspm_cli.utils.config import ConfigValidator
 from aspm_cli.utils.git_info import GitInfo
-from aspm_cli.utils.ingest_identity import detect_branch
+from aspm_cli.utils.ingest_identity import detect_branch, detect_repo_url
 from aspm_cli.scan import IaCScanner as OriginalIaCScanner
 
 class IACScanner(BaseScanner):
@@ -25,7 +25,7 @@ class IACScanner(BaseScanner):
             default="INFO,LOW,MEDIUM,HIGH,CRITICAL",
             help="Comma-separated list of severities to check. If any match, the scan will fail. Defaults to all severities."
         )
-        parser.add_argument("--repo-url", default=GitInfo.get_repo_url(), help="Git repository URL")
+        parser.add_argument("--repo-url", default=detect_repo_url(), help="Git repository URL")
         parser.add_argument("--repo-branch", default=detect_branch(), help="Git repository branch")
 
     def validate_config(self, args: argparse.Namespace, validator: ConfigValidator):

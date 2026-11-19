@@ -107,6 +107,27 @@ def detect_branch(env: Mapping[str, str] | None = None) -> str | None:
     return _clean_branch(_env(env, "ACCUKNOX_BRANCH") or _ci_branch(env)) or GitInfo.get_branch_name()
 
 
+def detect_repo_url(env: Mapping[str, str] | None = None) -> str | None:
+    """Repository URL to record in a scan report: ACCUKNOX_REPO_URL, then the CI's, then git's remote.
+
+    Credentials are stripped: some CIs check out with the job token in the remote URL
+    (GitLab: https://gitlab-ci-token:<token>@host/...), which must not end up in a report.
+    """
+    env = os.environ if env is None else env
+    return _clean_repo_url(_env(env, "ACCUKNOX_REPO_URL") or _ci_repo_url(env) or GitInfo.get_repo_url() or "") or None
+
+
+def detect_pipeline_id(env: Mapping[str, str] | None = None) -> str | None:
+    """The CI run's id, so a scan report links back to the run that produced it."""
+    env = os.environ if env is None else env
+    return _env(env, "GITHUB_RUN_ID", "CI_PIPELINE_ID", "BITBUCKET_BUILD_NUMBER", "BUILD_BUILDID", "BUILD_NUMBER") or None
+
+
+def detect_pipeline_url(env: Mapping[str, str] | None = None) -> str | None:
+    env = os.environ if env is None else env
+    return _ci_pipeline_url(env) or None
+
+
 def _ci_pipeline_url(env: Mapping[str, str]) -> str:
     if env.get("GITHUB_RUN_ID") and env.get("GITHUB_REPOSITORY"):
         server = env.get("GITHUB_SERVER_URL", "https://github.com").rstrip("/")

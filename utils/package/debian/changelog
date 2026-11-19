@@ -1,3 +1,14 @@
+aspm-scanner-cli (0.17.0-rc.4) unstable; urgency=medium
+
+  * Scan reports take the repository URL from ACCUKNOX_REPO_URL, then the CI, then git, with
+    credentials removed (GitLab checkouts carry the job token in the remote URL)
+  * SAST reports link to the CI run: --pipeline-id and --job-url default from the CI
+  * ML scan: without a local ModelScan, model files are scanned in its container (the
+    pipeline command does not have to run every scan in containers for ML)
+  * Align CLI, wheel, and package version metadata to 0.17.0-rc.4
+
+ -- AccuKnox <accuknox@accuknox.com>  Thu, 19 Nov 2026 18:00:00 +0530
+
 aspm-scanner-cli (0.17.0-rc.3) unstable; urgency=medium
 
   * pipeline: add the ml scan (--scans ml, --ml-command). ML results are uploaded outside the

@@ -1,6 +1,7 @@
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import uuid
 
@@ -102,6 +103,10 @@ class MLScanScanner:
                 self._write_payload([], scan_root)
                 return config.PASS_RETURN_CODE, self.result_file
 
+            # There is no installable ML tool, so without ModelScan on PATH the image is the only way to scan.
+            if not self.container_mode and not self._has_local_binary():
+                Logger.get_logger().info("ModelScan is not installed locally; scanning the model files in its container.")
+                self.container_mode = True
             # Only now: the scanner image is several GB, and most repositories have no model files.
             self._pull_image()
             metadata = derive_model_metadata(
@@ -214,6 +219,10 @@ class MLScanScanner:
         payload = build_ondemand_modelscan_payload(modelscan_results, metadata)
         with open(self.result_file, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2)
+
+    def _has_local_binary(self) -> bool:
+        binary = self._resolve_local_binary()
+        return os.path.isfile(binary) or shutil.which(binary) is not None
 
     def _resolve_local_binary(self) -> str:
         try:

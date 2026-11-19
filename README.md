@@ -26,7 +26,7 @@ It can upload results to the **AccuKnox ASPM Platform**, but it can also run in 
 Install from the GitHub release wheel:
 
 ```bash
-pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.3/accuknox_aspm_scanner-0.17.0rc3-py3-none-any.whl
+pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.4/accuknox_aspm_scanner-0.17.0rc4-py3-none-any.whl
 ```
 
 ### 2. Restricted or on-prem environment
@@ -50,7 +50,7 @@ Install the cross-platform Python wheel (same as connected environment above), o
 ```bash
 # Linux x86_64
 curl -fL -o accuknox-aspm-scanner \
-  https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.3/accuknox-aspm-scanner-linux-amd64
+  https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.4/accuknox-aspm-scanner-linux-amd64
 chmod +x accuknox-aspm-scanner
 ```
 
@@ -814,6 +814,11 @@ repository + branch. Unless `--commit-ref` / `--repo-branch` / `--branch` is giv
 `CHANGE_BRANCH` / `BRANCH_NAME`, `GIT_BRANCH`; and only then git. CI checkouts are often detached (GitHub pull
 requests, GitLab, Azure DevOps), where git can only answer `HEAD`, which would put every such build under one
 `HEAD` branch.
+
+The repository URL in those reports follows the same order (`ACCUKNOX_REPO_URL`, the CI's repository URL, then
+git's remote) with any credentials removed: some CIs check out with the job token in the remote URL. SAST reports
+also link to the CI run (`--pipeline-id` / `--job-url` default from the CI). ML scans run ModelScan in its container
+when it is not installed locally.
 
 ### Separate steps: `scan --quality-gate` + `gate`
 

@@ -4,7 +4,7 @@ from aspm_cli.scanners.base_scanner import BaseScanner
 from aspm_cli.scan.ml_scan import MLScanScanner as OriginalMLScanScanner
 from aspm_cli.utils.config import ConfigValidator
 from aspm_cli.utils.git_info import GitInfo
-from aspm_cli.utils.ingest_identity import detect_branch
+from aspm_cli.utils.ingest_identity import detect_branch, detect_repo_url
 
 
 class MLScanScanner(BaseScanner):
@@ -25,7 +25,7 @@ class MLScanScanner(BaseScanner):
         )
         parser.add_argument(
             "--repo-url",
-            default=GitInfo.get_repo_url(),
+            default=detect_repo_url(),
             help="Repository URL or CI project path (used in upload metadata)",
         )
         parser.add_argument(

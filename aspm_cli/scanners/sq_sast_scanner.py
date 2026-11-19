@@ -2,7 +2,7 @@ import argparse
 from aspm_cli.scanners.base_scanner import BaseScanner
 from aspm_cli.utils.config import ConfigValidator
 from aspm_cli.utils.git_info import GitInfo
-from aspm_cli.utils.ingest_identity import detect_branch
+from aspm_cli.utils.ingest_identity import detect_branch, detect_repo_url
 from aspm_cli.scan.sq_sast import SQSASTScanner as OriginalSQSASTScanner 
 
 class SQSASTScanner(BaseScanner):
@@ -31,7 +31,7 @@ class SQSASTScanner(BaseScanner):
                 "and hotspot vulnerabilityProbability (LOW,MEDIUM,HIGH). Defaults to all."
             ),
         )
-        parser.add_argument("--repo-url", default=GitInfo.get_repo_url(), help="Git repository URL")
+        parser.add_argument("--repo-url", default=detect_repo_url(), help="Git repository URL")
         parser.add_argument("--branch", default=detect_branch(), help="Git repository branch")
         parser.add_argument("--commit-sha", default=GitInfo.get_commit_sha(), help="Commit SHA for scanning")
         parser.add_argument("--pipeline-url", help="Pipeline URL for scanning")

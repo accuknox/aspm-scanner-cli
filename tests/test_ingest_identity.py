@@ -79,3 +79,24 @@ def test_upload_branch_uses_the_same_detection(monkeypatch):
     azure = {"BUILD_REPOSITORY_URI": "https://dev.azure.com/acme/web/_git/api",
              "BUILD_SOURCEBRANCH": "refs/heads/feature/login", "BUILD_SOURCEBRANCHNAME": "login"}
     assert ii.collect_ingest_identity(azure)["branch"] == "feature/login"
+
+
+def test_report_repo_url_prefers_the_ci_and_never_carries_credentials(monkeypatch):
+    monkeypatch.setattr(ii.GitInfo, "get_repo_url",
+                        staticmethod(lambda: "https://gitlab-ci-token:glcbt-SECRET@gitlab.com/acme/api.git"))
+    assert ii.detect_repo_url({"CI_PROJECT_URL": "https://gitlab.com/acme/api"}) == "https://gitlab.com/acme/api"
+    assert ii.detect_repo_url({}) == "https://gitlab.com/acme/api.git"
+    assert ii.detect_repo_url({"GITHUB_REPOSITORY": "acme/api"}) == "https://github.com/acme/api"
+    assert ii.detect_repo_url({"ACCUKNOX_REPO_URL": "https://example.org/x/y.git", "GITHUB_REPOSITORY": "a/b"}) == \
+        "https://example.org/x/y.git"
+    monkeypatch.setattr(ii.GitInfo, "get_repo_url", staticmethod(lambda: None))
+    assert ii.detect_repo_url({}) is None
+
+
+def test_report_links_back_to_the_ci_run():
+    env = {"GITHUB_RUN_ID": "42", "GITHUB_REPOSITORY": "acme/api"}
+    assert ii.detect_pipeline_id(env) == "42"
+    assert ii.detect_pipeline_url(env) == "https://github.com/acme/api/actions/runs/42"
+    assert ii.detect_pipeline_id({"CI_PIPELINE_ID": "7", "CI_PIPELINE_URL": "https://gitlab.com/p/-/pipelines/7"}) == "7"
+    assert ii.detect_pipeline_url({"CI_PIPELINE_URL": "https://gitlab.com/p/-/pipelines/7"}) == "https://gitlab.com/p/-/pipelines/7"
+    assert ii.detect_pipeline_id({}) is None and ii.detect_pipeline_url({}) is None
