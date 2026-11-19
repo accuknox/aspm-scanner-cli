@@ -1,0 +1,37 @@
+{
+  "profile": "CERT-In-SBOM-2.0",
+  "guideline": "CERT-In Technical Guidelines on SBOM, QBOM & CBOM, AIBOM and HBOM, version 2.0 (09 July 2025), chapter 4.2",
+  "validator_version": "1",
+  "pass_rule_note": "The guideline defines no pass/fail rule. This rule is AccuKnox's interpretation: every minimum data field must be populated on every component, or explicitly declared unknown with a reason. It is a data-field conformance check, not a certification by CERT-In.",
+  "applicability_note": "The guideline makes the 21 data fields mandatory for software supplied to government and public-sector organisations (7.1.4); for other customers it is recommended practice.",
+  "formats": ["CycloneDX", "SPDX"],
+  "vocabularies": {
+    "criticality": ["critical", "high", "medium", "low"],
+    "origin": ["proprietary", "open-source", "third-party vendor"],
+    "yes_no": ["yes", "no"]
+  },
+  "fields": [
+    {"id": "component_name", "clause": "4.2.1", "label": "Component Name", "allow_unknown": false},
+    {"id": "component_version", "clause": "4.2.2", "label": "Component Version", "allow_unknown": true},
+    {"id": "component_description", "clause": "4.2.3", "label": "Component Description", "allow_unknown": true},
+    {"id": "component_supplier", "clause": "4.2.4", "label": "Component Supplier", "allow_unknown": true},
+    {"id": "component_license", "clause": "4.2.5", "label": "Component License", "allow_unknown": true},
+    {"id": "component_origin", "clause": "4.2.6", "label": "Component Origin", "allow_unknown": true},
+    {"id": "component_dependencies", "clause": "4.2.7", "label": "Component Dependencies", "allow_unknown": true},
+    {"id": "vulnerabilities", "clause": "4.2.8", "label": "Vulnerabilities", "allow_unknown": true},
+    {"id": "patch_status", "clause": "4.2.9", "label": "Patch Status", "allow_unknown": true},
+    {"id": "release_date", "clause": "4.2.10", "label": "Release Date", "allow_unknown": true},
+    {"id": "end_of_life_date", "clause": "4.2.11", "label": "End of Life Date", "allow_unknown": true},
+    {"id": "criticality", "clause": "4.2.12", "label": "Criticality", "allow_unknown": true},
+    {"id": "usage_restrictions", "clause": "4.2.13", "label": "Usage Restrictions", "allow_unknown": true},
+    {"id": "checksums", "clause": "4.2.14", "label": "Checksums or Hashes", "allow_unknown": true},
+    {"id": "comments", "clause": "4.2.15", "label": "Comments or Notes", "allow_unknown": true, "optional": true, "note": "Free text written by people; not generated automatically and not counted in the pass rule."},
+    {"id": "sbom_author", "clause": "4.2.16", "label": "Author of SBOM Data", "allow_unknown": false, "scope": "document"},
+    {"id": "timestamp", "clause": "4.2.17", "label": "Timestamp", "allow_unknown": false, "scope": "document"},
+    {"id": "executable_property", "clause": "4.2.18", "label": "Executable Property", "allow_unknown": true},
+    {"id": "archive_property", "clause": "4.2.19", "label": "Archive Property", "allow_unknown": true},
+    {"id": "structured_property", "clause": "4.2.20", "label": "Structured Property", "allow_unknown": true},
+    {"id": "unique_identifier", "clause": "4.2.21", "label": "Unique Identifier", "allow_unknown": false}
+  ],
+  "criticality_formula": "critical if any known-exploited (KEV) vulnerability, else the highest vulnerability severity; with no vulnerabilities: medium for the root, applications, frameworks, operating systems and direct dependencies, low for transitive dependencies; raised one level when more than 5 components depend on it."
+}

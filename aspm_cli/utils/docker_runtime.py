@@ -62,9 +62,11 @@ def docker_workdir_mount(workdir: str = "/workdir", host_path: Optional[str] = N
 
 
 def docker_socket_mount_args() -> List[str]:
-    """Mount the Docker socket so in-container scanners can reach the host daemon."""
-    if sys.platform == "win32":
-        return ["-v", r"\\.\pipe\docker_engine:\\.\pipe\docker_engine"]
+    """Mount the Docker socket so in-container scanners can reach the host daemon.
+
+    Same path on every OS: Docker Desktop on Windows runs Linux containers and exposes
+    /var/run/docker.sock inside its VM; mounting the host named pipe fails (exit 125).
+    """
     return ["-v", "/var/run/docker.sock:/var/run/docker.sock"]
 
 

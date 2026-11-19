@@ -6,6 +6,7 @@ from aspm_cli.tool.manager import ToolManager
 from aspm_cli.utils import config, docker_pull
 from aspm_cli.utils.subprocess_utils import utf8_text
 from aspm_cli.utils.docker_runtime import build_docker_run_prefix
+from aspm_cli.utils.incremental import scope_gitleaks, scope_trufflehog
 from aspm_cli.utils.logger import Logger
 from colorama import Fore
 
@@ -14,10 +15,12 @@ GITLEAKS_IMAGE = "ghcr.io/gitleaks/gitleaks:v8.24.2"
 
 
 class SecretScanner:
-    def __init__(self, command, container_mode=False, engine="trufflehog"):
+    def __init__(self, command, container_mode=False, engine="trufflehog", changed_files=None, diff_range=None):
         self.command = command
         self.container_mode = container_mode
         self.engine = engine.lower()
+        self.changed_files = changed_files  # None = full scan
+        self.diff_range = diff_range
 
     @property
     def result_file(self):
@@ -84,12 +87,15 @@ class SecretScanner:
         args = shlex.split(self.command or "")
         forbidden_flags = {"--json", "--fail", "--no-update"}
         sanitized_args = [arg for arg in args if arg not in forbidden_flags]
+        if self.changed_files is not None:
+            sanitized_args = scope_trufflehog(sanitized_args, self.changed_files, self.diff_range)
         sanitized_args.extend(["--json", "--fail", "--no-update"])
         return sanitized_args
 
     def _build_gitleaks_args(self):
         if self.command and self.command.strip():
-            return shlex.split(self.command)
+            args = shlex.split(self.command)
+            return scope_gitleaks(args, self.diff_range) if self.changed_files is not None else args
 
         return [
             "detect",

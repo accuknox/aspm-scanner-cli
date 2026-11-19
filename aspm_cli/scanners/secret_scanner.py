@@ -40,5 +40,7 @@ class SecretScanner(BaseScanner):
         engine = args.engine.lower()
         self.engine = engine
         self.data_type_identifier = "DS" if engine == "gitleaks" else "TruffleHog"
-        scanner = OriginalSecretScanner(args.command, args.container_mode, engine=engine)
+        scanner = OriginalSecretScanner(args.command, args.container_mode, engine=engine,
+                                        changed_files=getattr(args, "changed_files", None),
+                                        diff_range=getattr(args, "diff_range", None))
         return scanner.run()

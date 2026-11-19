@@ -4,7 +4,7 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-accuknox-sq-sast = {file = "https://github.com/accuknox/aspm-sastjob/releases/download/2.0.2/accuknox_sq_sast-0.1.0-py3-none-any.whl"}
+accuknox-sq-sast = {file = "https://github.com/accuknox/aspm-sastjob/releases/download/2.0.3/accuknox_sq_sast-0.1.1-py3-none-any.whl"}
 pydantic = "==2.13.4"
 colorama = "==0.4.6"
 requests = "==2.32.3"

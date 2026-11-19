@@ -31,5 +31,6 @@ class IACScanner(BaseScanner):
         validator.validate_iac_scan(args.command, args.container_mode, args.repo_url, args.repo_branch, args.severity)
 
     def run_scan(self, args: argparse.Namespace) -> tuple[int, str]:
-        scanner = OriginalIaCScanner(args.command, args.container_mode, args.repo_url, args.repo_branch, args.severity)
+        scanner = OriginalIaCScanner(args.command, args.container_mode, args.repo_url, args.repo_branch, args.severity,
+                                     changed_files=getattr(args, "changed_files", None))
         return scanner.run()

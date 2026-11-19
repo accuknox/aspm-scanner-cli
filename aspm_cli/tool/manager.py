@@ -34,6 +34,7 @@ class ToolManager:
     TOOL_PATHS = {
         "iac": Path("iac"),
         "container": Path("container"),
+        "syft": Path("syft"),
         "secret": Path("secret"),
         "sq-sast": Path("sq-sast") / "bin" / "sonar-scanner",
         "dast": Path("dast") / "zap",
@@ -43,6 +44,7 @@ class ToolManager:
         "codeassure": Path("codeassure") / "codeassure",
         "gitleaks": Path("gitleaks"),
         "api-discovery": Path("code2api"),
+        "syft": Path("syft"),
     }
 
     @staticmethod
@@ -78,6 +80,10 @@ class ToolManager:
             raise ValueError(f"Unknown tool or directory name: {name}")
 
         full_path = ToolManager._install_dir / subpath
+        if name == "codeassure":
+            native = ToolManager._install_dir / "codeassure" / "venv" / ("Scripts/codeassure.exe" if ToolManager._is_windows else "bin/codeassure")
+            if native.is_file():
+                return str(native)
         if ToolManager._is_windows:
             full_path = ToolManager._resolve_windows_path(full_path)
 

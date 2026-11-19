@@ -27,6 +27,59 @@ class ContainerScanner(BaseScanner):
             action="store_true",
             help="Generate SBOM instead of running a vulnerability scan"
         )
+        parser.add_argument(
+            "--sbom-format",
+            choices=("cyclonedx", "spdx"),
+            default="cyclonedx",
+            help="SBOM standard to generate with --generate-sbom (default: cyclonedx)"
+        )
+        parser.add_argument(
+            "--sbom-author",
+            type=str,
+            default=None,
+            help=(
+                "Author recorded in the SBOM (CERT-In 'Author of SBOM data'). "
+                "Default: ACCUKNOX_SBOM_AUTHOR, the CI actor, the git identity, then the scanner."
+            )
+        )
+        parser.add_argument(
+            "--sbom-output",
+            type=str,
+            default=None,
+            help="Also write the finished SBOM to this file (the upload still uses ./results.json)"
+        )
+        parser.add_argument(
+            "--sbom-version",
+            type=int,
+            default=None,
+            help="Revision number written as the SBOM's version (CycloneDX 'version'); the scanner always writes 1"
+        )
+        parser.add_argument(
+            "--sbom-vex",
+            action="append",
+            default=None,
+            metavar="FILE",
+            help=(
+                "VEX file (OpenVEX, CycloneDX VEX or CSAF) to apply; repeatable. Trivy drops the CVEs it marks "
+                "not affected or fixed, and the statements are recorded in the SBOM as vulnerabilities[].analysis"
+            )
+        )
+        parser.add_argument(
+            "--cert-in-check",
+            action="store_true",
+            help=(
+                "Check the generated SBOM against the CERT-In minimum data fields and exit 1 "
+                "unless it is conformant"
+            )
+        )
+        parser.add_argument(
+            "--enrich-licenses",
+            action="store_true",
+            help=(
+                "Filesystem SBOM only: run Syft after Trivy and copy missing SPDX "
+                "licenses onto matching packages (default off)"
+            ),
+        )
 
     def validate_config(self, args: argparse.Namespace, validator: ConfigValidator):
         validator.validate_container_scan(
@@ -38,5 +91,13 @@ class ContainerScanner(BaseScanner):
     def run_scan(self, args: argparse.Namespace) -> tuple[int, str]:
         # Instantiate and run the original scanner logic
         generate_sbom = getattr(args, "generate_sbom", False)
-        scanner = OriginalContainerScanner(args.command, args.container_mode, generate_sbom=generate_sbom)
+        enrich_licenses = getattr(args, "enrich_licenses", False)
+        scanner = OriginalContainerScanner(
+            args.command,
+            args.container_mode,
+            generate_sbom=generate_sbom,
+            sbom_format=getattr(args, "sbom_format", "cyclonedx"),
+            vex_files=getattr(args, "sbom_vex", None),
+            enrich_licenses=enrich_licenses,
+        )
         return scanner.run()

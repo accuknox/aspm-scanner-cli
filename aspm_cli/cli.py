@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 from colorama import Fore, init
 
 from aspm_cli.commands import command_registry
@@ -36,7 +37,10 @@ def main():
                 Logger.get_logger().debug("--- Full Traceback ---")
                 import traceback
                 Logger.get_logger().debug(traceback.format_exc())
-            exit(1)
+            # exit()/quit() are injected by the `site` module for interactive
+            # use - not guaranteed present in a PyInstaller-frozen binary,
+            # where this raised NameError and masked the real failure above.
+            sys.exit(1)
     else:
         parser.print_help()
 

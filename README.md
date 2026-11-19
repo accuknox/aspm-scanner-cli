@@ -14,6 +14,8 @@ It can upload results to the **AccuKnox ASPM Platform**, but it can also run in 
 - 🧰 Works in standalone and on-prem environments
 - 🧵 Supports environment-variable and flag-based configuration
 - 🧩 Supports pre-commit integration
+- 🚦 CI/CD quality gate (`gate`) that fails the pipeline on policy breaches
+- 💬 PR decorator (`decorate-pr`) that posts findings as a PR review with inline comments
 
 ## Installation
 
@@ -24,7 +26,7 @@ It can upload results to the **AccuKnox ASPM Platform**, but it can also run in 
 Install from the GitHub release wheel:
 
 ```bash
-pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.15.2-rc.3/accuknox_aspm_scanner-0.15.2rc3-py3-none-any.whl
+pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.2/accuknox_aspm_scanner-0.17.0rc2-py3-none-any.whl
 ```
 
 ### 2. Restricted or on-prem environment
@@ -48,7 +50,7 @@ Install the cross-platform Python wheel (same as connected environment above), o
 ```bash
 # Linux x86_64
 curl -fL -o accuknox-aspm-scanner \
-  https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.15.2-rc.3/accuknox-aspm-scanner-linux-amd64
+  https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.2/accuknox-aspm-scanner-linux-amd64
 chmod +x accuknox-aspm-scanner
 ```
 
@@ -118,6 +120,8 @@ accuknox-aspm-scanner scan dast --help
 accuknox-aspm-scanner scan sq-sast --help
 accuknox-aspm-scanner tool --help
 accuknox-aspm-scanner pre-commit --help
+accuknox-aspm-scanner gate --help
+accuknox-aspm-scanner decorate-pr --help
 ```
 
 If you are running directly from local source code:
@@ -133,12 +137,14 @@ AccuKnox upload variables are optional when `--skip-upload` is used.
 - `ACCUKNOX_ENDPOINT`: Control plane URL for result upload
 - `ACCUKNOX_LABEL`: Label used to associate uploaded results
 - `ACCUKNOX_TOKEN`: Bearer token for upload
-- `ACCUKNOX_PROJECT_NAME`: Project name used for SBOM uploads
+- `ACCUKNOX_CLI_ID`: CI/CD quality-gate run id (uuid) shared by every scanner and the `gate` step in one pipeline run. Falls back for `--cli-id`. See [CI/CD Quality Gate](#cicd-quality-gate).
+- `ACCUKNOX_PROJECT_NAME`: Project name for SBOM uploads (required; created automatically if it does not exist)
 - `ACCUKNOX_PROJECT`: Legacy fallback for project name
 - `DEBUG`: Set to `TRUE` for verbose debug logs
 - `SOFT_FAIL`: Set to `TRUE` to enable soft-fail by default
 - `KEEP_RESULTS`: Set to `TRUE` to keep result files after scan completion
 - `SCAN_IMAGE`: Override the scanner image used in container mode
+- `SYFT_IMAGE`: Override the Syft image used with `--enrich-licenses` in container mode (default: `anchore/syft:v1.42.3`)
 - `CODEASSURE_IMAGE`: Override the AI analysis image used by SAST AI analysis
 - `ACCUKNOX_ENABLE_AI_SAST`: Set to `TRUE` to enable AI-SAST per repo (alternative to `--ai-analysis`)
 - `GITLEAKS_IMAGE`: Override the Gitleaks image when `--engine gitleaks`
@@ -174,6 +180,7 @@ Supported tool types:
 - `dast`
 - `codeassure`
 - `gitleaks`
+- `syft`
 
 User-level tool installs are placed under:
 
@@ -230,6 +237,10 @@ Common flags used before the scan name:
 - `--skip-upload`
 - `--keep-results`
 - `--softfail`
+- `--cli-id` — CI/CD quality-gate run id (see [CI/CD Quality Gate](#cicd-quality-gate))
+- `--repository` — CI/CD gate scope repository (e.g. `org/repo`)
+- `--branch` — CI/CD gate scope branch
+- `--commit-sha` — CI/CD gate scope commit SHA
 
 If you do not use `--skip-upload`, you must provide:
 
@@ -331,6 +342,19 @@ With AI analysis (CLI flag or per-repo env var):
 accuknox-aspm-scanner scan --skip-upload --keep-results sast --command "scan ." --ai-analysis --aiscan-severity "HIGH,CRITICAL"
 ```
 
+AI analysis is **off by default**; `--ai-analysis` (or the variable below) turns it on, and `--no-ai-analysis` forces it off even when the variable is set.
+
+Local mode needs two standalone binaries installed side by side, `codeassure` and `context-graph`:
+
+```bash
+accuknox-aspm-scanner tool install --type codeassure
+```
+
+They are downloaded from the matching aspm-scanner-cli release (`codeassure-<os>-<arch>`, `context-graph-<os>-<arch>` and an
+`ai-sast-SHA256SUMS` file; the release workflow attaches them automatically from the pinned codeassure-cli and code-context-graph releases) and every file is verified against that checksum list before it is installed. Supported: Linux amd64,
+macOS arm64, Windows amd64. Set `AI_SAST_BASE_URL` to download from another location, or `CODEASSURE_EXECUTABLE` to use a binary you
+already have. The LLM settings come from `--codeassure-config` (a `codeassure.json`) or `CODEASSURE_*` environment variables.
+
 Per-repo AI-SAST via environment variable (e.g. GitLab CI variable):
 
 ```bash
@@ -423,6 +447,8 @@ Flags used after `container`:
 
 - `--container-mode`
 - `--generate-sbom`
+- `--sbom-format`, `--sbom-author`, `--sbom-output`, `--cert-in-check` (see [SBOM standard, author and the CERT-In check](#sbom-standard-author-and-the-cert-in-check))
+- `--enrich-licenses` (filesystem/fs SBOM only; default off)
 
 Typical `--command` values:
 
@@ -449,7 +475,25 @@ Filesystem SBOM (AccuKnox project classifier `application`; run from repo root i
 accuknox-aspm-scanner scan --skip-upload --keep-results --project-name demo-project container --command "filesystem ." --generate-sbom --container-mode
 ```
 
-SBOM upload requires `--project-name` (or `ACCUKNOX_PROJECT_NAME`). `--project-name` is not required for vulnerability scans. Legacy env `ACCUKNOX_PROJECT` is also accepted.
+Local mode (no Docker) works on Linux, macOS and Windows: install the scanner once with `accuknox-aspm-scanner tool install --type container`, then drop `--container-mode`:
+
+```bash
+accuknox-aspm-scanner scan --skip-upload --keep-results --project-name demo-project container --command "filesystem ." --generate-sbom
+accuknox-aspm-scanner scan --skip-upload --keep-results --project-name demo-project container --command "image nginx:latest" --generate-sbom
+```
+
+Optional license enrich for filesystem/fs SBOM only. Trivy remains the SBOM engine (components + CVEs). With `--enrich-licenses`, Syft scans the same tree and copies normalized SPDX licenses onto matching Trivy packages (purl, then name@version). Existing Trivy licenses are not overwritten; Syft-only file components are not added. Image/rootfs SBOM and SCA are unchanged. `--enrich-licenses` on `image` / `rootfs` logs a warning and skips Syft.
+
+```bash
+accuknox-aspm-scanner tool install --type syft
+
+accuknox-aspm-scanner scan --project-name fs-test --keep-results --softfail \
+  container --command "filesystem ." --generate-sbom --enrich-licenses
+```
+
+`--container-mode` still works: Trivy image unchanged; Syft runs as `anchore/syft:v1.42.3` (override with `SYFT_IMAGE`) using the same `/workdir` mount.
+
+SBOM upload requires `--project-name` (or `ACCUKNOX_PROJECT_NAME`). The project does not need to exist beforehand: if it is missing, AccuKnox creates it automatically from this name. `--project-name` is not required for vulnerability scans. Legacy env `ACCUKNOX_PROJECT` is also accepted.
 
 SBOM Phase-1 capabilities:
 
@@ -469,6 +513,37 @@ ACCUKNOX_LABEL=POC \
 ACCUKNOX_TOKEN=abcd1234 \
 accuknox-aspm-scanner scan container --command "image nginx:latest" --container-mode
 ```
+
+#### SBOM standard, author and the CERT-In check
+
+Flags used after `container` with `--generate-sbom` (also accepted by `pipeline --scans sbom`):
+
+- `--sbom-format cyclonedx|spdx` — the standard to generate (default `cyclonedx`; `spdx` writes SPDX 2.3 JSON).
+- `--sbom-author NAME` — the "author of SBOM data". Default: `ACCUKNOX_SBOM_AUTHOR`, then the CI actor (`GITLAB_USER_EMAIL`, `GITHUB_ACTOR`, ...), then `git config user.email`, then `AccuKnox ASPM Scanner`.
+- `--sbom-output FILE` — also write the finished SBOM to `FILE`. This copy leaves out the platform-only top-level fields (`project_name`, `project_classifier`), so it passes strict CycloneDX/SPDX validators. The uploaded file keeps them.
+- `--sbom-version N` — the SBOM's revision number (CycloneDX `version`). The scanner always writes `1`; the platform also bumps it by itself when the same BOM is re-uploaded with different content.
+- `--sbom-vex FILE` (repeatable) — a VEX file (OpenVEX, CycloneDX VEX or CSAF). It is passed to Trivy (`--vex`), which drops the CVEs the file marks not affected or fixed, and every statement that matches a component is recorded in the SBOM as `vulnerabilities[].analysis`, so the file shows that the CVE was assessed. Statements for products that are not in the SBOM are ignored. In `--container-mode` Trivy only sees files under the current directory; others are still recorded in the SBOM. SPDX has no place for VEX statements.
+- `--cert-in-check` — check the SBOM against the CERT-In minimum data fields (21 fields, CERT-In Technical Guidelines on SBOM v2.0) and exit `1` unless it is conformant.
+
+Every SBOM the scanner generates now carries the author, assembly time, lifecycle (`source` for a repository, `analyzed` for an image) and SBOM level, the fields that can be worked out automatically on each component (origin, criticality, patch status, usage restrictions, executable/archive/structured, unique identifier), and a conformance attestation (`accuknox:cert-in:*` properties in CycloneDX, annotations in SPDX).
+
+A component with no supplier gets the organisation its package URL names where the namespace is one (Maven group id, npm scope, `github.com/<owner>`), marked with `certin:supplier-source=purl-namespace` so it is not mistaken for a declared supplier. Other ecosystems stay declared unknown.
+
+A field the scanner cannot know (a supplier a lockfile does not name, for example) is written as an explicit unknown with a reason code (`certin:unknown:<field>`), not left out and not guessed. The check reports how much of the data is real: `Conformant (34 components, 59.5% of fields populated, 40.5% declared unknown)`.
+
+```bash
+accuknox-aspm-scanner scan --skip-upload --project-name demo container \
+  --command "filesystem ." --generate-sbom --sbom-format spdx --cert-in-check --sbom-output sbom.spdx.json
+```
+
+Notes on what the check means:
+
+- The guideline defines no pass/fail rule. "Conformant" here is AccuKnox's reading of it: every field is populated on every component, or declared unknown with a reason. It is not a CERT-In certification.
+- The 21 fields are mandatory for software supplied to government and public-sector bodies; for others they are recommended.
+- The platform and this package use the same rules; independent open tools (`cyclonedx-cli validate`, `pyspdxtools -i`) check the file format only, not CERT-In conformance.
+- To check a file you already have, run `accuknox-aspm-scanner cert-in-check sbom.json` (add `--json` for the full report). It exits 0 when conformant, 1 when partially or not conformant, 2 when the file cannot be read, and it says whether the file's own attestation still matches its content.
+- VEX/CSAF statements are not generated.
+- `aspm_cli/certin/` is a copy of the platform's `xbom/certin`; do not edit it here.
 
 ### ML Scan
 
@@ -660,6 +735,145 @@ ACCUKNOX_TOKEN=abcd1234 \
 accuknox-aspm-scanner scan sq-sast --command "-Dsonar.projectKey=<PROJECT_KEY> -Dsonar.host.url=<HOST_URL> -Dsonar.token=<TOKEN> -Dsonar.organization=<ORG_ID>" --container-mode
 ```
 
+## Incremental scans (`--changed-only`)
+
+On a pull/merge request, scan only what the PR changed. Off by default: without the flag every scan is a full scan.
+
+```bash
+accuknox-aspm-scanner scan --changed-only sast --command "scan ."
+accuknox-aspm-scanner pipeline --changed-only --scans sast,secret,iac,sca,sbom --quality-gate
+accuknox-aspm-scanner scan --changed-only --base-ref origin/main iac --command "-d ."   # any CI
+```
+
+The changed files are the diff from the merge-base with the PR's base (deleted files excluded). The base is the
+PR base on GitHub Actions, `--base-ref` / `ACCUKNOX_BASE_REF` anywhere else, or detected from GitLab, Bitbucket,
+Azure DevOps and Jenkins PR variables (the base branch must be fetched: `fetch-depth: 0` on GitHub).
+`ACCUKNOX_CHANGED_ONLY=true` is the same as the flag.
+
+| Scan | With `--changed-only` |
+|---|---|
+| `sast` (and AI analysis) | Scans only the changed files; AI analysis only verifies findings on them. |
+| `secret` | trufflehog `filesystem`: changed files. trufflehog `git`: `--since-commit <base>`. gitleaks: the PR's commits (`--log-opts`); `--no-git` stays full. |
+| `iac` | `-d <dir>` becomes `-f <file>` for each changed file. |
+| `sca`, `sbom` | Full scan, but only if a manifest or lockfile changed (`package-lock.json`, `requirements.txt`, `go.mod`, `pom.xml`, ...). |
+| `container`, `dast`, `api-discovery`, `ml-scan`, `mobile`, `sq-sast` | Not repo-file scans: the flag is ignored. |
+
+If nothing relevant changed, the scan is skipped (exit 0, nothing uploaded). With `--quality-gate`, `scan` runs a full
+scan instead of skipping (the gate waits for that upload); `pipeline` only declares scans that produced results, so a
+skip is safe there. The gate then judges only the uploaded (changed-file) findings.
+
+It falls back to a full scan, with a warning, when the diff can't be computed (shallow clone, missing base), when no
+base is known, or when more than `ACCUKNOX_INCREMENTAL_MAX_FILES` files changed (default 1000).
+
+## Quality Gates
+
+A quality gate lets the **policy thresholds configured in AccuKnox** decide the build. The CLI uploads every
+scan as part of one run, waits for AccuKnox to evaluate them, and then passes, warns or fails the build from
+the verdict. The thresholds live in AccuKnox (policy service), not in the CLI.
+
+### Unified run: `pipeline`
+
+```bash
+export ACCUKNOX_ENDPOINT=cspm.accuknox.com ACCUKNOX_LABEL=POC ACCUKNOX_TOKEN=<token>
+export ACCUKNOX_GATE_TOKEN=<user token>   # see "Tokens" below
+
+accuknox-aspm-scanner pipeline --scans sast,sca,secret,iac,sbom --quality-gate
+```
+
+`pipeline` runs the scans in order, uploads them under one run id, then waits for the verdict (default 5 minutes).
+
+- `--scans`: any of `sast`, `sq-sast`, `sca`, `secret`, `iac`, `sbom` (container/filesystem SBOM).
+- Per-scan options: `--sast-command` (default `scan .`), `--sca-command` (`fs .`), `--secret-command`
+  (`filesystem .`), `--secret-engine`, `--iac-command` (`-d .`), `--sbom-command` (`filesystem .`),
+  `--sq-sast-command`, `--container-mode`.
+- Only scans that produced a result are declared to the gate, so a clean secret scan (nothing to upload)
+  never leaves the gate waiting.
+- With `--quality-gate`, findings no longer fail a scan step: the policy decides. Scans that cannot run or
+  upload still fail the build. Without it, `pipeline` simply runs the scans one after another.
+- `--fail-fast` stops at the first scan that cannot run.
+- `--ai-analysis` runs AI analysis on the scans that support it (today: `sast`; off by default), with
+  `--aiscan-severity`, `--codeassure-config`, `--context-graph-config` and `--graph-no-joern`. These options
+  need `--ai-analysis`. Other scan types ignore it until they gain an AI step.
+
+### Separate steps: `scan --quality-gate` + `gate`
+
+When each scan is its own workflow step, tie them to one run and finish with `gate`:
+
+```bash
+accuknox-aspm-scanner scan --quality-gate --gate-scanners SG,TR,IAC sast --command "scan ."
+accuknox-aspm-scanner scan --quality-gate --gate-scanners SG,TR,IAC sca  --command "fs ."
+accuknox-aspm-scanner scan --quality-gate --gate-scanners SG,TR,IAC iac  --command "-d ."
+accuknox-aspm-scanner gate
+```
+
+`--gate-scanners` must list every scan type the run uploads (`SG` sast, `SQ` sq-sast, `TR` sca/container,
+`IAC`, `TruffleHog`/`DS` secret, `SBOM`). A scan that produces no result (for example a clean secret scan)
+must not be listed, or the gate waits for it. Use `pipeline` to have this handled for you.
+
+All steps of one CI run share a run id automatically (derived from the CI run on GitHub Actions, GitLab,
+Bitbucket, Azure DevOps and Jenkins). Outside CI, or to override it, set `ACCUKNOX_CLI_ID` / `--cli-id`.
+`scan --quality-gate` prints the run id it used.
+
+### Outcome and exit codes
+
+| AccuKnox verdict | Result | Exit code |
+|---|---|---|
+| passed | build continues | 0 |
+| warning (a `warn` policy action) | build continues, warning printed | 0 |
+| failed (a `block` policy action) | build fails | 1 |
+| a scan could not be evaluated (unparsable scan, policy service unavailable) | build fails | 2 |
+| no verdict before `--gate-timeout` | `--gate-on-timeout fail` (default) fails, `pass` continues | 2 / 0 |
+
+`--softfail` reports a policy failure without failing the build. It does not hide scans that could not be
+evaluated. The CLI prints a per-scanner table and every breached threshold, adds GitHub annotations, and
+writes a summary to `$GITHUB_STEP_SUMMARY` when available.
+
+### Options
+
+- `--quality-gate` (or `ACCUKNOX_QUALITY_GATE=true`): enable the gate.
+- `--gate-timeout <seconds>`: how long to wait for the verdict (default 300).
+- `--gate-on-timeout fail|pass`: what to do if the verdict does not arrive in time (default `fail`).
+- `--cli-id`, `--repository`: override the run id / the `owner/name` that policy scopes match.
+- `--gate-json-file <path>` (or `ACCUKNOX_GATE_JSON_FILE`): also save the gate response to a file.
+
+### Machine-readable result
+
+After the verdict the CLI prints the gate response as JSON on **stdout** (logs go to stderr), between the
+lines `----- quality gate response (json) -----` and `----- end quality gate response -----`:
+
+```json
+{"cli_id": "…", "state": "resolved", "exit_code": 1, "softfail": false, "detail": null,
+ "response": { "status": "failed", "blocking": true, "results": {"SG": {"status": "fail", "counts": {…}, "reasons": […]}}, "overall": […] }}
+```
+
+`response` is the backend's poll response verbatim (empty when no verdict arrived); `state` is
+`resolved | timeout | unsupported | rejected`. Use `--gate-json-file` for automations that should not parse stdout.
+
+The repository and branch are detected from the CI environment or git. Policy scopes are matched against
+`owner/name:branch`; set `ACCUKNOX_REPO_URL` / `ACCUKNOX_BRANCH` when they cannot be detected.
+
+### Tokens
+
+Uploads use `ACCUKNOX_TOKEN`. The gate API identifies a *user*, which that token may not, so `gate` and
+`pipeline` use `ACCUKNOX_GATE_TOKEN` (or `--gate-token`) for polling and fall back to `ACCUKNOX_TOKEN`. If the
+fallback is rejected the error says so. Keep both as CI secrets.
+
+### GitHub Actions example
+
+```yaml
+- uses: actions/checkout@v4
+- name: AccuKnox scans and quality gate
+  env:
+    ACCUKNOX_ENDPOINT: cspm.accuknox.com
+    ACCUKNOX_LABEL: my-label
+    ACCUKNOX_TOKEN: ${{ secrets.ACCUKNOX_TOKEN }}
+    ACCUKNOX_GATE_TOKEN: ${{ secrets.ACCUKNOX_GATE_TOKEN }}
+  run: accuknox-aspm-scanner pipeline --scans sast,sca,secret,iac --quality-gate
+```
+
+The first run for a tenant can be slow while AccuKnox downloads reference data for a scan type, so raise
+`--gate-timeout` if the gate times out on first use.
+
 ## Quickstart
 
 Local mode is the default. Install the required local tool first:
@@ -762,3 +976,63 @@ Enable verbose debug mode:
 ```bash
 DEBUG=TRUE accuknox-aspm-scanner scan --skip-upload iac --command "-d ."
 ```
+### Scan compiled artifacts, manifests and existing SBOMs
+
+Install the native inventory and vulnerability engines, or pass `--container-mode`:
+
+```sh
+accuknox-aspm-scanner tool install --type syft
+accuknox-aspm-scanner tool install --type container
+
+# Existing --command workflows remain supported.
+accuknox-aspm-scanner scan --skip-upload --keep-results sca --target ./dist/service
+accuknox-aspm-scanner scan --skip-upload --keep-results sca --target ./dist/application.jar
+accuknox-aspm-scanner scan --skip-upload --keep-results sca --target ./package-lock.json
+accuknox-aspm-scanner scan --skip-upload --keep-results sca --target ./dependencies.cdx.json
+accuknox-aspm-scanner scan --skip-upload --keep-results sbom --target ./dist/service
+
+# Upload results using existing ACCUKNOX_ENDPOINT/TOKEN/LABEL/TENANT settings.
+accuknox-aspm-scanner scan --project-name payments sca --target ./dist/service --asset-name payment-service
+```
+
+`--target-type auto|directory|manifest|binary|archive|sbom` controls input detection.
+`--target` and legacy `--command` are mutually exclusive. Use a directory to include
+companion manifests/lockfiles while preserving relative paths. Standalone manifest
+scans select only that file. No dependency installation or build execution occurs.
+Existing CycloneDX and SPDX **JSON** SBOMs are supported; XML/tag-value are excluded.
+For reproducible disconnected scans, populate `--cache-dir` first, then use
+`--offline`. Container mode mounts the selected input read-only and maps input,
+result and cache paths explicitly; it does not require a Docker socket mount.
+
+Native Syft 1.42.3 downloads are verified against pinned SHA-256 checksums on Linux,
+macOS and Windows. Trivy remains pinned to 0.69.3. `SYFT_IMAGE` and `SCAN_IMAGE`
+override the corresponding container images.
+
+Use `--output-dir` outside the target directory to retain `result.json`,
+`sbom.json`, and `vulnerabilities.json`. Otherwise a temporary result directory is
+used; `--keep-results` retains it. Operational failures retain diagnostics/results.
+Exit codes for these new workflows are `0` success, `1` severity gate, `2`
+operational/incomplete inventory failure. `--softfail` applies to severity gates.
+Limited nonempty inventory can still match advisories; it does not establish that
+all embedded dependencies were identified. Stripped binaries may have no usable
+metadata and cannot be declared vulnerability-free.
+
+### Mobile scanning from CI/CD
+
+Full APK/IPA analysis runs on the backend's existing mobile services:
+
+```sh
+accuknox-aspm-scanner scan --project-name mobile-app mobile --target ./app.apk --asset-name android-app
+accuknox-aspm-scanner scan --project-name mobile-app mobile --target ./app.apk --mode static_dynamic
+accuknox-aspm-scanner scan --project-name mobile-app mobile --target ./app.ipa --mode static
+accuknox-aspm-scanner scan --project-name mobile-app mobile --target ./app.apk --no-wait --idempotency-key build-123
+accuknox-aspm-scanner scan --keep-results mobile --run-id RUN_UUID --output-dir ./mobile-results
+```
+
+Default static mode includes SBOM and dependency vulnerability matching. Dynamic
+mode requires an Android analyzer; IPA supports static/SBOM modes. `--mode sbom`
+uses the backend's mobile inventory and dependency pipeline. Mobile analysis cannot
+use `--skip-upload`. Commands wait by default (`--timeout`, default 3600 seconds),
+or return a run ID with `--no-wait`. Resume a wait/download with `--run-id`.
+A timeout does not cancel the backend run. Backend capability checks report missing
+services or an incompatible deployment before starting work.

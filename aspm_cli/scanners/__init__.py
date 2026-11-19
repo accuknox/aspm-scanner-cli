@@ -19,3 +19,6 @@ scanner_registry = {
     "ML-SCAN": MLScanScanner,
     "API-DISCOVERY": APIDiscoveryScanner,
 }
+
+from .artifact_scanner import SBOMScanner, MobileScanner
+scanner_registry.update({"SBOM": SBOMScanner, "MOBILE": MobileScanner})
