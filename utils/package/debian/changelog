@@ -1,3 +1,16 @@
+aspm-scanner-cli (0.17.0-rc.5) unstable; urgency=medium
+
+  * DAST: --scan-type baseline|full|api, --target and --options replace the engine's own
+    --command; --zap-plan is now --dast-plan (the old flags still work, hidden)
+  * Preview features: incremental scans (--changed-only) and the PR decorator (decorate-pr) are
+    off and left out of --help unless ACCUKNOX_PREVIEW=true. --changed-only without it warns
+    and runs a full scan; decorate-pr without it exits 1
+  * Release workflow: tags must be on main (or release/X.Y for an older line) and newer than the
+    last release on that line; only a final version on main is marked Latest
+  * Align CLI, wheel, and package version metadata to 0.17.0-rc.5
+
+ -- AccuKnox <accuknox@accuknox.com>  Fri, 20 Nov 2026 12:00:00 +0530
+
 aspm-scanner-cli (0.17.0-rc.4) unstable; urgency=medium
 
   * Scan reports take the repository URL from ACCUKNOX_REPO_URL, then the CI, then git, with
