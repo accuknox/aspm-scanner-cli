@@ -12,6 +12,7 @@ from pathlib import Path
 
 from aspm_cli.utils.docker_runtime import cpu_arch, local_tool_install_supported, platform_name
 from aspm_cli.utils.logger import Logger
+from aspm_cli.utils.tls import download_context
 
 
 # Keep versions aligned with utils/prepare-aspm-scanners.sh where possible.
@@ -36,7 +37,6 @@ DARWIN_SUPPORTED_TOOLS = frozenset({
     "syft",
     "gitleaks",
     "sq-sast",
-    "syft",
 })
 
 # Tools with native Windows installers (x86_64 / amd64).
@@ -49,7 +49,6 @@ WINDOWS_SUPPORTED_TOOLS = frozenset({
     "gitleaks",
     "sq-sast",
     "codeassure",
-    "syft",
 })
 
 
@@ -220,7 +219,7 @@ class ToolDownloader:
     def _download_file(self, url: str, dest: Path, sha256: str = None):
         Logger.get_logger().debug(f"Downloading {url}")
         # timeout is per socket read, so slow-but-moving big downloads still finish
-        with urllib.request.urlopen(url, timeout=60) as r, open(dest, "wb") as f:
+        with urllib.request.urlopen(url, timeout=60, context=download_context()) as r, open(dest, "wb") as f:
             shutil.copyfileobj(r, f)
         if sha256:
             digest = hashlib.sha256()

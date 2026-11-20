@@ -12,6 +12,7 @@ import urllib.request
 from pathlib import Path
 
 from aspm_cli.utils.logger import Logger
+from aspm_cli.utils.tls import download_context
 from aspm_cli.utils.version import get_version
 
 SUMS_NAME = "ai-sast-SHA256SUMS"
@@ -25,7 +26,7 @@ def _base_url():
 
 
 def _download(url):
-    with urllib.request.urlopen(url, timeout=120) as response:  # timeout is per read, so big files still finish
+    with urllib.request.urlopen(url, timeout=120, context=download_context()) as response:  # timeout is per read, so big files still finish
         return response.read()
 
 

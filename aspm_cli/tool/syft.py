@@ -10,6 +10,7 @@ import zipfile
 from pathlib import Path
 
 from aspm_cli.utils.logger import Logger
+from aspm_cli.utils.tls import download_context
 
 VERSION = "1.42.3"
 CHECKSUMS = {
@@ -38,7 +39,7 @@ def install_syft(install_dir, overwrite=False):
     try:
         with tempfile.TemporaryDirectory() as work:
             archive_path = Path(work) / name
-            with urllib.request.urlopen(f"https://github.com/anchore/syft/releases/download/v{VERSION}/{name}", timeout=120) as response, archive_path.open("wb") as output:
+            with urllib.request.urlopen(f"https://github.com/anchore/syft/releases/download/v{VERSION}/{name}", timeout=120, context=download_context()) as response, archive_path.open("wb") as output:
                 shutil.copyfileobj(response, output)
             if hashlib.sha256(archive_path.read_bytes()).hexdigest() != expected:
                 raise ValueError("Syft download checksum mismatch")
