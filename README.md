@@ -504,6 +504,7 @@ Opt-outs and behaviour:
 
 - `--no-syft-merge`: Trivy only for the inventory.
 - `--no-infer-deps`: skip source inference.
+- `--no-build-probe` (or `ACCUKNOX_BUILD_PROBE=off`): do not read versions from a build directory or a sandboxed CMake configure (below).
 - Syft is installed with `accuknox-aspm-scanner tool install --type syft`. If it is missing or fails, the scan warns and continues with the Trivy SBOM. `--enrich-licenses` (the previous opt-in) keeps its strictness: with it, a missing Syft fails the scan.
 - SPDX (`--sbom-format spdx`): the added packages and inferred dependencies are appended to Trivy's SPDX document (with `DEPENDS_ON` relationships and what found them in `comment`). SPDX cannot carry vulnerabilities, so there is no advisory pass.
 - `--container-mode`: the advisory lookup for the added components is a second Trivy container run. The two runs share one throw-away Docker volume (`accuknox-trivy-cache-<id>`, removed afterwards) so the vulnerability database is downloaded once. An `image` inventory mounts the Docker socket, as the Trivy image scan already does.
@@ -518,6 +519,14 @@ accuknox-aspm-scanner scan --project-name fs-test --keep-results --softfail \
 `--container-mode` still works: Syft runs as `anchore/syft:v1.42.3` (override with `SYFT_IMAGE`) using the same `/workdir` mount.
 
 For `sca`, the same inference runs after the filesystem scan: dependencies with a resolved version are checked through a synthetic `conan.lock` kept in a temp directory outside the repository, and their advisories are appended to `results.json` under the target `inferred from source`, so they count toward `--severity`. SCA reports list only vulnerable packages, so versionless and clean inferred components appear in the SBOM only. Use `--no-infer-deps` to turn it off.
+
+**Versions from the build.** An `#include <zlib.h>` names a library, not its version. When the system libraries a C/C++ project uses would otherwise stay versionless, the scanner looks for the version in this order:
+
+1. an existing build directory under the scanned tree (`CMakeCache.txt`): read only, and it reflects the customer's own build. The version comes from the package's `*ConfigVersion.cmake`, a `<Pkg>_VERSION` cache entry, or the version macros in the headers CMake resolved;
+2. otherwise, if `cmake` is installed, a throw-away `cmake -S <repo> -B <tempdir>` run. It runs the repository's own CMake code, so it is **only** done inside a sandbox that denies network access and any write outside the temp directory (macOS `sandbox-exec`, Linux `bwrap`); without one it is skipped and logged. It reports the libraries installed on the scanning machine, which match the product only when the scan runs on its build host;
+3. otherwise the component stays versionless and is listed without lookups.
+
+A version the repository itself states is never replaced, and vendored copies never take the host's version. Such components carry `accuknox:source=build-output` and the evidence `CMakeCache.txt:<VAR> (build-output | cmake-configure)`.
 
 SBOM upload requires `--project-name` (or `ACCUKNOX_PROJECT_NAME`). The project does not need to exist beforehand: if it is missing, AccuKnox creates it automatically from this name. `--project-name` is not required for vulnerability scans. Legacy env `ACCUKNOX_PROJECT` is also accepted.
 
@@ -1051,11 +1060,75 @@ accuknox-aspm-scanner scan --skip-upload --keep-results sca --target ./package-l
 accuknox-aspm-scanner scan --skip-upload --keep-results sca --target ./dependencies.cdx.json
 accuknox-aspm-scanner scan --skip-upload --keep-results sbom --target ./dist/service
 
-# Upload results using existing ACCUKNOX_ENDPOINT/TOKEN/LABEL/TENANT settings.
-accuknox-aspm-scanner scan --project-name payments sca --target ./dist/service --asset-name payment-service
+# More inputs, all scanned locally (nothing is uploaded with --skip-upload):
+accuknox-aspm-scanner scan --skip-upload --keep-results sca --target ./release.zip        # zip/tar/tgz, nested archives
+accuknox-aspm-scanner scan --skip-upload --keep-results sca --target ./service.exe        # PE, ELF, Mach-O (Go, Rust, .NET, jar...)
+accuknox-aspm-scanner scan --skip-upload --keep-results sca --target ./service.gz         # gz/xz/bz2 single files
+accuknox-aspm-scanner scan --skip-upload --keep-results sca --target ./bundle.7z          # 7z/rar (needs 7-Zip or bsdtar)
+docker save myapp:1.0 -o myapp.tar
+accuknox-aspm-scanner scan --skip-upload --keep-results sca --target ./myapp.tar          # container image tarball (docker save / OCI)
+accuknox-aspm-scanner scan --skip-upload --keep-results sbom --target ./oci-layout-dir    # OCI image layout directory
+
+# Upload results using the usual ACCUKNOX_ENDPOINT/TOKEN/LABEL settings (tenant is optional).
+accuknox-aspm-scanner scan sca --target ./dist/service --asset-name payment-service
+accuknox-aspm-scanner scan --project-name payments sbom --target ./dist/service
 ```
 
-`--target-type auto|directory|manifest|binary|archive|sbom` controls input detection.
+#### Uploads
+
+`sca --target` and `sbom --target` upload through `/api/v1/artifact/`, the same route and token
+handling as the SAST, SCA, secret and IaC scanners, so any token that works for those works here.
+
+* `sca` uploads the merged Trivy report (`TR`). It appears as a filesystem asset named after
+  `--asset-name` (default: the file name), so re-uploading the same name updates that asset.
+* `sbom` uploads the CycloneDX document (`SBOM`) under `--project-name` / `ACCUKNOX_PROJECT_NAME`,
+  which is required for SBOM uploads and created if missing. An SBOM with no components is not uploaded.
+* The scan always runs locally first and its files are kept with `--keep-results`/`--output-dir`.
+  If the upload fails the status and response body are logged and the exit code is 2.
+* Not available on this route: the coverage/"limited" summary, per-run ingestion status and the
+  SHA-256 artifact identity. Those stay in the local `result.json`. Mobile analysis (`mobile --target`)
+  still uses the backend's artifact API.
+
+#### What is scanned, and how
+
+| Input | Inventory (Syft) | Vulnerabilities (Trivy, results merged) |
+|-------|------------------|------------------------------------------|
+| Manifest / lockfile | the file | `fs` |
+| Directory | `dir:` | `sbom` + `fs` (lockfiles) + `rootfs` (binaries, jars, OS packages) |
+| Executable, jar/war/ear, rpm/deb | `file:` | `sbom` + `rootfs` |
+| zip, tar, tgz, whl, nupkg, 7z, rar | unpacked tree | `sbom` + `fs` + `rootfs` on the unpacked tree |
+| gz / xz / bz2 single file | decompressed, then re-detected | as for the decompressed content |
+| Container image tarball / OCI layout | `docker-archive:` / `oci-archive:` / `oci-dir:` (never unpacked) | `sbom` + `image --input` |
+| CycloneDX / SPDX JSON | converted | `sbom` |
+
+`trivy fs` reads lockfiles but not compiled binaries, while `trivy rootfs` reads binaries but
+not lockfiles, which is why a directory or unpacked archive needs both. Every pass is merged
+into one `vulnerabilities.json` (an advisory for the same package and version is reported once;
+`1.2.3` and `v1.2.3` count as the same version). Any package Trivy reports that Syft did not
+inventory is added to `sbom.json` so each finding maps to a component. If one pass fails the
+others still count and the failure is listed in `coverage_reasons`.
+
+* Archives are unpacked into the result directory with the existing hardening (no path
+  traversal, links, special files, encrypted members or duplicate names) under one shared size
+  and member budget, so nested archives (up to 3 levels) and compressed layers cannot expand
+  beyond one archive's limit. Your input is never modified. Archives found inside a *directory*
+  you pass are not unpacked; pass the archive itself. Package archives (`.jar .war .ear .rpm .deb`)
+  are read as packages, not unpacked.
+* Trivy skips executables without the execute bit, so the engine marks unpacked binaries
+  executable inside the result directory (nothing is ever run), and copies a non-executable
+  single binary there before scanning. Binaries inside a directory you pass keep your modes.
+* `7z`/`rar` need an extractor on `PATH`: 7-Zip (`7zz`, `7z`, `7za`) or libarchive `bsdtar`
+  (`bsdtar` is preinstalled on macOS; on Linux `apt install libarchive-tools` or `7zip`; on Windows install 7-Zip). The
+  listing is validated before extraction and the result is checked again afterwards.
+* Alpine `.apk` packages are scanned as archives; Android `.apk`/`.ipa` still go to `mobile`.
+* Local scans accept inputs up to 4 GiB (16 GiB expanded). Override with
+  `ACCUKNOX_ARTIFACT_MAX_BYTES` and `ACCUKNOX_ARTIFACT_MAX_EXPANDED_BYTES`. Only the small
+  `result.json` is uploaded, so the backend's upload cap does not apply.
+* Not supported: VM disk images (`trivy vm`), encrypted archives, symlink-bearing archives.
+
+`--target-type auto|directory|manifest|binary|archive|sbom` controls input detection
+(container image tarballs and unpacked bundles are `archive`; the report's `artifact.format` says
+which).
 `--target` and legacy `--command` are mutually exclusive. Use a directory to include
 companion manifests/lockfiles while preserving relative paths. Standalone manifest
 scans select only that file. No dependency installation or build execution occurs.

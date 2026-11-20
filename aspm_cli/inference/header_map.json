@@ -1,5 +1,5 @@
 {
-  "_comment": "Header -> package map for C/C++ include inference. 'headers' entries ending in '/' match a directory prefix; others match the exact include path. 'conan' is the Conan Center recipe name (used for the purl / synthetic conan.lock), 'vcpkg' the vcpkg port name, 'aliases' other names seen in CMake find_package()/FetchContent.",
+  "_comment": "Header -> package map for C/C++ include inference. 'headers' entries ending in '/' match a directory prefix; others match the exact include path. 'conan' is the Conan Center recipe name (used for the purl / synthetic conan.lock), 'vcpkg' the vcpkg port name, 'aliases' other names seen in CMake find_package()/FetchContent. 'registry': false marks a package that is not on Conan Center: its purl is pkg:generic so it is listed but never looked up.",
   "packages": {
     "zlib": {
       "conan": "zlib",
@@ -143,16 +143,16 @@
     },
     "libjpeg": {
       "conan": "libjpeg",
-      "vcpkg": "libjpeg-turbo",
+      "vcpkg": null,
       "headers": [
-        "jpeglib.h",
-        "jerror.h"
+        "jconfig.h",
+        "jerror.h",
+        "jmorecfg.h",
+        "jpeglib.h"
       ],
       "aliases": [
         "JPEG",
-        "libjpeg",
-        "libjpeg-turbo",
-        "libjpeg-turbo8"
+        "libjpeg"
       ]
     },
     "libxml2": {
@@ -513,6 +513,492 @@
       "aliases": [
         "portaudio"
       ]
+    },
+    "x264": {
+      "conan": "x264",
+      "vcpkg": "x264",
+      "headers": [
+        "x264.h"
+      ],
+      "aliases": [
+        "libx264"
+      ]
+    },
+    "x265": {
+      "conan": "libx265",
+      "vcpkg": "x265",
+      "headers": [
+        "x265.h"
+      ],
+      "aliases": [
+        "libx265",
+        "x265"
+      ]
+    },
+    "libvpx": {
+      "conan": "libvpx",
+      "vcpkg": "libvpx",
+      "headers": [
+        "vpx/"
+      ],
+      "aliases": [
+        "vpx"
+      ]
+    },
+    "libaom": {
+      "conan": "libaom-av1",
+      "vcpkg": "aom",
+      "headers": [
+        "aom/"
+      ],
+      "aliases": [
+        "aom",
+        "libaom"
+      ]
+    },
+    "dav1d": {
+      "conan": "dav1d",
+      "vcpkg": "dav1d",
+      "headers": [
+        "dav1d/"
+      ],
+      "aliases": [
+        "libdav1d"
+      ]
+    },
+    "fdk-aac": {
+      "conan": "fdk-aac",
+      "vcpkg": "fdk-aac",
+      "headers": [
+        "fdk-aac/"
+      ],
+      "aliases": [
+        "libfdk_aac"
+      ]
+    },
+    "libass": {
+      "conan": "libass",
+      "vcpkg": "libass",
+      "headers": [
+        "ass/"
+      ],
+      "aliases": [
+        "ass"
+      ]
+    },
+    "fontconfig": {
+      "conan": "fontconfig",
+      "vcpkg": "fontconfig",
+      "headers": [
+        "fontconfig/"
+      ],
+      "aliases": []
+    },
+    "fribidi": {
+      "conan": "fribidi",
+      "vcpkg": "fribidi",
+      "headers": [
+        "fribidi.h",
+        "fribidi/"
+      ],
+      "aliases": [
+        "libfribidi"
+      ]
+    },
+    "harfbuzz": {
+      "conan": "harfbuzz",
+      "vcpkg": "harfbuzz",
+      "headers": [
+        "hb.h",
+        "hb-ft.h",
+        "harfbuzz/"
+      ],
+      "aliases": [
+        "libharfbuzz"
+      ]
+    },
+    "openh264": {
+      "conan": "openh264",
+      "vcpkg": "openh264",
+      "headers": [
+        "wels/"
+      ],
+      "aliases": [
+        "libopenh264"
+      ]
+    },
+    "openjpeg": {
+      "conan": "openjpeg",
+      "vcpkg": "openjpeg",
+      "headers": [
+        "openjpeg.h",
+        "openjpeg-2.5/",
+        "openjpeg-2.4/",
+        "openjpeg-2.3/",
+        "openjp2/"
+      ],
+      "aliases": [
+        "libopenjp2",
+        "libopenjpeg"
+      ]
+    },
+    "libwebp": {
+      "conan": "libwebp",
+      "vcpkg": "libwebp",
+      "headers": [
+        "webp/"
+      ],
+      "aliases": [
+        "webp"
+      ]
+    },
+    "gnutls": {
+      "conan": "gnutls",
+      "vcpkg": "gnutls",
+      "headers": [
+        "gnutls/"
+      ],
+      "aliases": []
+    },
+    "libsndfile": {
+      "conan": "libsndfile",
+      "vcpkg": "libsndfile",
+      "headers": [
+        "sndfile.h"
+      ],
+      "aliases": [
+        "sndfile"
+      ]
+    },
+    "snappy": {
+      "conan": "snappy",
+      "vcpkg": "snappy",
+      "headers": [
+        "snappy.h",
+        "snappy-c.h"
+      ],
+      "aliases": []
+    },
+    "zeromq": {
+      "conan": "zeromq",
+      "vcpkg": "zeromq",
+      "headers": [
+        "zmq.h"
+      ],
+      "aliases": [
+        "libzmq",
+        "zmq"
+      ]
+    },
+    "lcms2": {
+      "conan": "lcms",
+      "vcpkg": "lcms2",
+      "headers": [
+        "lcms2.h"
+      ],
+      "aliases": [
+        "lcms",
+        "littlecms"
+      ]
+    },
+    "speex": {
+      "conan": "speex",
+      "vcpkg": "speex",
+      "headers": [
+        "speex/"
+      ],
+      "aliases": [
+        "libspeex"
+      ]
+    },
+    "theora": {
+      "conan": "theora",
+      "vcpkg": "libtheora",
+      "headers": [
+        "theora/"
+      ],
+      "aliases": [
+        "libtheora"
+      ]
+    },
+    "flatbuffers": {
+      "conan": "flatbuffers",
+      "vcpkg": "flatbuffers",
+      "headers": [
+        "flatbuffers/"
+      ],
+      "aliases": []
+    },
+    "tbb": {
+      "conan": "onetbb",
+      "vcpkg": "tbb",
+      "headers": [
+        "tbb/",
+        "oneapi/tbb/",
+        "oneapi/tbb.h"
+      ],
+      "aliases": [
+        "onetbb",
+        "oneTBB"
+      ]
+    },
+    "jasper": {
+      "conan": "jasper",
+      "vcpkg": "jasper",
+      "headers": [
+        "jasper/"
+      ],
+      "aliases": [
+        "libjasper"
+      ]
+    },
+    "ffmpeg": {
+      "conan": "ffmpeg",
+      "vcpkg": "ffmpeg",
+      "headers": [
+        "libavcodec/",
+        "libavformat/",
+        "libavutil/",
+        "libswscale/",
+        "libswresample/",
+        "libavfilter/",
+        "libavdevice/"
+      ],
+      "aliases": [
+        "libav",
+        "libavcodec"
+      ]
+    },
+    "zlib-ng": {
+      "conan": "zlib-ng",
+      "vcpkg": "zlib-ng",
+      "headers": [
+        "zlib-ng.h"
+      ],
+      "aliases": [
+        "zlibng"
+      ]
+    },
+    "dlpack": {
+      "conan": "dlpack",
+      "vcpkg": "dlpack",
+      "headers": [
+        "dlpack/"
+      ],
+      "aliases": []
+    },
+    "libgcrypt": {
+      "conan": "libgcrypt",
+      "vcpkg": "libgcrypt",
+      "headers": [
+        "gcrypt.h"
+      ],
+      "aliases": [
+        "gcrypt"
+      ]
+    },
+    "libssh": {
+      "conan": "libssh",
+      "vcpkg": "libssh",
+      "headers": [
+        "libssh/"
+      ],
+      "aliases": []
+    },
+    "srt": {
+      "conan": "srt",
+      "vcpkg": "srt",
+      "headers": [
+        "srt/"
+      ],
+      "aliases": [
+        "libsrt"
+      ]
+    },
+    "cairo": {
+      "conan": "cairo",
+      "vcpkg": "cairo",
+      "headers": [
+        "cairo.h",
+        "cairo/"
+      ],
+      "aliases": []
+    },
+    "libsamplerate": {
+      "conan": "libsamplerate",
+      "vcpkg": "libsamplerate",
+      "headers": [
+        "samplerate.h"
+      ],
+      "aliases": [
+        "samplerate"
+      ]
+    },
+    "libxcb": {
+      "conan": "xcb",
+      "vcpkg": "libxcb",
+      "headers": [
+        "xcb/"
+      ],
+      "aliases": [
+        "xcb"
+      ]
+    },
+    "libjpeg-turbo": {
+      "conan": "libjpeg-turbo",
+      "vcpkg": "libjpeg-turbo",
+      "headers": [
+        "turbojpeg.h"
+      ],
+      "aliases": [
+        "libjpeg-turbo8",
+        "libjpeg-turbo"
+      ],
+      "implements": [
+        "libjpeg"
+      ],
+      "_note": "Different project from IJG libjpeg: its versions (3.x) must never be matched against libjpeg advisories."
+    },
+    "cudnn": {
+      "conan": "cudnn",
+      "vcpkg": null,
+      "headers": [
+        "cudnn*"
+      ],
+      "aliases": [],
+      "registry": false
+    },
+    "thrust": {
+      "conan": "thrust",
+      "vcpkg": null,
+      "headers": [
+        "thrust/",
+        "cub/"
+      ],
+      "aliases": [
+        "cub"
+      ],
+      "registry": false
+    },
+    "gstreamer": {
+      "conan": "gstreamer",
+      "vcpkg": null,
+      "headers": [
+        "gst/"
+      ],
+      "aliases": [
+        "GStreamer",
+        "gst"
+      ],
+      "registry": false
+    },
+    "hpx": {
+      "conan": "hpx",
+      "vcpkg": null,
+      "headers": [
+        "hpx/"
+      ],
+      "aliases": [
+        "HPX"
+      ],
+      "registry": false
+    },
+    "libjxl": {
+      "conan": "libjxl",
+      "vcpkg": null,
+      "headers": [
+        "jxl/"
+      ],
+      "aliases": [
+        "jxl",
+        "libjxl_threads"
+      ],
+      "registry": false
+    },
+    "vpl": {
+      "conan": "vpl",
+      "vcpkg": null,
+      "headers": [
+        "vpl/",
+        "mfx/"
+      ],
+      "aliases": [
+        "onevpl",
+        "oneVPL"
+      ],
+      "registry": false
+    },
+    "libva": {
+      "conan": "libva",
+      "vcpkg": null,
+      "headers": [
+        "va/"
+      ],
+      "aliases": [
+        "va"
+      ],
+      "registry": false
+    },
+    "gtk": {
+      "conan": "gtk",
+      "vcpkg": null,
+      "headers": [
+        "gtk/"
+      ],
+      "aliases": [
+        "GTK",
+        "gtk3",
+        "gtk+-3.0"
+      ],
+      "registry": false
+    },
+    "intel-ipp": {
+      "conan": "intel-ipp",
+      "vcpkg": null,
+      "headers": [
+        "ipp*"
+      ],
+      "aliases": [
+        "IPP",
+        "ipp"
+      ],
+      "registry": false
+    },
+    "onnxruntime": {
+      "conan": "onnxruntime",
+      "vcpkg": null,
+      "headers": [
+        "onnxruntime_*",
+        "onnxruntime/"
+      ],
+      "aliases": [
+        "ONNX"
+      ],
+      "registry": false
+    },
+    "tim-vx": {
+      "conan": "tim-vx",
+      "vcpkg": null,
+      "headers": [
+        "tim/"
+      ],
+      "aliases": [
+        "libtim-vx",
+        "timvx"
+      ],
+      "registry": false
+    },
+    "arm-compute-library": {
+      "conan": "arm-compute-library",
+      "vcpkg": null,
+      "headers": [
+        "arm_compute/"
+      ],
+      "aliases": [
+        "ComputeLibrary",
+        "acl"
+      ],
+      "registry": false
     }
   }
 }
