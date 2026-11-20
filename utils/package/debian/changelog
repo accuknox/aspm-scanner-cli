@@ -1,3 +1,13 @@
+aspm-scanner-cli (0.17.0) unstable; urgency=medium
+
+  * Release 0.17.0 (first final release since 0.15.1; includes the 0.16.x line)
+  * Tool installs verify downloads against the system CAs plus certifi, so the macOS binary
+    can install scanner tools (they failed with CERTIFICATE_VERIFY_FAILED)
+  * C/C++ dependency inference from source, Trivy + Syft SBOM merge, binary scanning
+  * Align CLI, wheel, and package version metadata to 0.17.0
+
+ -- AccuKnox <accuknox@accuknox.com>  Fri, 20 Nov 2026 15:00:00 +0530
+
 aspm-scanner-cli (0.17.0-rc.5) unstable; urgency=medium
 
   * DAST: --scan-type baseline|full|api, --target and --options replace the engine's own
