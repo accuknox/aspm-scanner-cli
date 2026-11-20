@@ -402,7 +402,7 @@ class ConfigValidator:
             @model_validator(mode='after')
             def check_command_or_plan(self) -> 'DASTScanConfig':
                 if not self.command and not self.zap_plan:
-                    raise ValueError("DAST scan requires either --command or --zap-plan.")
+                    raise ValueError("DAST scan requires either --scan-type with --target, or --dast-plan.")
                 return self
 
             @model_validator(mode='after')
@@ -417,7 +417,7 @@ class ConfigValidator:
                     missing = ", ".join(sorted(set(provided) - given))
                     raise ValueError(f"Authenticated DAST scan requires {missing} as well.")
                 if given and self.zap_plan:
-                    raise ValueError("Use either --zap-plan or --auth-url/--auth-username/--auth-password, not both.")
+                    raise ValueError("Use either --dast-plan or --auth-url/--auth-username/--auth-password, not both.")
                 return self
 
         try:

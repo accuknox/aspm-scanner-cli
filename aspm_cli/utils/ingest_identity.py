@@ -82,11 +82,50 @@ def _ci_repo_url(env: Mapping[str, str]) -> str:
 
 
 def _ci_branch(env: Mapping[str, str]) -> str:
-    # For pull requests GitHub exposes the source branch separately from the merge ref.
+    # On pull requests use the source branch: GITHUB_HEAD_REF (GitHub), SYSTEM_PULLREQUEST_SOURCEBRANCH
+    # (Azure DevOps) and CHANGE_BRANCH (Jenkins) hold it apart from the merge ref or "PR-12".
+    # Azure's BUILD_SOURCEBRANCHNAME keeps only the last segment (feature/x -> x), so the full
+    # BUILD_SOURCEBRANCH is preferred when it names a branch.
+    azure_branch = _env(env, "BUILD_SOURCEBRANCH")
+    azure_branch = azure_branch if azure_branch.startswith("refs/heads/") else ""
     return _env(
-        env, "GITHUB_HEAD_REF", "GITHUB_REF_NAME", "CI_COMMIT_REF_NAME", "BITBUCKET_BRANCH",
-        "BUILD_SOURCEBRANCHNAME", "BRANCH_NAME", "GIT_BRANCH",
-    ).removeprefix("origin/")
+        {**env, "AZURE_BRANCH": azure_branch},
+        "GITHUB_HEAD_REF", "GITHUB_REF_NAME", "CI_COMMIT_REF_NAME", "BITBUCKET_BRANCH",
+        "SYSTEM_PULLREQUEST_SOURCEBRANCH", "AZURE_BRANCH", "BUILD_SOURCEBRANCHNAME",
+        "CHANGE_BRANCH", "BRANCH_NAME", "GIT_BRANCH",
+    ).removeprefix("refs/heads/").removeprefix("origin/")
+
+
+def detect_branch(env: Mapping[str, str] | None = None) -> str | None:
+    """Branch to record in a scan report: ACCUKNOX_BRANCH, then the CI's branch, then git.
+
+    CI checkouts are often detached (GitHub pull requests, GitLab, Azure DevOps), where git can
+    only answer "HEAD"; the backend keys SAST and IaC assets on the branch, so every such build
+    would land on one shared "HEAD" asset. Outside CI this is git's answer, unchanged.
+    """
+    env = os.environ if env is None else env
+    return _clean_branch(_env(env, "ACCUKNOX_BRANCH") or _ci_branch(env)) or GitInfo.get_branch_name()
+
+
+def detect_repo_url(env: Mapping[str, str] | None = None) -> str | None:
+    """Repository URL to record in a scan report: ACCUKNOX_REPO_URL, then the CI's, then git's remote.
+
+    Credentials are stripped: some CIs check out with the job token in the remote URL
+    (GitLab: https://gitlab-ci-token:<token>@host/...), which must not end up in a report.
+    """
+    env = os.environ if env is None else env
+    return _clean_repo_url(_env(env, "ACCUKNOX_REPO_URL") or _ci_repo_url(env) or GitInfo.get_repo_url() or "") or None
+
+
+def detect_pipeline_id(env: Mapping[str, str] | None = None) -> str | None:
+    """The CI run's id, so a scan report links back to the run that produced it."""
+    env = os.environ if env is None else env
+    return _env(env, "GITHUB_RUN_ID", "CI_PIPELINE_ID", "BITBUCKET_BUILD_NUMBER", "BUILD_BUILDID", "BUILD_NUMBER") or None
+
+
+def detect_pipeline_url(env: Mapping[str, str] | None = None) -> str | None:
+    env = os.environ if env is None else env
+    return _ci_pipeline_url(env) or None
 
 
 def _ci_pipeline_url(env: Mapping[str, str]) -> str:

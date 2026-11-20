@@ -8,11 +8,14 @@ from pydantic import ValidationError
 from aspm_cli.commands.base_command import BaseCommand
 from aspm_cli.commands.gate_command import add_gate_arguments
 from aspm_cli.utils.common import handle_failure
+from aspm_cli.utils.git_info import GitInfo
 from aspm_cli.utils.incremental import INCREMENTAL_SCANS, resolve_changed_files, should_skip
 from aspm_cli.utils.ingest_identity import collect_ingest_identity
 from aspm_cli.utils.logger import Logger
+from aspm_cli.utils.preview import preview_help
 from aspm_cli.utils.quality_gate import (
     EXIT_OPERATIONAL,
+    GATE_SCANNERS,
     GateConfigError,
     decide,
     gate_upload_params,
@@ -35,7 +38,7 @@ SCAN_BUILDERS = {
     "sast": ("SAST", lambda a: ["--command", a.sast_command]),
     "sq-sast": ("SQ-SAST", lambda a: ["--command", a.sq_sast_command]),
     "sca": ("SCA", lambda a: ["--command", a.sca_command]),
-    "secret": ("SECRET", lambda a: ["--command", a.secret_command, "--engine", a.secret_engine]),
+    "secret": ("SECRET", lambda a: ["--command", default_secret_command(a), "--engine", a.secret_engine]),
     "iac": ("IAC", lambda a: ["--command", a.iac_command]),
     "sbom": (
         "CONTAINER",
@@ -45,7 +48,28 @@ SCAN_BUILDERS = {
         + [x for path in (a.sbom_vex or []) for x in ("--sbom-vex", path)]
         + (["--cert-in-check"] if a.cert_in_check else []),
     ),
+    "ml": ("ML-SCAN", lambda a: ["--command", a.ml_command]),
 }
+
+# Gitleaks' own default; an empty command is rejected, and TruffleHog's arguments mean nothing to it.
+GITLEAKS_DEFAULT_COMMAND = "detect --source . --report-format sarif --report-path results.json --no-banner"
+
+
+def default_secret_command(args) -> str:
+    """--secret-command, or the engine's default.
+
+    TruffleHog defaults to git mode (the checked-out commits): AccuKnox cannot yet import results of
+    its filesystem mode, and filesystem mode reports the CI token that actions/checkout leaves in
+    .git/config. Outside a git checkout git mode cannot run, so filesystem mode is used there.
+    """
+    if args.secret_command:
+        return args.secret_command
+    if args.secret_engine == "gitleaks":
+        return GITLEAKS_DEFAULT_COMMAND
+    if GitInfo._run_git_command(["rev-parse", "--is-inside-work-tree"]) == "true":
+        return "git file://."
+    Logger.get_logger().info("Not a git checkout: the secret scan uses TruffleHog filesystem mode.")
+    return "filesystem ."
 
 
 # Scans that have an AI analysis step, and the scanner options --ai-analysis turns into for each.
@@ -79,10 +103,12 @@ class PipelineCommand(BaseCommand):
         parser.add_argument("--container-mode", action="store_true", help="Run the scanners in containers")
         parser.add_argument(
             "--changed-only", action="store_true",
-            help="Incremental scan: scan only what the PR (or --base-ref) changed; a scan with nothing relevant to scan is skipped "
-                 "and not declared to the quality gate. Falls back to full scans if the diff can't be computed. Also ACCUKNOX_CHANGED_ONLY=true.",
+            help=preview_help(
+                "Incremental scan: scan only what the PR (or --base-ref) changed; a scan with nothing relevant to scan is skipped "
+                "and not declared to the quality gate. Falls back to full scans if the diff can't be computed. Also ACCUKNOX_CHANGED_ONLY=true.",
+            ),
         )
-        parser.add_argument("--base-ref", help="With --changed-only: base branch/commit to diff against (default: the PR base).")
+        parser.add_argument("--base-ref", help=preview_help("With --changed-only: base branch/commit to diff against (default: the PR base)."))
         parser.add_argument("--fail-fast", action="store_true", help="Stop at the first scan that fails to run")
         parser.add_argument(
             "--quality-gate",
@@ -107,7 +133,11 @@ class PipelineCommand(BaseCommand):
         parser.add_argument("--sast-command", default="scan .", help="SAST scanner arguments (default: 'scan .')")
         parser.add_argument("--sq-sast-command", help="SonarQube scanner arguments (required for sq-sast)")
         parser.add_argument("--sca-command", default="fs .", help="SCA (Trivy) arguments (default: 'fs .')")
-        parser.add_argument("--secret-command", default="filesystem .", help="Secret scanner arguments (default: 'filesystem .')")
+        parser.add_argument(
+            "--secret-command",
+            help="Secret scanner arguments (default: TruffleHog 'git file://.', or 'filesystem .' outside a git checkout; "
+            "Gitleaks 'detect --source .')",
+        )
         parser.add_argument("--secret-engine", choices=["trufflehog", "gitleaks"], default="trufflehog")
         parser.add_argument("--iac-command", default="-d .", help="IaC scanner arguments (default: '-d .')")
         parser.add_argument("--sbom-command", default="filesystem .", help="SBOM arguments (default: 'filesystem .')")
@@ -116,6 +146,12 @@ class PipelineCommand(BaseCommand):
         parser.add_argument("--sbom-version", type=int, default=None, help="Revision number written as the SBOM's version (the scanner always writes 1)")
         parser.add_argument("--sbom-vex", action="append", default=None, metavar="FILE", help="VEX file (OpenVEX, CycloneDX VEX or CSAF) to apply; repeatable")
         parser.add_argument("--cert-in-check", action="store_true", help="Fail unless the SBOM meets the CERT-In minimum data fields")
+        parser.add_argument(
+            "--ml-command",
+            default="scan -p . -r json",
+            help="ML model scan (ModelScan) arguments (default: 'scan -p . -r json'). The quality gate does not cover ML: "
+            "its result is uploaded, and model issues fail the build unless --softfail.",
+        )
         parser.set_defaults(func=self.execute)
 
     def execute(self, args):
@@ -205,21 +241,26 @@ class PipelineCommand(BaseCommand):
                 discard_result(run, args.keep_results)
             elif run.result_file:
                 uploadable.append((scan, run))
-        uploaded = set()
+        uploaded, gate_uploaded = set(), set()
         upload_failed = []
         if args.skip_upload:
             for _, run in uploadable:
                 discard_result(run, args.keep_results)
         elif uploadable:
-            declared = list(dict.fromkeys(run.data_type for _, run in uploadable))
+            # The backend waits for every type a gated upload names, so a type the gate does not
+            # evaluate (ML) is uploaded without the run id; it would otherwise never resolve.
+            declared = list(dict.fromkeys(run.data_type for _, run in uploadable if run.data_type in GATE_SCANNERS))
             identity = collect_ingest_identity()
-            if quality_gate:
+            if quality_gate and declared:
                 logger.info(f"Quality gate run id: {cli_id}")
             for scan, run in uploadable:
-                params = gate_upload_params(cli_id, declared, identity, args.repository) if quality_gate else identity
+                gated = quality_gate and run.data_type in GATE_SCANNERS
+                params = gate_upload_params(cli_id, declared, identity, args.repository) if gated else identity
                 outcome = upload_run(run, accuknox_config, args.keep_results, params)
                 if outcome.uploaded:
                     uploaded.add(scan)
+                    if gated:
+                        gate_uploaded.add(scan)
                 elif not outcome.empty_sbom:
                     upload_failed.append(scan)
 
@@ -227,7 +268,9 @@ class PipelineCommand(BaseCommand):
         operational = bool(broken or upload_failed)
         worst = 0
         for scan, run in runs:
-            code = gate_exit_code(run, scan in uploaded) if quality_gate else run.exit_code
+            # The policy judges findings only of the scans it evaluates; the others keep their own exit code.
+            gated = quality_gate and run.data_type in GATE_SCANNERS
+            code = gate_exit_code(run, scan in uploaded) if gated else run.exit_code
             if run.certin_failed:
                 code = max(code, 1)
             if code != 0 and not (softfail and not (run.scantype.upper() == "SAST" and code == 2)):
@@ -245,9 +288,15 @@ class PipelineCommand(BaseCommand):
                 f"Upload failed for {', '.join(upload_failed)}; the quality gate would wait for it, so it is not polled."
             )
             return EXIT_OPERATIONAL
-        if not uploaded:
-            logger.info("No scan produced results, so there is nothing for the quality gate to evaluate.")
-            return EXIT_OPERATIONAL if operational else worst
+        if not gate_uploaded:
+            if uploaded:
+                logger.info(f"The quality gate does not cover {', '.join(sorted(uploaded))}, so there is nothing for it to evaluate.")
+            else:
+                logger.info("No scan produced results, so there is nothing for the quality gate to evaluate.")
+            if operational:
+                return EXIT_OPERATIONAL
+            handle_failure(worst, softfail=False, allow_softfail=False)
+            return worst
 
         # Phase 3: the verdict.
         logger.info(f"Waiting up to {args.gate_timeout}s for the quality gate...")

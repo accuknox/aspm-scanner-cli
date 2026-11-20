@@ -12,7 +12,7 @@ from aspm_cli.utils.scan_runner import ScanRun
 
 CLI_ID = "469c1037-2983-4438-9d73-a2384f805a40"
 IDENTITY = {"repo_url": "https://github.com/acme/api", "branch": "main", "commit_sha": "a" * 40}
-DATA_TYPES = {"SAST": "SG", "SCA": "TR", "SECRET": "TruffleHog", "IAC": "IAC", "SQ-SAST": "SQ", "CONTAINER": "SBOM"}
+DATA_TYPES = {"SAST": "SG", "SCA": "TR", "SECRET": "TruffleHog", "IAC": "IAC", "SQ-SAST": "SQ", "CONTAINER": "SBOM", "ML-SCAN": "MLC"}
 
 
 class Harness:
@@ -290,3 +290,61 @@ def test_scan_gate_needs_declared_scanners_and_an_upload(harness):
     assert run_scan_command(quality_gate=True) == 2
     assert run_scan_command(quality_gate=True, gate_scanners="SG", skip_upload=True) == 2
     assert harness.uploads == []
+
+
+# ---------------------------------------------------------------- ML scan (not covered by the gate)
+
+
+def test_ml_is_uploaded_outside_the_gate_run_so_the_gate_never_waits_for_it(harness):
+    code = run_pipeline(harness, scans="sast,ml", quality_gate=True)
+    assert code == 0
+    sg, mlc = harness.uploads
+    assert sg[0] == "SG" and sg[1]["cli_id"] == CLI_ID and sg[1]["scanners"] == "SG"
+    assert mlc[0] == "MLC" and "cli_id" not in mlc[1] and "scanners" not in mlc[1]
+    assert mlc[1]["branch"] == "main"
+    assert harness.polled == [(CLI_ID, 300)]
+
+
+def test_ml_issues_fail_the_build_with_the_gate_on_unless_softfail(harness):
+    harness.exit_codes = {"ML-SCAN": 1, "SAST": 1}
+    assert run_pipeline(harness, scans="sast,ml", quality_gate=True) == 1  # SAST findings: the policy (passed) decides
+    assert run_pipeline(harness, scans="sast,ml", quality_gate=True, softfail=True) == 0
+
+
+def test_ml_alone_with_the_gate_uploads_and_does_not_poll(harness):
+    harness.exit_codes = {"ML-SCAN": 1}
+    assert run_pipeline(harness, scans="ml", quality_gate=True) == 1
+    assert [upload[0] for upload in harness.uploads] == ["MLC"]
+    assert "cli_id" not in harness.uploads[0][1] and harness.polled == []
+    harness.exit_codes = {}
+    assert run_pipeline(harness, scans="ml", quality_gate=True) == 0
+
+
+def test_ml_command_reaches_the_ml_scanner(harness):
+    run_pipeline(harness, scans="ml", ml_command="scan -p models -r json")
+    assert harness.scan_args["ML-SCAN"].command == "scan -p models -r json"
+
+
+# ---------------------------------------------------------------- secret scan default
+
+
+def test_trufflehog_defaults_to_git_mode_in_a_git_checkout(harness, monkeypatch):
+    monkeypatch.setattr(pipeline_command.GitInfo, "_run_git_command", staticmethod(lambda parts: "true"))
+    run_pipeline(harness, scans="secret")
+    assert harness.scan_args["SECRET"].command == "git file://."
+
+
+def test_trufflehog_falls_back_to_filesystem_outside_git(harness, monkeypatch):
+    monkeypatch.setattr(pipeline_command.GitInfo, "_run_git_command", staticmethod(lambda parts: None))
+    run_pipeline(harness, scans="secret")
+    assert harness.scan_args["SECRET"].command == "filesystem ."
+
+
+def test_gitleaks_gets_its_own_default_not_trufflehog_arguments(harness):
+    run_pipeline(harness, scans="secret", secret_engine="gitleaks")
+    assert harness.scan_args["SECRET"].command.startswith("detect --source .")
+
+
+def test_an_explicit_secret_command_is_kept(harness):
+    run_pipeline(harness, scans="secret", secret_command="filesystem src")
+    assert harness.scan_args["SECRET"].command == "filesystem src"

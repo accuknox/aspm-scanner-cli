@@ -1,3 +1,44 @@
+aspm-scanner-cli (0.17.0-rc.5) unstable; urgency=medium
+
+  * DAST: --scan-type baseline|full|api, --target and --options replace the engine's own
+    --command; --zap-plan is now --dast-plan (the old flags still work, hidden)
+  * Preview features: incremental scans (--changed-only) and the PR decorator (decorate-pr) are
+    off and left out of --help unless ACCUKNOX_PREVIEW=true. --changed-only without it warns
+    and runs a full scan; decorate-pr without it exits 1
+  * Release workflow: tags must be on main (or release/X.Y for an older line) and newer than the
+    last release on that line; only a final version on main is marked Latest
+  * Align CLI, wheel, and package version metadata to 0.17.0-rc.5
+
+ -- AccuKnox <accuknox@accuknox.com>  Fri, 20 Nov 2026 12:00:00 +0530
+
+aspm-scanner-cli (0.17.0-rc.4) unstable; urgency=medium
+
+  * Scan reports take the repository URL from ACCUKNOX_REPO_URL, then the CI, then git, with
+    credentials removed (GitLab checkouts carry the job token in the remote URL)
+  * SAST reports link to the CI run: --pipeline-id and --job-url default from the CI
+  * ML scan: without a local ModelScan, model files are scanned in its container (the
+    pipeline command does not have to run every scan in containers for ML)
+  * Align CLI, wheel, and package version metadata to 0.17.0-rc.4
+
+ -- AccuKnox <accuknox@accuknox.com>  Thu, 19 Nov 2026 18:00:00 +0530
+
+aspm-scanner-cli (0.17.0-rc.3) unstable; urgency=medium
+
+  * pipeline: add the ml scan (--scans ml, --ml-command). ML results are uploaded outside the
+    quality-gate run, which does not evaluate them, so the gate never waits for them; model issues
+    fail the build unless --softfail
+  * ML scan: pull the scanner image only when model files are found
+  * pipeline: TruffleHog secret scans default to git mode (git file://.), or filesystem mode outside a
+    git checkout; Gitleaks gets its own default instead of TruffleHog arguments
+  * Quality gate: scans that passed only because no policy checked them are printed as plain-language
+    warnings, and as annotations on GitHub Actions and Azure DevOps
+  * Branch in scan reports: SAST, IaC, SCA, SonarQube and ML default to the CI branch (the source branch
+    on pull requests) instead of git's answer, which is "HEAD" on detached CI checkouts; Azure DevOps
+    and Jenkins pull requests also report their source branch in upload metadata
+  * Align CLI, wheel, and package version metadata to 0.17.0-rc.3
+
+ -- AccuKnox <accuknox@accuknox.com>  Thu, 19 Nov 2026 12:00:00 +0530
+
 aspm-scanner-cli (0.17.0-rc.2) unstable; urgency=medium
 
   * Fix gitleaks install on Linux: download the bundle its pinned checksum belongs to; tool bundle

@@ -8,11 +8,17 @@ import os
 from aspm_cli.pr_decorator.detect import detect_pr_context
 from aspm_cli.utils.git_info import GitInfo
 from aspm_cli.utils.logger import Logger
+from aspm_cli.utils.preview import preview_enabled, preview_notice
+
+
+def is_requested(args) -> bool:
+    return bool(getattr(args, "changed_only", False)) or \
+        os.getenv("ACCUKNOX_CHANGED_ONLY", "").lower() in ("1", "true", "yes")
 
 
 def is_enabled(args) -> bool:
-    return bool(getattr(args, "changed_only", False)) or \
-        os.getenv("ACCUKNOX_CHANGED_ONLY", "").lower() in ("1", "true", "yes")
+    """Incremental is a preview feature: requested without ACCUKNOX_PREVIEW=true it is a full scan."""
+    return is_requested(args) and preview_enabled()
 
 
 def _ci_base_ref() -> str | None:
@@ -38,9 +44,12 @@ def _changed_files(base: str, head: str) -> list[str] | None:
 def resolve_changed_files(args) -> list[str] | None:
     """Existing (non-deleted) files changed since the merge-base. [] = nothing
     to scan. None = incremental off or unavailable -> caller does a full scan."""
-    if not is_enabled(args):
-        return None
     log = Logger.get_logger()
+    if not is_requested(args):
+        return None
+    if not preview_enabled():
+        log.warning(f"{preview_notice('Incremental scanning (--changed-only)')} Running a full scan.")
+        return None
     base, head = getattr(args, "base_ref", None), "HEAD"
     if not base:
         ctx = detect_pr_context()

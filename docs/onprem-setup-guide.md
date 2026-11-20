@@ -54,7 +54,7 @@ These are only required when not using `--skip-upload`:
 Install the CLI from the GitHub release wheel:
 
 ```bash
-pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.2/accuknox_aspm_scanner-0.17.0rc2-py3-none-any.whl
+pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.5/accuknox_aspm_scanner-0.17.0rc5-py3-none-any.whl
 ```
 
 ### Restricted or on-prem environment
@@ -145,11 +145,11 @@ accuknox-aspm-scanner scan --skip-upload --keep-results --project-name demo-proj
   --command "filesystem ." --generate-sbom --container-mode
 ```
 
-### DAST scan with mirrored ZAP image
+### DAST scan with mirrored scanner image
 
 ```bash
-export SCAN_IMAGE=registry.local/zaproxy/zap-stable:2.16.1
-accuknox-aspm-scanner scan --skip-upload --keep-results dast --command "zap-baseline.py -t http://example.com/ -I" --container-mode
+export SCAN_IMAGE=registry.local/dast/scanner:2.16.1
+accuknox-aspm-scanner scan --skip-upload --keep-results dast --scan-type baseline --target http://example.com/ --options "-I" --container-mode
 ```
 
 ### SonarQube SAST scan against self-hosted SonarQube
@@ -245,7 +245,7 @@ accuknox-aspm-scanner scan --skip-upload sq-sast --skip-sonar-scan --command "-D
 
 ### DAST local mode is partial
 
-The current DAST implementation does not fully support local execution for `zap-baseline.py` and `zap-full-scan.py`.
+The current DAST implementation does not fully support local execution for the `baseline` and `full` scan types.
 
 Workaround:
 

@@ -6,10 +6,12 @@ from aspm_cli.pr_decorator import run as pr_decorator_run
 from aspm_cli.pr_decorator.adapters import LOADERS_BY_SCANTYPE
 from aspm_cli.pr_decorator.remediation import DEFAULT_BASE_URL, DEFAULT_MODEL
 from aspm_cli.pr_decorator.render import DEFAULT_THRESHOLDS
+from aspm_cli.utils.preview import preview_enabled, preview_notice
 
 
 class PRDecoratorCommand(BaseCommand):
-    help_text = "Post scan findings as a PR review (summary comment + inline comments)"
+    help_text = "[preview] Post scan findings as a PR review (summary comment + inline comments)"
+    preview = True
 
     def configure_parser(self, parser):
         parser.add_argument(
@@ -50,6 +52,8 @@ class PRDecoratorCommand(BaseCommand):
         parser.set_defaults(func=self.execute)
 
     def execute(self, args):
+        if not preview_enabled():
+            self._fail(preview_notice("decorate-pr"))
         result_paths = [p for p in args.result_file.split(",") if p]
         scan_types = [t.strip() or None for t in args.scan_type.split(",")] if args.scan_type else None
         if scan_types and len(scan_types) != len(result_paths):

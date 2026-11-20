@@ -6,6 +6,7 @@ from colorama import Fore, init
 from aspm_cli.commands import command_registry
 from aspm_cli.utils.common import clean_env_vars, print_banner
 from aspm_cli.utils.logger import Logger
+from aspm_cli.utils.preview import preview_enabled
 from aspm_cli.utils.version import get_version
 
 init(autoreset=True)
@@ -19,11 +20,18 @@ def main():
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    # Register all commands from the registry
+    # Register all commands from the registry. Preview commands stay usable but are left out of
+    # --help unless ACCUKNOX_PREVIEW=true (argparse lists a sub-command only when given help=).
+    visible = []
     for cmd_name, cmd_class in command_registry.items():
         cmd_instance = cmd_class()
-        cmd_parser = subparsers.add_parser(cmd_name, help=cmd_instance.help_text)
+        if getattr(cmd_instance, "preview", False) and not preview_enabled():
+            cmd_parser = subparsers.add_parser(cmd_name)
+        else:
+            cmd_parser = subparsers.add_parser(cmd_name, help=cmd_instance.help_text)
+            visible.append(cmd_name)
         cmd_instance.configure_parser(cmd_parser)
+    subparsers.metavar = "{" + ",".join(visible) + "}"
 
     args = parser.parse_args()
 

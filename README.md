@@ -15,7 +15,6 @@ It can upload results to the **AccuKnox ASPM Platform**, but it can also run in 
 - 🧵 Supports environment-variable and flag-based configuration
 - 🧩 Supports pre-commit integration
 - 🚦 CI/CD quality gate (`gate`) that fails the pipeline on policy breaches
-- 💬 PR decorator (`decorate-pr`) that posts findings as a PR review with inline comments
 
 ## Installation
 
@@ -26,7 +25,7 @@ It can upload results to the **AccuKnox ASPM Platform**, but it can also run in 
 Install from the GitHub release wheel:
 
 ```bash
-pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.2/accuknox_aspm_scanner-0.17.0rc2-py3-none-any.whl
+pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.5/accuknox_aspm_scanner-0.17.0rc5-py3-none-any.whl
 ```
 
 ### 2. Restricted or on-prem environment
@@ -50,7 +49,7 @@ Install the cross-platform Python wheel (same as connected environment above), o
 ```bash
 # Linux x86_64
 curl -fL -o accuknox-aspm-scanner \
-  https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.2/accuknox-aspm-scanner-linux-amd64
+  https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.5/accuknox-aspm-scanner-linux-amd64
 chmod +x accuknox-aspm-scanner
 ```
 
@@ -121,7 +120,6 @@ accuknox-aspm-scanner scan sq-sast --help
 accuknox-aspm-scanner tool --help
 accuknox-aspm-scanner pre-commit --help
 accuknox-aspm-scanner gate --help
-accuknox-aspm-scanner decorate-pr --help
 ```
 
 If you are running directly from local source code:
@@ -280,7 +278,7 @@ Flags used after `iac`:
 - `--container-mode`
 - `--severity` — Comma-separated severities that fail the scan. Allowed: `INFO,LOW,MEDIUM,HIGH,CRITICAL`. Defaults to all.
 - `--repo-url`
-- `--repo-branch`
+- `--repo-branch` — defaults to the CI branch (see [Branch in scan reports](#branch-in-scan-reports)), else git
 
 Typical `--command` value:
 
@@ -317,7 +315,7 @@ Flags used after `sast`:
 - `--severity` — Comma-separated severities that fail the scan (matched on finding impact). Allowed: `LOW,MEDIUM,HIGH,CRITICAL,UNKNOWN`. Defaults to all.
 - `--aiscan-severity`
 - `--repo-url`
-- `--commit-ref`
+- `--commit-ref` — defaults to the CI branch (see [Branch in scan reports](#branch-in-scan-reports)), else git
 - `--commit-sha`
 - `--pipeline-id`
 - `--job-url`
@@ -411,7 +409,7 @@ Flags used after `sca`:
 - `--container-mode`
 - `--severity`
 - `--repo-url` — used for SCA asset identity (`ArtifactName`); defaults from git
-- `--repo-branch` — branch used with `--repo-url`; defaults from git
+- `--repo-branch` — branch used with `--repo-url`; defaults to the CI branch, else git
 
 Typical `--command` value:
 
@@ -563,7 +561,7 @@ Flags used after `ml-scan`:
 
 - `--container-mode`
 - `--repo-url` — used for `model_id` / `model_path` metadata
-- `--commit-ref` — branch/ref in `model_path`
+- `--commit-ref` — branch/ref in `model_path`; defaults to the CI branch, else git
 - `--model-name` — optional collector name in upload payload
 - `--source-type` — default `github`
 
@@ -627,49 +625,43 @@ Upload uses `data_type=API`. Output is code2api JSON (`internal_apis`, `external
 
 ### DAST Scan
 
-Use for OWASP ZAP-based scanning. Full guide, including authenticated scans and the ZAP
-Automation Framework plan format: [`docs/dast-scan.md`](docs/dast-scan.md).
+Use for DAST scanning. Full guide, including authenticated scans and the automation plan
+format: [`docs/dast-scan.md`](docs/dast-scan.md).
 
-Required: one of `--command` or `--zap-plan`.
+Required: `--scan-type` with `--target`, or `--dast-plan`.
 
 Flags used after `dast`:
 
+- `--scan-type`: `baseline` (passive), `full` (active) or `api` (OpenAPI/SOAP/GraphQL)
+- `--target`: target URL (or API definition file for `api`)
+- `--options`: extra scanner options, e.g. `"-m 5"` (spider minutes) or `"-I"`
 - `--severity-threshold`
-- `--container-mode` (required for `--auth-*` and `--zap-plan`)
-- `--zap-plan`: path to a ZAP Automation Framework plan (`zap.yaml`) to run as-is instead of
-  `--command`/`--auth-*` — full control over jobs (spiderAjax, activeScan, passive rule config,
-  auth or unauth). Mutually exclusive with `--auth-*`. Template: [`docs/examples/zap-plan-template.yaml`](docs/examples/zap-plan-template.yaml).
+- `--container-mode` (required for `--auth-*` and `--dast-plan`)
+- `--dast-plan`: path to an automation plan (YAML) to run as-is instead of
+  `--scan-type`/`--auth-*` - full control over jobs. Mutually exclusive with `--auth-*`.
+  Template: [`docs/examples/dast-plan-template.yaml`](docs/examples/dast-plan-template.yaml).
 - `--auth-url`, `--auth-username`, `--auth-password`: log in with a real headless browser before
   spidering/scanning (works for plain HTML forms and JS/SPA logins like OWASP Juice Shop).
 - `--auth-logged-in-regex`, `--auth-logged-out-regex`, `--auth-login-fallback-url`: optional
   session-verification settings for the authenticated flow above.
 
-Typical `--command` value:
-
-```bash
-zap-baseline.py -t http://example.com/ -I
-```
-
 Recommended example:
 
 ```bash
-accuknox-aspm-scanner scan --skip-upload --keep-results dast --command "zap-baseline.py -t http://example.com/ -I" --container-mode
+accuknox-aspm-scanner scan --skip-upload --keep-results dast --scan-type baseline --target http://example.com/ --options "-I" --container-mode
 ```
 
 Container mode with AccuKnox upload:
 
 ```bash
-ACCUKNOX_ENDPOINT=cspm.accuknox.com \
-ACCUKNOX_LABEL=POC \
-ACCUKNOX_TOKEN=abcd1234 \
-accuknox-aspm-scanner scan dast --command "zap-baseline.py -t http://example.com/ -I" --container-mode
+ACCUKNOX_ENDPOINT=cspm.accuknox.com ACCUKNOX_LABEL=POC ACCUKNOX_TOKEN=abcd1234 accuknox-aspm-scanner scan dast --scan-type baseline --target http://example.com/ --options "-I" --container-mode
 ```
 
 Authenticated scan:
 
 ```bash
 accuknox-aspm-scanner scan dast \
-  --command "zap-baseline.py -t https://example.com -m 5" \
+  --scan-type baseline --target https://example.com --options "-m 5" \
   --container-mode \
   --auth-url "https://example.com/login" \
   --auth-username "user@example.com" \
@@ -678,10 +670,10 @@ accuknox-aspm-scanner scan dast \
   --auth-logged-in-regex "user@example\.com"
 ```
 
-Bring-your-own ZAP plan (see [`docs/dast-scan.md`](docs/dast-scan.md) for the full job reference):
+Bring-your-own plan (see [`docs/dast-scan.md`](docs/dast-scan.md) for the full job reference):
 
 ```bash
-accuknox-aspm-scanner scan dast --zap-plan ./zap.yaml --container-mode
+accuknox-aspm-scanner scan dast --dast-plan ./plan.yaml --container-mode
 ```
 
 ### SonarQube SAST Scan
@@ -735,11 +727,26 @@ ACCUKNOX_TOKEN=abcd1234 \
 accuknox-aspm-scanner scan sq-sast --command "-Dsonar.projectKey=<PROJECT_KEY> -Dsonar.host.url=<HOST_URL> -Dsonar.token=<TOKEN> -Dsonar.organization=<ORG_ID>" --container-mode
 ```
 
-## Incremental scans (`--changed-only`)
+## Preview features
+
+Preview features ship in the CLI but are off, and left out of `--help`, unless `ACCUKNOX_PREVIEW=true` is set.
+They are not yet stable: their flags, output and behaviour may change in any release.
+
+| Feature | Without `ACCUKNOX_PREVIEW=true` |
+|---|---|
+| Incremental scans (`--changed-only`, `ACCUKNOX_CHANGED_ONLY`) | A warning, then a full scan |
+| PR decorator (`decorate-pr`, see [docs/pr-decorator.md](docs/pr-decorator.md)) | Refused (exit 1) |
+
+### Incremental scans (`--changed-only`)
 
 On a pull/merge request, scan only what the PR changed. Off by default: without the flag every scan is a full scan.
 
+> **Known limitation:** AccuKnox compares each upload with the previous scan of the same asset, so findings in files a
+> partial scan did not cover move to *Waiting for Verification* and then *Fixed*. Use incremental scans for fast PR
+> feedback only, and keep full scans on your default branch.
+
 ```bash
+export ACCUKNOX_PREVIEW=true
 accuknox-aspm-scanner scan --changed-only sast --command "scan ."
 accuknox-aspm-scanner pipeline --changed-only --scans sast,secret,iac,sca,sbom --quality-gate
 accuknox-aspm-scanner scan --changed-only --base-ref origin/main iac --command "-d ."   # any CI
@@ -782,18 +789,43 @@ accuknox-aspm-scanner pipeline --scans sast,sca,secret,iac,sbom --quality-gate
 
 `pipeline` runs the scans in order, uploads them under one run id, then waits for the verdict (default 5 minutes).
 
-- `--scans`: any of `sast`, `sq-sast`, `sca`, `secret`, `iac`, `sbom` (container/filesystem SBOM).
-- Per-scan options: `--sast-command` (default `scan .`), `--sca-command` (`fs .`), `--secret-command`
-  (`filesystem .`), `--secret-engine`, `--iac-command` (`-d .`), `--sbom-command` (`filesystem .`),
-  `--sq-sast-command`, `--container-mode`.
+- `--scans`: any of `sast`, `sq-sast`, `sca`, `secret`, `iac`, `sbom` (container/filesystem SBOM), `ml`.
+- Per-scan options: `--sast-command` (default `scan .`), `--sca-command` (`fs .`), `--secret-command`,
+  `--secret-engine`, `--iac-command` (`-d .`), `--sbom-command` (`filesystem .`), `--ml-command`
+  (`scan -p . -r json`), `--sq-sast-command`, `--container-mode`.
+- `--secret-command` defaults to TruffleHog git mode, `git file://.` (the checked-out commits), and to
+  `filesystem .` outside a git checkout. AccuKnox cannot yet import TruffleHog `filesystem` results, and in CI
+  filesystem mode also reports the token `actions/checkout` stores in `.git/config`. With
+  `--secret-engine gitleaks` the default is `detect --source .`.
+- `ml` scans model files (`.pkl .pt .pth .h5 .keras .pb .ckpt .npy`). The quality gate does not cover it: its
+  result is uploaded outside the gate run, and model issues fail the build unless `--softfail`. In container
+  mode the scanner image is pulled only when model files are found.
 - Only scans that produced a result are declared to the gate, so a clean secret scan (nothing to upload)
   never leaves the gate waiting.
 - With `--quality-gate`, findings no longer fail a scan step: the policy decides. Scans that cannot run or
   upload still fail the build. Without it, `pipeline` simply runs the scans one after another.
+- A scan that passed only because no policy checked it (no policy matches the repository and branch, or the
+  matching policies do not gate that scan) is printed as a warning, and as an annotation on GitHub Actions
+  and Azure DevOps.
 - `--fail-fast` stops at the first scan that cannot run.
 - `--ai-analysis` runs AI analysis on the scans that support it (today: `sast`; off by default), with
   `--aiscan-severity`, `--codeassure-config`, `--context-graph-config` and `--graph-no-joern`. These options
   need `--ai-analysis`. Other scan types ignore it until they gain an AI step.
+
+### Branch in scan reports
+
+SAST, IaC, SCA, SonarQube and ML reports record a branch, and AccuKnox files SAST and IaC findings under
+repository + branch. Unless `--commit-ref` / `--repo-branch` / `--branch` is given, the branch comes from
+`ACCUKNOX_BRANCH`, then the CI (on pull requests, the source branch): `GITHUB_HEAD_REF` / `GITHUB_REF_NAME`,
+`CI_COMMIT_REF_NAME`, `BITBUCKET_BRANCH`, `SYSTEM_PULLREQUEST_SOURCEBRANCH` / `BUILD_SOURCEBRANCH`,
+`CHANGE_BRANCH` / `BRANCH_NAME`, `GIT_BRANCH`; and only then git. CI checkouts are often detached (GitHub pull
+requests, GitLab, Azure DevOps), where git can only answer `HEAD`, which would put every such build under one
+`HEAD` branch.
+
+The repository URL in those reports follows the same order (`ACCUKNOX_REPO_URL`, the CI's repository URL, then
+git's remote) with any credentials removed: some CIs check out with the job token in the remote URL. SAST reports
+also link to the CI run (`--pipeline-id` / `--job-url` default from the CI). ML scans run ModelScan in its container
+when it is not installed locally.
 
 ### Separate steps: `scan --quality-gate` + `gate`
 
@@ -931,11 +963,11 @@ export SCAN_IMAGE=registry.local/accuknox/trivy:0.69.3
 accuknox-aspm-scanner scan --skip-upload --keep-results container --command "image nginx:latest" --container-mode
 ```
 
-DAST with mirrored ZAP image:
+DAST with mirrored scanner image:
 
 ```bash
-export SCAN_IMAGE=registry.local/zaproxy/zap-stable:2.16.1
-accuknox-aspm-scanner scan --skip-upload --keep-results dast --command "zap-baseline.py -t http://example.com/ -I" --container-mode
+export SCAN_IMAGE=registry.local/dast/scanner:2.16.1
+accuknox-aspm-scanner scan --skip-upload --keep-results dast --scan-type baseline --target http://example.com/ --options "-I" --container-mode
 ```
 
 SonarQube SAST against self-hosted SonarQube:

@@ -1,6 +1,7 @@
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import uuid
 
@@ -78,13 +79,8 @@ class MLScanScanner:
     def run(self):
         temp_files = []
         try:
-            if self.container_mode:
-                docker_pull(
-                    self.scan_image,
-                    platform=default_ml_scan_docker_platform(),
-                )
-
             if "--help" in (self.command or ""):
+                self._pull_image()
                 cmd = self._build_scan_command(["scan", "--help"], ".")
                 result = run_scan_subprocess(cmd)
                 Logger.log_with_color("INFO", result.stdout or result.stderr, Fore.WHITE)
@@ -107,6 +103,12 @@ class MLScanScanner:
                 self._write_payload([], scan_root)
                 return config.PASS_RETURN_CODE, self.result_file
 
+            # There is no installable ML tool, so without ModelScan on PATH the image is the only way to scan.
+            if not self.container_mode and not self._has_local_binary():
+                Logger.get_logger().info("ModelScan is not installed locally; scanning the model files in its container.")
+                self.container_mode = True
+            # Only now: the scanner image is several GB, and most repositories have no model files.
+            self._pull_image()
             metadata = derive_model_metadata(
                 self.repo_url,
                 self.commit_ref,
@@ -203,6 +205,10 @@ class MLScanScanner:
                 except OSError:
                     pass
 
+    def _pull_image(self):
+        if self.container_mode:
+            docker_pull(self.scan_image, platform=default_ml_scan_docker_platform())
+
     def _write_payload(self, modelscan_results, scan_root, metadata=None):
         metadata = metadata or derive_model_metadata(
             self.repo_url,
@@ -213,6 +219,10 @@ class MLScanScanner:
         payload = build_ondemand_modelscan_payload(modelscan_results, metadata)
         with open(self.result_file, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2)
+
+    def _has_local_binary(self) -> bool:
+        binary = self._resolve_local_binary()
+        return os.path.isfile(binary) or shutil.which(binary) is not None
 
     def _resolve_local_binary(self) -> str:
         try:
