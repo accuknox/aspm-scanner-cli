@@ -117,6 +117,7 @@ class TestConfigureProbe(unittest.TestCase):
                     self.assertIsNone(cache)
             self.assertFalse(os.path.exists(marker))
 
+    @unittest.skipIf(os.name == "nt", "the fake cmake is a shell script; the configure probe never runs on Windows (no sandbox)")
     def test_failed_configure_still_yields_what_it_found(self):
         with tempfile.TemporaryDirectory() as tmp:
             prefix = make_system_prefix(tmp)
@@ -128,7 +129,7 @@ class TestConfigureProbe(unittest.TestCase):
                 found = by_name(infer_dependencies(os.path.join(tmp, "repo")))
             self.assertEqual(found["zlib"].version, "1.3.1")
             self.assertIn("(cmake-configure)", " ".join(found["zlib"].evidence))
-            self.assertEqual(os.listdir(os.path.join(tmp, "repo")), ["CMakeLists.txt", "src"])  # tree untouched
+            self.assertEqual(sorted(os.listdir(os.path.join(tmp, "repo"))), ["CMakeLists.txt", "src"])  # tree untouched
 
     @unittest.skipUnless(sys.platform == "darwin", "uses macOS sandbox-exec")
     def test_real_macos_sandbox_denies_network_and_outside_writes(self):

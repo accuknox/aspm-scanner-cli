@@ -147,6 +147,7 @@ class TrivyPassTests(Base):
         self.assertEqual(set(passes), {"sbom", "rootfs"})
         self.assertEqual(passes["rootfs"][1], str(binary.resolve()))
 
+    @unittest.skipIf(os.name == "nt", "Windows has no execute bit; staging and marking are skipped there")
     def test_non_executable_binary_is_staged_without_touching_the_input(self):
         binary = self.root / "tool.exe"
         binary.write_bytes(b"MZ" + b"\0" * 60)
@@ -350,6 +351,7 @@ class ExtractionTests(Base):
         with self.assertRaisesRegex(ArtifactError, "Unsupported archive type"):
             extract_archive(bare, self.root / "d3")
 
+    @unittest.skipIf(os.name == "nt", "Windows has no execute bit; staging and marking are skipped there")
     def test_mark_executables_only_touches_executables(self):
         (self.root / "t").mkdir()
         (self.root / "t" / "bin").write_bytes(ELF)
