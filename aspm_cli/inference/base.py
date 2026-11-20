@@ -21,6 +21,7 @@ SOURCE_REGISTRY = "registry"
 SOURCE_GIT = "git"
 SOURCE_VENDORED = "vendored"
 SOURCE_INCLUDE = "include-only"
+SOURCE_BUILD = "build-output"  # version read from a build directory or a sandboxed CMake configure
 
 PROP_PREFIX = "accuknox:"
 LOOKUP_BLOCKED_PURL_TYPES = frozenset({"generic", "github", "gitlab", "bitbucket"})

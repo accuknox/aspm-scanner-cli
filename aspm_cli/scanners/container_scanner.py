@@ -1,4 +1,5 @@
 import argparse
+import os
 from aspm_cli.scanners.base_scanner import BaseScanner
 from aspm_cli.utils.config import ConfigValidator
 from aspm_cli.scan.container import ContainerScanner as OriginalContainerScanner
@@ -86,6 +87,14 @@ class ContainerScanner(BaseScanner):
             help="Filesystem SBOM only: do not merge Syft's inventory into the SBOM (Trivy only)",
         )
         parser.add_argument(
+            "--no-build-probe",
+            action="store_true",
+            help=(
+                "Do not read dependency versions from an existing build directory (CMakeCache.txt) or from a "
+                "sandboxed CMake configure. Same as ACCUKNOX_BUILD_PROBE=off"
+            ),
+        )
+        parser.add_argument(
             "--no-infer-deps",
             action="store_true",
             help=(
@@ -102,6 +111,8 @@ class ContainerScanner(BaseScanner):
         )
 
     def run_scan(self, args: argparse.Namespace) -> tuple[int, str]:
+        if getattr(args, "no_build_probe", False):
+            os.environ["ACCUKNOX_BUILD_PROBE"] = "off"
         # Instantiate and run the original scanner logic
         generate_sbom = getattr(args, "generate_sbom", False)
         enrich_licenses = getattr(args, "enrich_licenses", False)

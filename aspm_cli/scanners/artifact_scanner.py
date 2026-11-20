@@ -9,14 +9,15 @@ def add_target_arguments(parser):
     parser.add_argument("--output-dir", help="Directory for result.json, SBOM and reports (outside the input)")
     parser.add_argument("--offline", action="store_true", help="Use already cached vulnerability databases")
     parser.add_argument("--cache-dir", help="Scanner database cache directory")
-    parser.add_argument("--idempotency-key", help="Submission key for retrying an identical report upload")
+    parser.add_argument("--idempotency-key", help="Submission key for retrying a mobile analysis request (ignored by sca/sbom uploads)")
 
 
 class SBOMScanner(BaseScanner):
-    help_text = "Generate an SBOM for a directory, manifest, executable or archive"
+    help_text = "Generate an SBOM for a directory, manifest, executable, archive, container image tarball or SBOM"
 
     def add_arguments(self, parser):
-        parser.add_argument("--target", required=True)
+        parser.add_argument("--target", required=True,
+                            help="Directory, manifest, executable, archive (zip/tar/gz/7z/rar/jar...), container image tarball or SBOM")
         parser.add_argument("--container-mode", action="store_true")
         add_target_arguments(parser)
 

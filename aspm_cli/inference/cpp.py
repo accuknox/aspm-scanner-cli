@@ -18,10 +18,12 @@ import subprocess
 from functools import lru_cache
 from typing import Dict, Iterator, List, Optional, Set, Tuple
 
+from aspm_cli.utils.logger import Logger
 from aspm_cli.inference.base import (
     CONFIDENCE_A,
     CONFIDENCE_B,
     CONFIDENCE_C,
+    SOURCE_BUILD,
     SOURCE_GIT,
     SOURCE_INCLUDE,
     SOURCE_REGISTRY,
@@ -78,6 +80,14 @@ _INCLUDE_RE = re.compile(r'^\s*#\s*(?:include|include_next|import)\s*([<"])([^>"
 _BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 _LINE_COMMENT_RE = re.compile(r"//[^\n]*")
 _IF0_RE = re.compile(r"^\s*#\s*if\s+0\b.*?^\s*#\s*(?:endif|else)\b", re.MULTILINE | re.DOTALL)
+_CONFIGURE_NOISE = frozenset({  # configure checks for the platform / libc, not dependencies
+    "stdlib", "custom_allocator", "pthreads", "dl", "m", "c", "rt", "socket", "winsock2", "x11", "xext", "xv",
+    "xlib_x11", "xlib_xext", "xlib_xv", "xcb_shm", "xcb_shape", "xcb_xfixes", "alsa", "sndio", "oss",
+    # platform SDK libraries, not third-party dependencies
+    "bcrypt", "ole32", "psapi", "shell32", "vfw32", "user32", "gdi32", "advapi32", "ws2_32", "iokit",
+    "securetransport", "camera2ndk", "mediandk", "ohcodec", "opencl", "vdpau", "mmal_core", "mmal", "raw1394",
+    "coreservices", "corefoundation", "avfoundation", "videotoolbox", "audiotoolbox", "metal", "mfplat",
+})
 _VERSION_RE = re.compile(r"\d+(?:\.\d+)+[a-z]?")
 _SEMVER_TAG_RE = re.compile(r"^(?:[A-Za-z][A-Za-z_-]*[-_]?)?v?(\d+(?:[._]\d+)+[a-z]?)$")
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -144,8 +154,18 @@ def is_system_header(include_path: str) -> bool:
     return key.startswith(_SYSTEM_PREFIXES)
 
 
+@lru_cache(maxsize=1)
+def _not_on_conan_center() -> frozenset:
+    return frozenset(
+        normalize_dep_name(meta["conan"]) for meta in _load_header_map().values() if meta.get("registry") is False
+    )
+
+
 def _conan_purl(name: str, version: Optional[str]) -> str:
-    return f"pkg:conan/{name}@{version}" if version else f"pkg:conan/{name}"
+    """pkg:conan/..., except for packages marked ``"registry": false`` in the header map: those are not on
+    Conan Center, so a conan purl would be a claim we cannot back (and could match the wrong advisories)."""
+    kind = "generic" if normalize_dep_name(name) in _not_on_conan_center() else "conan"
+    return f"pkg:{kind}/{name}@{version}" if version else f"pkg:{kind}/{name}"
 
 
 def _generic_purl(name: str, version: Optional[str], vcs_url: Optional[str] = None) -> str:
@@ -219,8 +239,115 @@ def _in_dependency(rel_path: str, submodule_paths: List[str]) -> bool:
     return any(rel_path == sp or rel_path.startswith(sp + "/") for sp in submodule_paths)
 
 
+_PART_TOKENS = frozenset({"MAJOR", "MINOR", "PATCH", "MICRO", "BUILD", "REVISION"})
+_PART_ORDER = ("MAJOR", "MINOR", "PATCH", "MICRO", "BUILD", "REVISION")
+_PART_DEF_RE = re.compile(
+    r'(?:^[ \t]*#[ \t]*define[ \t]+|^[ \t]*set[ \t]*\([ \t]*)([A-Za-z_][A-Za-z0-9_]*)[ \t]+"?(\d{1,4})"?[ \t]*\)?[ \t]*(?=$|//|/\*|#)',
+    re.MULTILINE | re.IGNORECASE,
+)
+_VERSION_MACRO_RE = re.compile(
+    r'^\s*#\s*define\s+([A-Za-z_]\w*VER(?:SION)?\w*)\s+"?[^"\n]*?(\d+\.\d+(?:\.\d+)*[a-z]?)', re.MULTILINE | re.IGNORECASE
+)
+_CMAKE_VERSION_SET_RE = re.compile(
+    r'^\s*set\s*\(\s*(\w*VERSION\w*)\s+"?(\d+(?:\.\d+)+)"?\s*\)', re.MULTILINE | re.IGNORECASE
+)
+_NOT_A_LIBRARY_VERSION = frozenset(
+    {"CMAKE", "COMPILER", "MSVC", "CXX", "ABI", "MIN", "MINIMUM", "REQUIRED", "STD", "HOST", "SYSTEM"}
+)
+_README_VERSION_RE = re.compile(r"^[\s#*_>-]*version\s*[:=]?\s*v?(\d+\.\d+(?:\.\d+)+)", re.IGNORECASE | re.MULTILINE)
+
+
+def _name_variants(name: str) -> List[str]:
+    base = normalize_dep_name(name)
+    variants = [base]
+    if base.startswith("lib") and len(base) > 6:
+        variants.append(base[3:])
+    return variants
+
+
+def _identifier_matches(identifier: str, variants: List[str]) -> bool:
+    flat = re.sub(r"[^a-z0-9]", "", identifier.lower())
+    return any(v and v.replace("-", "").replace("_", "") in flat for v in variants)
+
+
+def _usable_identifier(identifier: str) -> bool:
+    return not any(token in _NOT_A_LIBRARY_VERSION for token in identifier.upper().split("_"))
+
+
+def _version_from_parts(text: str, variants: List[str]) -> Optional[str]:
+    """Assemble MAJOR/MINOR/PATCH from separate #define / set() lines (FOO_VERSION_MAJOR, FOO_MAJOR_VERSION...)."""
+    groups: Dict[str, Dict[str, str]] = {}
+    for match in _PART_DEF_RE.finditer(text):
+        tokens = match.group(1).upper().split("_")
+        parts = [t for t in tokens if t in _PART_TOKENS]
+        if len(parts) != 1 or not _usable_identifier(match.group(1)):
+            continue
+        key = "_".join(t for t in tokens if t not in _PART_TOKENS)
+        groups.setdefault(key, {}).setdefault(parts[0], match.group(2))
+    candidates = []
+    for key, found in groups.items():
+        if "MAJOR" not in found or "MINOR" not in found:
+            continue
+        numbers = [found[p] for p in _PART_ORDER if p in found]
+        candidates.append((0 if _identifier_matches(key, variants) else 1, ".".join(numbers[:3])))
+    return min(candidates)[1] if candidates else None
+
+
+def _version_from_macros(text: str, variants: List[str]) -> Optional[str]:
+    """A single version macro, preferring one whose identifier names the library (ZLIBNG_VERSION over ZLIB_VERSION)."""
+    matches = [(i, v) for i, v in _VERSION_MACRO_RE.findall(text) if _usable_identifier(i)]
+    if not matches:
+        return None
+    named = [m for m in matches if _identifier_matches(m[0], variants)]
+    return (named or matches)[0][1]
+
+
+def _version_from_cmake(text: str, variants: List[str]) -> Optional[str]:
+    match = re.search(r"project\s*\([^)]*?\bVERSION\s+(\d+(?:\.\d+)+)", text, re.IGNORECASE | re.DOTALL)
+    if match:
+        return match.group(1)
+    literal = [(i, v) for i, v in _CMAKE_VERSION_SET_RE.findall(text) if _usable_identifier(i)]
+    if literal:
+        named = [m for m in literal if _identifier_matches(m[0], variants) or m[0].upper() == "VERSION"]
+        if named:
+            return named[0][1]
+    return _version_from_parts(text, variants)
+
+
+def _candidate_files(directory: str, variants: List[str]) -> List[str]:
+    """Header-ish files likely to carry the library's version, shallowest first."""
+    found: List[Tuple[int, str]] = []
+    for dirpath, dirnames, filenames in os.walk(directory):
+        dirnames[:] = [d for d in dirnames if d not in PRUNE_DIRS and d not in ("test", "tests", "doc", "docs", "examples")]
+        depth = dirpath[len(directory):].count(os.sep)
+        if depth > 3:
+            dirnames[:] = []
+            continue
+        for fname in filenames:
+            lower = fname.lower()
+            for suffix in (".in", ".cmakein", ".cmake"):  # zlib.h.in, config.h.cmake.in
+                if lower.endswith(suffix):
+                    lower = lower[: -len(suffix)]
+            stem, ext = os.path.splitext(lower)
+            if ext not in HEADER_EXTENSIONS:
+                continue
+            stem_n = normalize_dep_name(stem.split(".")[0])
+            related = len(stem_n) >= 3 and any(v.startswith(stem_n) or stem_n.startswith(v) or v.endswith(stem_n) for v in variants)
+            parent = normalize_dep_name(os.path.basename(dirpath))
+            in_named_dir = len(parent) >= 3 and any(parent == v or parent.endswith(v) for v in variants)
+            if "version" in stem or "config" in stem or related or in_named_dir:
+                found.append((depth, os.path.join(dirpath, fname)))
+    found.sort()
+    return [path for _depth, path in found[:60]]
+
+
 def sniff_vendored_version(directory: str, name: str) -> Optional[str]:
-    """Best-effort version of a vendored tree: VERSION file, project(VERSION), then header macros."""
+    """Best-effort version of a vendored tree.
+
+    Order: VERSION file, CMake (project(VERSION)/set(X_VERSION)/MAJOR-MINOR parts), version headers
+    (single macro or MAJOR/MINOR/PATCH parts, also *.h.in), a "<lib> version X.Y.Z" header banner, README "Version:".
+    """
+    variants = _name_variants(name)
     for fname in ("VERSION", "VERSION.txt", "version.txt", ".version"):
         text = _read_text(os.path.join(directory, fname), 4096)
         if text:
@@ -229,33 +356,44 @@ def sniff_vendored_version(directory: str, name: str) -> Optional[str]:
                 return match.group(0)
     cmake = _read_text(os.path.join(directory, "CMakeLists.txt"), 512_000)
     if cmake:
-        match = re.search(r"project\s*\([^)]*?\bVERSION\s+(\d+(?:\.\d+)+)", cmake, re.IGNORECASE | re.DOTALL)
+        found = _version_from_cmake(cmake, variants)
+        if found:
+            return found
+    headers = _candidate_files(directory, variants)
+    banner = re.compile(r"\b(?:%s)\s+version\s+v?(\d+\.\d+(?:\.\d+)+)" % "|".join(re.escape(v) for v in variants), re.IGNORECASE)
+    # Gather every candidate, then prefer one that names the library, then the most specific (most components).
+    candidates: List[Tuple[int, int, int, str]] = []  # (unnamed?, -components, order, version)
+    for order, path in enumerate(headers):
+        text = _read_text(path, 256_000)
+        if not text:
+            continue
+        for identifier, found in _VERSION_MACRO_RE.findall(text):
+            if _usable_identifier(identifier):
+                named = _identifier_matches(identifier, variants)
+                candidates.append((0 if named else 1, -(found.count(".") + 1), order, found))
+        parts = _version_from_parts(text, variants)
+        if parts:
+            candidates.append((1, -(parts.count(".") + 1), order, parts))
+        match = banner.search(text[:4096])
         if match:
-            return match.group(1)
-    macro = re.compile(
-        r'#\s*define\s+\w*VERSION\w*\s+"?[^"\n]*?(\d+\.\d+(?:\.\d+)*[a-z]?)', re.IGNORECASE
-    )
-    wanted = normalize_dep_name(name)
-    scanned = 0
-    for dirpath, dirnames, filenames in os.walk(directory):
-        dirnames[:] = [d for d in dirnames if d not in PRUNE_DIRS and d not in ("test", "tests", "doc", "docs", "examples")]
-        if dirpath[len(directory):].count(os.sep) > 3:
-            dirnames[:] = []
-        for fname in sorted(filenames):
-            stem, ext = os.path.splitext(fname)
-            if ext.lower() not in HEADER_EXTENSIONS:
-                continue
-            if "version" not in stem.lower() and not normalize_dep_name(stem).startswith(wanted):
-                continue
-            scanned += 1
-            if scanned > 40:
-                return None
-            text = _read_text(os.path.join(dirpath, fname), 256_000)
-            if text:
-                match = macro.search(text)
-                if match:
-                    return match.group(1)
+            candidates.append((0, -(match.group(1).count(".") + 1), order, match.group(1)))
+    if candidates:
+        return min(candidates)[3]
+    try:
+        entries = sorted(os.listdir(directory))
+    except OSError:
+        entries = []
+    for entry in entries:
+        if entry.lower().startswith("readme"):
+            text = _read_text(os.path.join(directory, entry), 8192)
+            match = _README_VERSION_RE.search(text) if text else None
+            if match:
+                return match.group(1)
     return None
+
+
+def _any_named_macro(text: str, variants: List[str]) -> bool:
+    return any(_identifier_matches(i, variants) and _usable_identifier(i) for i, _v in _VERSION_MACRO_RE.findall(text))
 
 
 def _is_ci_or_docker(rel: str, lower: str) -> bool:
@@ -333,7 +471,9 @@ class CppInferrer(LanguageInferrer):
 
         all_files: Dict[str, List[str]] = {}  # basename -> [rel paths], for first-party resolution
         source_files: List[str] = []
+        self._dir_names: Set[str] = set()
         for dirpath, filenames in _walk(root):
+            self._dir_names.add(os.path.basename(dirpath).lower())
             for fname in filenames:
                 full = os.path.join(dirpath, fname)
                 rel = _rel(root, full)
@@ -342,6 +482,7 @@ class CppInferrer(LanguageInferrer):
                     source_files.append(rel)
 
         submodules = _submodule_paths(root)
+        self._configure_libs = self._custom_configure(root)
         for dep in self._build_file_deps(root, submodules):
             add(dep)
         for dep in self._vendored_deps(root, source_files, submodules):
@@ -349,11 +490,55 @@ class CppInferrer(LanguageInferrer):
         self._include_deps(root, source_files, all_files, result, add, submodules)
 
         skip = {normalize_dep_name(n) for n in (existing_names or set())}
+        # A repo that ships a package's own header directory (opencv2/, libavcodec/) *is* that package.
+        for key, dep in list(found.items()):
+            if dep.source != SOURCE_VENDORED and self._ships_own_headers(dep.name):
+                del found[key]
+        self._apply_build_versions(root, found)
+        # A concrete implementation (libjpeg-turbo) makes the versionless API it implements (jpeglib.h) redundant.
+        for dep in list(found.values()):
+            pkg = known_package(dep.name)
+            for implemented in (_load_header_map()[pkg].get("implements", []) if pkg else []):
+                other = found.get(normalize_dep_name(_load_header_map()[implemented]["conan"]))
+                if other is not None and other.version is None and other.source == SOURCE_INCLUDE and dep.version:
+                    del found[normalize_dep_name(other.name)]
         result.files_scanned = len(source_files)
         result.deps = sorted(
             (d for key, d in found.items() if key not in skip), key=lambda d: (d.confidence, d.name.lower())
         )
         return result
+
+    @staticmethod
+    def _apply_build_versions(root: str, found: Dict[str, InferredDep]) -> None:
+        """Fill versions of otherwise versionless system dependencies from a build that exists (or a sandboxed
+        CMake configure). Never overrides a version the repository itself states, and never touches vendored trees
+        (the build may have used the vendored copy rather than the host's)."""
+        from aspm_cli.inference import buildprobe
+
+        wanted = [d for d in found.values() if d.version is None and d.source != SOURCE_VENDORED]
+        if not wanted:
+            return
+        versions = buildprobe.collect_build_versions(root, Logger.get_logger())
+        for dep in wanted:
+            hit = versions.get(normalize_dep_name(dep.name))
+            if not hit:
+                continue
+            version, evidence, origin = hit
+            dep.version = version
+            dep.confidence = CONFIDENCE_B
+            dep.source = SOURCE_BUILD
+            dep.purl = _conan_purl(dep.name, version) if dep.ecosystem == "conan" else _generic_purl(dep.name, version)
+            dep.evidence = list(dict.fromkeys([*dep.evidence, f"{evidence} ({origin})"]))
+
+    def _ships_own_headers(self, name: str) -> bool:
+        pkg = known_package(name)
+        if not pkg:
+            return False
+        dirs = getattr(self, "_dir_names", set())
+        for header in _load_header_map()[pkg].get("headers", []):
+            if header.endswith("/") and header.rstrip("/").split("/")[0].lower() in dirs:
+                return True
+        return False
 
     # ---- includes ---------------------------------------------------------------------------
     def _include_deps(self, root, source_files, all_files, result, add, submodules=()) -> None:
@@ -366,7 +551,7 @@ class CppInferrer(LanguageInferrer):
                 continue
             clean = _strip_comments(text)
             for match in _INCLUDE_RE.finditer(clean):
-                inc = match.group(2).strip()
+                inc = match.group(2).strip().replace("\\", "/")
                 line = clean.count("\n", 0, match.start()) + 1
                 seen.setdefault(inc, []).append(f"{rel}:{line}")
         for inc, where in seen.items():
@@ -374,8 +559,30 @@ class CppInferrer(LanguageInferrer):
                 continue
             if self._is_first_party(inc, all_files):
                 continue
+            if "/" in inc.lstrip("./") and inc.lstrip("./").split("/")[0].lower() in getattr(self, "_dir_names", ()):
+                continue  # <libavutil/x.h> where libavutil/ is a directory of this repo (generated headers)
             pkg = package_for_header(inc)
-            if pkg:
+            declared = getattr(self, "_configure_libs", {}).get(inc.lower())
+            if declared and not pkg:
+                name, constraint, where_declared = declared
+                known = known_package(name)
+                if known:
+                    name = _load_header_map()[known]["conan"]
+                purl = _conan_purl(name, None) if known else _generic_purl(name, None)
+                add(
+                    InferredDep(
+                        name=name,
+                        version=None,
+                        purl=purl,
+                        ecosystem="conan" if known else "generic",
+                        confidence=CONFIDENCE_C,
+                        source=SOURCE_INCLUDE,
+                        evidence=[*where[:2], where_declared],
+                        constraint=constraint,
+                        kind="build-file",
+                    )
+                )
+            elif pkg:
                 meta = _load_header_map()[pkg]
                 result_name = meta["conan"]
                 add(
@@ -386,7 +593,8 @@ class CppInferrer(LanguageInferrer):
                         ecosystem="conan",
                         confidence=CONFIDENCE_C,
                         source=SOURCE_INCLUDE,
-                        evidence=where[:3],
+                        evidence=[*where[:3], declared[2]] if declared else where[:3],
+                        constraint=declared[1] if declared else None,
                         kind="source-import",
                     )
                 )
@@ -434,10 +642,11 @@ class CppInferrer(LanguageInferrer):
                 version = None if wrapper else sniff_vendored_version(path, child)
                 pkg = known_package(name)
                 evidence = [rel + "/"]
-                if pkg and version:
+                if pkg:  # same identity the include scan uses, so both fold into one component
                     conan = _load_header_map()[pkg]["conan"]
                     deps.append(InferredDep(conan, version, _conan_purl(conan, version), "conan",
-                                            CONFIDENCE_B, SOURCE_VENDORED, evidence, kind="vendored"))
+                                            CONFIDENCE_B if version else CONFIDENCE_C, SOURCE_VENDORED, evidence,
+                                            kind="vendored"))
                 else:
                     deps.append(InferredDep(name, version, _generic_purl(name, version), "generic",
                                             CONFIDENCE_B if version else CONFIDENCE_C, SOURCE_VENDORED,
@@ -737,6 +946,53 @@ class CppInferrer(LanguageInferrer):
                                        [line], constraint=f"{m.group(2)}{m.group(3)}" if m.group(3) else None,
                                        kind="build-file"))
         return out
+
+    # Hand-written ./configure scripts (FFmpeg and friends) declare their external libraries with helper
+    # functions: require_pkg_config <feature> "<pkg> >= 1.2" "hdr.h ..." <func>, require <feature> hdr.h func -lfoo.
+    _CONFIGURE_PKG_RE = re.compile(
+        r'\b(?:require|check)_pkg_config(?:_cpp|_cxx|_header_only)?\s+([A-Za-z0-9_]+)\s+("[^"\n]*"|[^\s"]+)\s+("[^"\n]*"|[^\s"]+)'
+    )
+    _CONFIGURE_LIB_RE = re.compile(r'\b(?:require|check_lib)(?:_cpp|_cxx)?\s+([A-Za-z0-9_]+)\s+("[^"\n]*"|[^\s"]+)([^\n]*)')
+
+    def _custom_configure(self, root: str) -> Dict[str, Tuple[str, Optional[str], str]]:
+        """header (lower) -> (library name, version constraint, 'configure:LINE') from a ./configure script."""
+        found: Dict[str, Tuple[str, Optional[str], str]] = {}
+        for fname in ("configure", "configure.sh"):
+            path = os.path.join(root, fname)
+            text = _read_text(path, 2_000_000) if os.path.isfile(path) else None
+            if not text or "generated by gnu autoconf" in text[:2000].lower():
+                continue  # missing, or a generated autoconf script (configure.ac is handled elsewhere)
+            rel = fname
+            for match in self._CONFIGURE_PKG_RE.finditer(text):
+                spec = match.group(2).strip('"').split()
+                feature, headers = match.group(1), match.group(3).strip('"')
+                if not spec or "$" in spec[0]:
+                    continue
+                name = spec[0]
+                constraint = None
+                if len(spec) >= 3 and spec[1] in (">=", ">", "="):
+                    constraint = f"{spec[1]}{spec[2]}"
+                self._remember_configure(found, name, constraint, headers, f"{rel}:{text.count(chr(10), 0, match.start()) + 1}", feature)
+            for match in self._CONFIGURE_LIB_RE.finditer(text):
+                feature, headers, rest = match.group(1), match.group(2).strip('"'), match.group(3)
+                link = re.search(r"-l([A-Za-z0-9_.+-]+)", rest)
+                name = link.group(1) if link else re.sub(r"^lib", "", feature)
+                if "$" in name:
+                    continue
+                self._remember_configure(found, name, None, headers, f"{rel}:{text.count(chr(10), 0, match.start()) + 1}", feature)
+        return found
+
+    @staticmethod
+    def _remember_configure(found, name, constraint, headers, where, feature) -> None:
+        name = re.sub(r"(?:[-_]\d+(?:\.\d+)*|_threads)$", "", name)  # lilv-0, librsvg-2.0, libjxl_threads
+        name = re.sub(r"^(libva)-(?:drm|x11|win32|wayland|glx)$", r"\1", name)  # one library, several pkg-config modules
+        if not name or name.lower() in _CONFIGURE_NOISE or feature.lower() in _CONFIGURE_NOISE:
+            return
+        for header in headers.split():
+            header = header.strip("<>\"'")
+            if "$" in header or not header.lower().endswith((".h", ".hpp", ".hh")):
+                continue  # FT_FREETYPE_H style macros, shell variables
+            found.setdefault(header.lower(), (name, constraint, where))
 
     def _meson_wrap(self, path: str, rel: str) -> List[InferredDep]:
         text = _read_text(path, 64_000)

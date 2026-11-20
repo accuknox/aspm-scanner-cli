@@ -413,3 +413,141 @@ class TestLargeRepoRegressions(unittest.TestCase):
         write(self.root, "Externals/zlib/zlib.h", '#define ZLIB_VERSION "1.2.11"\n')
         dep = by_name(CppInferrer().infer(self.root))["zlib"]
         self.assertEqual((dep.version, dep.confidence), ("1.2.11", "B"))
+
+
+class TestVersionSniffingPatterns(unittest.TestCase):
+    """Real-world layouts seen in opencv/3rdparty."""
+
+    def sniff(self, name, files):
+        with tempfile.TemporaryDirectory() as tmp:
+            for rel, text in files.items():
+                write(tmp, f"{name}/{rel}", text)
+            return sniff_vendored_version(os.path.join(tmp, name), name)
+
+    def test_cmake_set_version_literal(self):
+        self.assertEqual(self.sniff("libjpeg-turbo", {"CMakeLists.txt": "project(${X} C)\nset(VERSION 3.1.2)\n"}), "3.1.2")
+
+    def test_cmake_major_minor_micro_parts(self):
+        cmake = 'set(LIBTIFF_MAJOR_VERSION "4")\nset(LIBTIFF_MINOR_VERSION "7")\nset(LIBTIFF_MICRO_VERSION "2")\n'
+        self.assertEqual(self.sniff("libtiff", {"CMakeLists.txt": cmake}), "4.7.2")
+
+    def test_header_parts_on_consecutive_lines(self):
+        header = "#define SPNG_VERSION_MAJOR 0\n#define SPNG_VERSION_MINOR 7\n#define SPNG_VERSION_PATCH 4\n"
+        self.assertEqual(self.sniff("libspng", {"spng.h": header}), "0.7.4")
+
+    def test_header_in_directory_named_after_library(self):
+        header = "#define FLATBUFFERS_VERSION_MAJOR 25\n#define FLATBUFFERS_VERSION_MINOR 9\n#define FLATBUFFERS_VERSION_REVISION 23\n"
+        self.assertEqual(self.sniff("flatbuffers", {"include/flatbuffers/base.h": header}), "25.9.23")
+
+    def test_banner_comment(self):
+        self.assertEqual(self.sniff("libpng", {"png.h": "/* png.h - libpng version 1.6.57\n */\n"}), "1.6.57")
+
+    def test_readme_version_line(self):
+        self.assertEqual(self.sniff("protobuf", {"README.md": "# Protocol Buffers\nVersion: 3.19.1\n"}), "3.19.1")
+
+    def test_macro_naming_the_library_beats_the_wrapped_one(self):
+        header = '#define ZLIB_VERSION "1.3.1.zlib-ng"\n#define ZLIBNG_VERSION "2.2.1"\n'
+        self.assertEqual(self.sniff("zlib-ng", {"zlib.h.in": header}), "2.2.1")
+
+    def test_most_specific_unnamed_version_wins(self):
+        files = {"include/ittnotify.h": "#define ITT_MAJOR 3\n#define ITT_MINOR 0\n",
+                 "src/ittnotify_config.h": "#define API_VERSION_NUM 3.25.4\n"}
+        self.assertEqual(self.sniff("ittnotify", files), "3.25.4")
+
+    def test_compiler_and_cmake_versions_are_not_library_versions(self):
+        self.assertIsNone(self.sniff("foo", {"CMakeLists.txt": "set(CMAKE_CXX_COMPILER_VERSION 12.2.0)\ncmake_minimum_required(VERSION 3.5)\n"}))
+
+
+class TestCustomConfigureScript(unittest.TestCase):
+    CONFIGURE = (
+        "#!/bin/sh\n"
+        'enabled libx264 && require_pkg_config libx264 "x264 >= 0.150" x264.h x264_encoder_encode\n'
+        'enabled libdav1d && require_pkg_config libdav1d "dav1d >= 1.0.0" "dav1d/dav1d.h" dav1d_version\n'
+        'enabled libmp3lame && require libmp3lame lame/lame.h lame_set_VBR_quality -lmp3lame\n'
+        'check_pkg_config bcrypt_lib bcrypt "bcrypt.h" BCryptGenRandom\n'
+    )
+
+    def infer(self, sources):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "configure", self.CONFIGURE)
+            for rel, text in sources.items():
+                write(tmp, rel, text)
+            return by_name(infer_dependencies(tmp))
+
+    def test_declared_libraries_used_by_the_source_become_components(self):
+        found = self.infer({"libavcodec/libx264.c": "#include <x264.h>\n", "libavcodec/libdav1d.c": '#include <dav1d/dav1d.h>\n'})
+        self.assertEqual(found["x264"].constraint, ">=0.150")
+        self.assertIsNone(found["x264"].version)
+        self.assertIn("dav1d", found)
+        self.assertTrue(any(e.startswith("configure:") for e in found["x264"].evidence))
+
+    def test_require_form_names_the_library_from_the_link_flag(self):
+        found = self.infer({"libavcodec/libmp3lame.c": "#include <lame/lame.h>\n"})
+        self.assertIn("mp3lame", found)
+
+    def test_declared_but_never_included_is_not_reported(self):
+        self.assertNotIn("x264", self.infer({"main.c": "int main(void){return 0;}\n"}))
+
+    def test_platform_sdk_libraries_are_not_dependencies(self):
+        self.assertNotIn("bcrypt", self.infer({"compat/w32.c": "#include <bcrypt.h>\n"}))
+
+    def test_repo_directory_makes_header_first_party(self):
+        found = self.infer({"libavutil/avutil.h": "", "libavcodec/a.c": "#include <libavutil/ffversion.h>\n"})
+        self.assertNotIn("ffmpeg", found)
+
+    def test_repo_shipping_a_packages_header_dir_is_not_a_dependency_on_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "modules/core/include/opencv2/core.hpp", "")
+            write(tmp, "samples/CMakeLists.txt", "find_package(OpenCV REQUIRED)\n")
+            self.assertNotIn("opencv", by_name(infer_dependencies(tmp)))
+
+    def test_vendored_known_package_merges_with_its_include_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "3rdparty/libjpeg-turbo/CMakeLists.txt", "set(VERSION 3.1.2)\n")
+            write(tmp, "src/a.c", "#include <jpeglib.h>\n")
+            found = by_name(infer_dependencies(tmp))
+            self.assertEqual(found["libjpeg-turbo"].version, "3.1.2")
+
+
+class TestLibjpegIsNotLibjpegTurbo(unittest.TestCase):
+    def test_turbo_is_its_own_package_and_replaces_the_versionless_api_entry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "3rdparty/libjpeg-turbo/CMakeLists.txt", "set(VERSION 3.1.2)\n")
+            write(tmp, "src/a.c", "#include <jpeglib.h>\n")
+            found = by_name(infer_dependencies(tmp))
+            self.assertEqual(found["libjpeg-turbo"].version, "3.1.2")
+            self.assertEqual(found["libjpeg-turbo"].purl, "pkg:conan/libjpeg-turbo@3.1.2")
+            self.assertNotIn("libjpeg", found)  # IJG libjpeg advisories must not be matched against 3.x
+
+    def test_plain_jpeglib_include_stays_libjpeg(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "src/a.c", "#include <jpeglib.h>\n")
+            self.assertIn("libjpeg", by_name(infer_dependencies(tmp)))
+
+
+class TestOpencvStyleGaps(unittest.TestCase):
+    def infer(self, files):
+        with tempfile.TemporaryDirectory() as tmp:
+            for rel, text in files.items():
+                write(tmp, rel, text)
+            return by_name(infer_dependencies(tmp))
+
+    def test_windows_backslash_includes_resolve_to_first_party_files(self):
+        found = self.infer({"modules/core/include/opencv2/core.hpp": "", "src/a.cpp": '#include "opencv2\\core.hpp"\n'})
+        self.assertEqual(found, {})
+
+    def test_optional_backends_are_reported_without_a_registry_purl(self):
+        found = self.infer({"src/a.cpp": "#include <cudnn.h>\n#include <gst/gst.h>\n#include <jxl/decode.h>\n"
+                                           "#include <onnxruntime_cxx_api.h>\n#include <va/va.h>\n"})
+        for name in ("cudnn", "gstreamer", "libjxl", "onnxruntime", "libva"):
+            self.assertIn(name, found)
+            self.assertTrue(found[name].purl.startswith("pkg:generic/"), found[name].purl)
+            self.assertFalse(found[name].lookup_eligible)
+
+    def test_packages_on_conan_center_keep_conan_purls(self):
+        found = self.infer({"src/a.cpp": "#include <zlib.h>\n"})
+        self.assertEqual(found["zlib"].purl, "pkg:conan/zlib")
+
+    def test_a_versioned_non_registry_package_is_still_never_looked_up(self):
+        from aspm_cli.inference.cpp import _conan_purl
+        self.assertEqual(_conan_purl("onnxruntime", "1.17.0"), "pkg:generic/onnxruntime@1.17.0")
