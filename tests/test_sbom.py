@@ -289,12 +289,19 @@ class TestSbomLicenseMerge(unittest.TestCase):
         self.assertEqual(stats["enriched"], 0)
         self.assertNotIn("licenses", trivy["components"][0])
 
-    def test_should_enrich_filesystem_only(self):
+    def test_should_enrich_applies_to_filesystem_rootfs_and_image(self):
         self.assertTrue(should_enrich_filesystem_licenses("filesystem .", True))
         self.assertTrue(should_enrich_filesystem_licenses("fs ./src", True))
+        self.assertTrue(should_enrich_filesystem_licenses("image nginx:latest", True))
+        self.assertTrue(should_enrich_filesystem_licenses("rootfs /tmp/rootfs", True))
         self.assertFalse(should_enrich_filesystem_licenses("filesystem .", False))
-        self.assertFalse(should_enrich_filesystem_licenses("image nginx:latest", True))
-        self.assertFalse(should_enrich_filesystem_licenses("rootfs /tmp/rootfs", True))
+        self.assertFalse(should_enrich_filesystem_licenses("config .", True))
+
+    def test_syft_scan_source_image_and_rootfs(self):
+        self.assertEqual(syft_scan_source("image nginx:latest", False), "nginx:latest")
+        self.assertEqual(syft_scan_source("image nginx:latest", True), "nginx:latest")
+        self.assertEqual(syft_scan_source("rootfs ./root", False), "dir:./root")
+        self.assertEqual(syft_scan_source("rootfs ./root", True), "dir:/workdir/root")
 
     def test_syft_scan_source_native_and_docker(self):
         self.assertEqual(syft_scan_source("filesystem .", False), "dir:.")
@@ -333,26 +340,20 @@ class TestEnrichLicensesFlag(unittest.TestCase):
         self.assertTrue(args.enrich_licenses)
         self.assertTrue(args.generate_sbom)
 
-    def test_enrich_licenses_ignored_for_image(self):
-        scanner = ContainerScanner(
-            "image nginx:latest",
-            generate_sbom=True,
-            enrich_licenses=True,
-        )
-        with patch.object(scanner, "_run_syft") as mock_syft:
-            rc = scanner._enrich_licenses_from_syft()
-        self.assertEqual(rc, 0)
-        mock_syft.assert_not_called()
+    def test_image_and_rootfs_run_syft_too(self):
+        for command in ("image nginx:latest", "rootfs ./root"):
+            scanner = ContainerScanner(command, generate_sbom=True, enrich_licenses=True)
+            done = type("Done", (), {"returncode": 0, "stdout": '{"components": []}', "stderr": ""})()
+            with patch.object(scanner, "_run_syft", return_value=done) as mock_syft:
+                rc = scanner._enrich_licenses_from_syft()
+            self.assertEqual(rc, 0, command)
+            mock_syft.assert_called_once()
+            self.assertEqual(scanner._syft_doc, {"components": []})
 
-    def test_enrich_licenses_ignored_for_rootfs(self):
-        scanner = ContainerScanner(
-            "rootfs /tmp/rootfs",
-            generate_sbom=True,
-            enrich_licenses=True,
-        )
+    def test_unsupported_subcommand_skips_syft(self):
+        scanner = ContainerScanner("config .", generate_sbom=True, enrich_licenses=True)
         with patch.object(scanner, "_run_syft") as mock_syft:
-            rc = scanner._enrich_licenses_from_syft()
-        self.assertEqual(rc, 0)
+            self.assertEqual(scanner._enrich_licenses_from_syft(), 0)
         mock_syft.assert_not_called()
 
     def test_build_syft_command_container_mode(self):
@@ -367,7 +368,16 @@ class TestEnrichLicensesFlag(unittest.TestCase):
         self.assertIn(scanner.ak_syft_image, cmd)
         self.assertIn("dir:/workdir", cmd)
         self.assertIn("--enrich", cmd)
-        self.assertIn("cyclonedx-json=/workdir/.accuknox-syft-sbom.json", cmd)
+        # read from stdout: nothing is written into the scanned directory
+        self.assertEqual(cmd[-3:], ["-o", "cyclonedx-json", "-q"])
+        self.assertFalse(any(".accuknox-syft-sbom" in part for part in cmd))
+        self.assertNotIn("/var/run/docker.sock:/var/run/docker.sock", cmd)
+
+    def test_build_syft_command_image_container_mode_mounts_docker_socket(self):
+        scanner = ContainerScanner("image nginx:latest", container_mode=True, generate_sbom=True)
+        cmd = scanner._build_syft_command()
+        self.assertIn("/var/run/docker.sock:/var/run/docker.sock", cmd)
+        self.assertIn("nginx:latest", cmd)
 
     def test_missing_syft_fails(self):
         scanner = ContainerScanner(

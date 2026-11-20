@@ -1,4 +1,5 @@
 import argparse
+import os
 
 from aspm_cli.scanners.base_scanner import BaseScanner
 from aspm_cli.scan.sca import SCAScanner as OriginalSCAScanner
@@ -14,7 +15,7 @@ class SCAScanner(BaseScanner):
     def add_arguments(self, parser: argparse.ArgumentParser):
         from aspm_cli.scanners.artifact_scanner import add_target_arguments
         target = parser.add_mutually_exclusive_group(required=True)
-        target.add_argument("--target", help="Manifest, directory, executable, archive or SBOM")
+        target.add_argument("--target", help="Manifest, directory, executable, archive (zip/tar/gz/7z/rar/jar...), container image tarball or SBOM")
         add_target_arguments(parser)
         target.add_argument(
             "--command",
@@ -42,6 +43,23 @@ class SCAScanner(BaseScanner):
             help="Git repository branch (used for SCA asset identity; defaults from git)",
         )
 
+        parser.add_argument(
+            "--no-build-probe",
+            action="store_true",
+            help=(
+                "Do not read dependency versions from an existing build directory (CMakeCache.txt) or from a "
+                "sandboxed CMake configure. Same as ACCUKNOX_BUILD_PROBE=off"
+            ),
+        )
+        parser.add_argument(
+            "--no-infer-deps",
+            action="store_true",
+            help=(
+                "Do not infer dependencies from source (C/C++ includes, CMake, submodules, vendored "
+                "trees) when no dependency tracker lists them"
+            ),
+        )
+
     def validate_config(self, args: argparse.Namespace, validator: ConfigValidator):
         validator.validate_sca_scan(
             args.command,
@@ -52,11 +70,14 @@ class SCAScanner(BaseScanner):
         )
 
     def run_scan(self, args: argparse.Namespace) -> tuple[int, str]:
+        if getattr(args, "no_build_probe", False):
+            os.environ["ACCUKNOX_BUILD_PROBE"] = "off"
         scanner = OriginalSCAScanner(
             args.command,
             args.container_mode,
             severity=args.severity,
             repo_url=args.repo_url,
             repo_branch=args.repo_branch,
+            infer_deps=not getattr(args, "no_infer_deps", False),
         )
         return scanner.run()
