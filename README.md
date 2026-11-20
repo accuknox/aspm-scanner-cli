@@ -15,7 +15,6 @@ It can upload results to the **AccuKnox ASPM Platform**, but it can also run in 
 - 🧵 Supports environment-variable and flag-based configuration
 - 🧩 Supports pre-commit integration
 - 🚦 CI/CD quality gate (`gate`) that fails the pipeline on policy breaches
-- 💬 PR decorator (`decorate-pr`) that posts findings as a PR review with inline comments
 
 ## Installation
 
@@ -26,7 +25,7 @@ It can upload results to the **AccuKnox ASPM Platform**, but it can also run in 
 Install from the GitHub release wheel:
 
 ```bash
-pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.4/accuknox_aspm_scanner-0.17.0rc4-py3-none-any.whl
+pip install https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.5/accuknox_aspm_scanner-0.17.0rc5-py3-none-any.whl
 ```
 
 ### 2. Restricted or on-prem environment
@@ -50,7 +49,7 @@ Install the cross-platform Python wheel (same as connected environment above), o
 ```bash
 # Linux x86_64
 curl -fL -o accuknox-aspm-scanner \
-  https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.4/accuknox-aspm-scanner-linux-amd64
+  https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.17.0-rc.5/accuknox-aspm-scanner-linux-amd64
 chmod +x accuknox-aspm-scanner
 ```
 
@@ -121,7 +120,6 @@ accuknox-aspm-scanner scan sq-sast --help
 accuknox-aspm-scanner tool --help
 accuknox-aspm-scanner pre-commit --help
 accuknox-aspm-scanner gate --help
-accuknox-aspm-scanner decorate-pr --help
 ```
 
 If you are running directly from local source code:
@@ -729,11 +727,26 @@ ACCUKNOX_TOKEN=abcd1234 \
 accuknox-aspm-scanner scan sq-sast --command "-Dsonar.projectKey=<PROJECT_KEY> -Dsonar.host.url=<HOST_URL> -Dsonar.token=<TOKEN> -Dsonar.organization=<ORG_ID>" --container-mode
 ```
 
-## Incremental scans (`--changed-only`)
+## Preview features
+
+Preview features ship in the CLI but are off, and left out of `--help`, unless `ACCUKNOX_PREVIEW=true` is set.
+They are not yet stable: their flags, output and behaviour may change in any release.
+
+| Feature | Without `ACCUKNOX_PREVIEW=true` |
+|---|---|
+| Incremental scans (`--changed-only`, `ACCUKNOX_CHANGED_ONLY`) | A warning, then a full scan |
+| PR decorator (`decorate-pr`, see [docs/pr-decorator.md](docs/pr-decorator.md)) | Refused (exit 1) |
+
+### Incremental scans (`--changed-only`)
 
 On a pull/merge request, scan only what the PR changed. Off by default: without the flag every scan is a full scan.
 
+> **Known limitation:** AccuKnox compares each upload with the previous scan of the same asset, so findings in files a
+> partial scan did not cover move to *Waiting for Verification* and then *Fixed*. Use incremental scans for fast PR
+> feedback only, and keep full scans on your default branch.
+
 ```bash
+export ACCUKNOX_PREVIEW=true
 accuknox-aspm-scanner scan --changed-only sast --command "scan ."
 accuknox-aspm-scanner pipeline --changed-only --scans sast,secret,iac,sca,sbom --quality-gate
 accuknox-aspm-scanner scan --changed-only --base-ref origin/main iac --command "-d ."   # any CI

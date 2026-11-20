@@ -1,5 +1,8 @@
 # PR Decorator
 
+> **Preview feature.** `decorate-pr` is refused, and left out of `--help`, unless `ACCUKNOX_PREVIEW=true`
+> is set. Its flags and output may change in any release.
+
 `accuknox-aspm-scanner decorate-pr` posts scan findings as a real GitHub PR
 review — one summary comment (severity table + quality gate) plus inline
 comments on the exact lines — instead of a wall of text in the Actions log.

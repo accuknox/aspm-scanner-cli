@@ -12,6 +12,7 @@ from aspm_cli.utils.git_info import GitInfo
 from aspm_cli.utils.incremental import INCREMENTAL_SCANS, resolve_changed_files, should_skip
 from aspm_cli.utils.ingest_identity import collect_ingest_identity
 from aspm_cli.utils.logger import Logger
+from aspm_cli.utils.preview import preview_help
 from aspm_cli.utils.quality_gate import (
     EXIT_OPERATIONAL,
     GATE_SCANNERS,
@@ -102,10 +103,12 @@ class PipelineCommand(BaseCommand):
         parser.add_argument("--container-mode", action="store_true", help="Run the scanners in containers")
         parser.add_argument(
             "--changed-only", action="store_true",
-            help="Incremental scan: scan only what the PR (or --base-ref) changed; a scan with nothing relevant to scan is skipped "
-                 "and not declared to the quality gate. Falls back to full scans if the diff can't be computed. Also ACCUKNOX_CHANGED_ONLY=true.",
+            help=preview_help(
+                "Incremental scan: scan only what the PR (or --base-ref) changed; a scan with nothing relevant to scan is skipped "
+                "and not declared to the quality gate. Falls back to full scans if the diff can't be computed. Also ACCUKNOX_CHANGED_ONLY=true.",
+            ),
         )
-        parser.add_argument("--base-ref", help="With --changed-only: base branch/commit to diff against (default: the PR base).")
+        parser.add_argument("--base-ref", help=preview_help("With --changed-only: base branch/commit to diff against (default: the PR base)."))
         parser.add_argument("--fail-fast", action="store_true", help="Stop at the first scan that fails to run")
         parser.add_argument(
             "--quality-gate",

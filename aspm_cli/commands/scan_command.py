@@ -8,6 +8,7 @@ from aspm_cli.utils.logger import Logger
 from aspm_cli.utils.common import handle_failure, ALLOWED_SCAN_TYPES
 from aspm_cli.utils.incremental import INCREMENTAL_SCANS, resolve_changed_files, should_skip
 from aspm_cli.utils.ingest_identity import collect_ingest_identity
+from aspm_cli.utils.preview import preview_help
 from aspm_cli.utils.quality_gate import (
     EXIT_OPERATIONAL,
     GATE_SCANNERS,
@@ -45,10 +46,12 @@ class ScanCommand(BaseCommand):
         parser.add_argument('--keep-results', action='store_true', help='Keep scan results file after completion')
         parser.add_argument(
             "--changed-only", action="store_true",
-            help="Incremental scan: only scan files changed in the PR (or since --base-ref). "
-                 "Falls back to a full scan if the diff can't be computed. Also ACCUKNOX_CHANGED_ONLY=true.",
+            help=preview_help(
+                "Incremental scan: only scan files changed in the PR (or since --base-ref). "
+                "Falls back to a full scan if the diff can't be computed. Also ACCUKNOX_CHANGED_ONLY=true.",
+            ),
         )
-        parser.add_argument("--base-ref", help="With --changed-only: base branch/commit to diff against (default: the PR base).")
+        parser.add_argument("--base-ref", help=preview_help("With --changed-only: base branch/commit to diff against (default: the PR base)."))
         parser.add_argument(
             "--quality-gate",
             action="store_true",

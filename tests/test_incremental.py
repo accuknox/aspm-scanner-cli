@@ -4,6 +4,8 @@ from unittest.mock import patch
 
 from aspm_cli.scan.sast import SASTScanner
 
+PREVIEW = {"ACCUKNOX_PREVIEW": "true"}
+
 
 class IncrementalSastTests(unittest.TestCase):
     def test_targets_are_replaced_by_changed_files(self):
@@ -25,7 +27,7 @@ class IncrementalSastTests(unittest.TestCase):
         from types import SimpleNamespace
         from aspm_cli.utils.incremental import resolve_changed_files
         self.assertIsNone(resolve_changed_files(SimpleNamespace(changed_only=False)))
-        with patch.dict(os.environ, {}, clear=False), patch("aspm_cli.utils.incremental.detect_pr_context", return_value=None):
+        with patch.dict(os.environ, PREVIEW), patch("aspm_cli.utils.incremental.detect_pr_context", return_value=None):
             self.assertIsNone(resolve_changed_files(SimpleNamespace(changed_only=True, base_ref=None)))
 
 
@@ -53,6 +55,11 @@ class IncrementalScopeTests(unittest.TestCase):
 
 
 class IncrementalResolveTests(unittest.TestCase):
+    def setUp(self):
+        preview = patch.dict(os.environ, PREVIEW)
+        preview.start()
+        self.addCleanup(preview.stop)
+
     def _args(self, **kw):
         from types import SimpleNamespace
         return SimpleNamespace(changed_only=True, base_ref=None, **kw)
@@ -85,6 +92,50 @@ class IncrementalResolveTests(unittest.TestCase):
         args.base_ref = "main"
         with patch("aspm_cli.utils.incremental.GitInfo._run_git_command", return_value=None):
             self.assertIsNone(resolve_changed_files(args))
+
+
+    def test_resolves_changed_files_with_preview(self):
+        from aspm_cli.utils.incremental import resolve_changed_files
+        args = self._args()
+        args.base_ref = "main"
+        with patch("aspm_cli.utils.incremental.GitInfo._run_git_command", return_value="abc123"), \
+                patch("aspm_cli.utils.incremental._changed_files", return_value=["a.py"]), \
+                patch("aspm_cli.utils.incremental.os.path.isfile", return_value=True):
+            self.assertEqual(resolve_changed_files(args), ["a.py"])
+
+
+class IncrementalPreviewTests(unittest.TestCase):
+    """Incremental is a preview feature: without ACCUKNOX_PREVIEW=true a request for it is a full scan."""
+
+    def _resolve(self, env, **args):
+        from types import SimpleNamespace
+        from aspm_cli.utils.incremental import resolve_changed_files
+        with patch.dict(os.environ, env, clear=True), \
+                patch("aspm_cli.utils.incremental.GitInfo._run_git_command", return_value="abc123"), \
+                patch("aspm_cli.utils.incremental._changed_files", return_value=["a.py"]), \
+                patch("aspm_cli.utils.incremental.os.path.isfile", return_value=True), \
+                patch("aspm_cli.utils.incremental.Logger.get_logger") as logger:
+            files = resolve_changed_files(SimpleNamespace(base_ref="main", **args))
+        return files, logger.return_value.warning
+
+    def test_flag_without_preview_runs_a_full_scan_with_a_warning(self):
+        files, warning = self._resolve({}, changed_only=True)
+        self.assertIsNone(files)
+        self.assertIn("ACCUKNOX_PREVIEW=true", warning.call_args.args[0])
+
+    def test_env_without_preview_runs_a_full_scan(self):
+        files, warning = self._resolve({"ACCUKNOX_CHANGED_ONLY": "true"}, changed_only=False)
+        self.assertIsNone(files)
+        warning.assert_called_once()
+
+    def test_not_requested_is_silent(self):
+        files, warning = self._resolve({}, changed_only=False)
+        self.assertIsNone(files)
+        warning.assert_not_called()
+
+    def test_flag_with_preview_scopes_the_scan(self):
+        files, _ = self._resolve(PREVIEW, changed_only=True)
+        self.assertEqual(files, ["a.py"])
 
 
 if __name__ == "__main__":
