@@ -1,3 +1,12 @@
+aspm-scanner-cli (0.17.1) unstable; urgency=medium
+
+  * sq-sast: fail with the scanner/fetch error instead of uploading stale or empty results
+  * sq-sast: pick the result file for --branch when several branches are fetched
+  * sq-sast: always send a repo URL the backend parser accepts (--repo-url, git remote, or a localhost fallback); fill the commit from the latest analysis
+  * sq-sast: skip the system truststore for the native scanner on macOS (keychain access crashed the scanner JVM)
+
+ -- AccuKnox <accuknox@accuknox.com>  Mon, 23 Nov 2026 19:00:00 +0530
+
 aspm-scanner-cli (0.17.0) unstable; urgency=medium
 
   * Release 0.17.0 (first final release since 0.15.1; includes the 0.16.x line)
