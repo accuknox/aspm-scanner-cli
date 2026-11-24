@@ -119,6 +119,11 @@ class SQSASTScanner:
 
             if result.stdout:
                 Logger.get_logger().debug(result.stdout)
+                if result.returncode != 0:
+                    # The scanner writes its errors to stdout; show them without needing debug logging.
+                    for line in result.stdout.splitlines():
+                        if "ERROR" in line:
+                            Logger.get_logger().error(line)
             if result.stderr:
                 Logger.get_logger().error(result.stderr)
 
@@ -246,7 +251,8 @@ class SQSASTScanner:
         """True if this scan wrote report-task.txt, i.e. the analysis reached SonarQube."""
         task_file = self._task_file()
         # A task file older than this scan is a leftover (self-hosted runner); its task already finished.
-        return os.path.exists(task_file) and os.path.getmtime(task_file) >= self._scan_started
+        # File timestamps can lag the clock slightly, so allow 2s; a leftover file is far older than that.
+        return os.path.exists(task_file) and os.path.getmtime(task_file) >= self._scan_started - 2
 
     def _wait_for_analysis(self, timeout=300):
         """SonarQube processes the scan in the background; wait for it so the fetch sees this analysis."""

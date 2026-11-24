@@ -141,7 +141,7 @@ class FetchCleanupTests(TempDirTest):
 
 class ScannerFailureTests(TempDirTest):
     def test_failed_scan_returns_code_without_fetching(self):
-        s = make_scanner(f"-Dsonar.projectBaseDir={self.tmp.name}")
+        s = make_scanner(f"-Dsonar.projectBaseDir={self.tmp.name.replace(os.sep, '/')}")
         with mock.patch.object(s, "_run_sq_scan", return_value=3), \
                 mock.patch.object(s, "_run_ak_scan") as fetch:
             self.assertEqual(s.run(), (3, None))  # caller applies --softfail
@@ -149,7 +149,7 @@ class ScannerFailureTests(TempDirTest):
 
     def test_gate_failure_after_quiet_analysis_still_uploads(self):
         """No 'ANALYSIS SUCCESSFUL' in the log (log level WARN), but this scan wrote report-task.txt."""
-        s = make_scanner(f"-Dsonar.projectBaseDir={self.tmp.name}")
+        s = make_scanner(f"-Dsonar.projectBaseDir={self.tmp.name.replace(os.sep, '/')}")
         workdir = os.path.join(self.tmp.name, ".scannerwork")
         os.makedirs(workdir)
 
@@ -165,7 +165,7 @@ class ScannerFailureTests(TempDirTest):
         self.assertEqual((code, path), (1, result))
 
     def test_stale_task_file_does_not_count_as_this_analysis(self):
-        s = make_scanner(f"-Dsonar.projectBaseDir={self.tmp.name}")
+        s = make_scanner(f"-Dsonar.projectBaseDir={self.tmp.name.replace(os.sep, '/')}")
         workdir = os.path.join(self.tmp.name, ".scannerwork")
         os.makedirs(workdir)
         task = os.path.join(workdir, "report-task.txt")
