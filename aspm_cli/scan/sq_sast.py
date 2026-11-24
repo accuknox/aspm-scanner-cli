@@ -48,12 +48,15 @@ class SQSASTScanner:
         self.sonar_host_url = self._extract_arg("-Dsonar.host.url")
         self.sonar_org_id = self._extract_arg("-Dsonar.organization")
         self._analysis_ok = False
+        self._branch_fallback = False
+        self._scan_started = 0
 
     def run(self):
         self.repo_url = self._valid_repo_url(self.repo_url)
         try:
             returncode = 0
             if not self.skip_sonar_scan:
+                self._scan_started = time.time()
                 returncode = self._run_sq_scan()
                 if returncode != 0 and not self._analysis_ok:
                     # Analysis never completed; surface the scanner error instead of fetching stale results.
@@ -137,16 +140,26 @@ class SQSASTScanner:
             # One file per SonarQube branch. File names mangle "/" and can collide, so compare the
             # exact branch stored inside each file.
             by_branch = {self._file_branch(r): r for r in results}
-            chosen = by_branch.get(self.branch)
+            # -Dsonar.branch.name is what Sonar actually analysed; the git branch is only a fallback.
+            wanted = self._extract_arg("-Dsonar.branch.name") or self.branch
+            chosen = by_branch.get(wanted)
             if not chosen:
-                raise RuntimeError(
-                    f"Project has {len(results)} SonarQube branches ({', '.join(str(b) for b in by_branch)}) "
-                    f"and none is '{self.branch}'. Pass --branch with one of them."
+                main = self._main_branch()
+                chosen = by_branch.get(main)
+                if not chosen:
+                    raise RuntimeError(
+                        f"Project has {len(results)} SonarQube branches ({', '.join(str(b) for b in by_branch)}) "
+                        f"and none is '{wanted}'. Pass --branch with one of them."
+                    )
+                Logger.get_logger().warning(
+                    f"SonarQube has no branch '{wanted}'; uploading its main branch '{main}' instead."
                 )
-            Logger.get_logger().warning(
-                f"Project has {len(results)} SonarQube branches; uploading '{self.branch}' only. "
-                "Run once per branch to cover the rest."
-            )
+                self._branch_fallback = True
+            else:
+                Logger.get_logger().warning(
+                    f"Project has {len(results)} SonarQube branches; uploading '{wanted}' only. "
+                    "Run once per branch to cover the rest."
+                )
             return chosen
         except Exception as e:
             Logger.get_logger().error(f"Error during AccuKnox SQ Fetcher: {e}")
@@ -157,9 +170,30 @@ class SQSASTScanner:
         with open(path, "r") as f:
             return json.load(f).get("branch")
 
+    def _main_branch(self):
+        """Name of the SonarQube project's main branch, or None if unavailable."""
+        try:
+            r = requests.get(f"{self.sonar_host_url}/api/project_branches/list",
+                             params={"project": self.sonar_project_key},
+                             auth=(self.sonar_token, ""), timeout=30)
+            r.raise_for_status()
+            return next((b.get("name") for b in r.json().get("branches", []) if b.get("isMain")), None)
+        except Exception as e:
+            Logger.get_logger().debug(f"Could not read the SonarQube main branch: {e}")
+            return None
+
+    def _task_file(self):
+        # shortcut: container mode with a container-side projectBaseDir is not translated, use the cwd.
+        base = self._extract_arg("-Dsonar.projectBaseDir") or os.getcwd()
+        work = self._extract_arg("-Dsonar.working.directory") or ".scannerwork"
+        return os.path.join(base, work, "report-task.txt")
+
     def _wait_for_analysis(self, timeout=300):
         """SonarQube processes the scan in the background; wait for it so the fetch sees this analysis."""
-        task_file = os.path.join(os.getcwd(), ".scannerwork", "report-task.txt")
+        task_file = self._task_file()
+        # A task file older than this scan is a leftover (self-hosted runner); its task already finished.
+        if not os.path.exists(task_file) or os.path.getmtime(task_file) < self._scan_started:
+            return
         try:
             with open(task_file) as f:
                 url = dict(l.strip().split("=", 1) for l in f if "=" in l).get("ceTaskUrl")
@@ -169,12 +203,18 @@ class SQSASTScanner:
             while time.time() < deadline:
                 r = requests.get(url, auth=(self.sonar_token, ""), timeout=30)
                 r.raise_for_status()
-                if r.json().get("task", {}).get("status") in ("SUCCESS", "FAILED", "CANCELED"):
+                status = r.json().get("task", {}).get("status")
+                if status in ("FAILED", "CANCELED"):
+                    # Fetching now would upload the previous analysis as if it were this one.
+                    raise RuntimeError(f"SonarQube background task {status}; not fetching stale results.")
+                if status == "SUCCESS":
                     return
                 time.sleep(3)
             Logger.get_logger().warning("Timed out waiting for SonarQube to process the analysis; results may be stale.")
+        except RuntimeError:
+            raise
         except Exception as e:
-            Logger.get_logger().debug(f"Could not wait for the SonarQube analysis: {e}")
+            Logger.get_logger().warning(f"Could not wait for the SonarQube analysis; results may be stale: {e}")
 
     def _process_result_file(self, file_path):
         """Append metadata to result JSON."""
@@ -184,12 +224,12 @@ class SQSASTScanner:
 
             # CLI/git values win; otherwise take them from SonarQube (result branch, latest analysis revision).
             file_branch = data.get("branch")
-            # The local commit only describes the analysed code when it is the same branch.
-            same_branch = not file_branch or not self.branch or file_branch == self.branch
+            # Only when we fell back to Sonar's main branch does the git branch/commit not describe the data.
+            git_ok = not self._branch_fallback
             repo_details = {
                 "repository_url": self.repo_url,
-                "commit": (self.commit_sha if same_branch else None) or self._analysis_revision(file_branch),
-                "branch": file_branch or self.branch,
+                "commit": (self.commit_sha if git_ok else None) or self._analysis_revision(file_branch),
+                "branch": (self.branch if git_ok else None) or file_branch,
                 "pipeline_url": self.pipeline_url
             }
 
@@ -208,7 +248,12 @@ class SQSASTScanner:
         """The backend parser needs a full URL with a host (e.g. https://github.com/org/repo.git)."""
         url = (url or "").strip()
         if "://" not in url:
-            # git@github.com:org/repo.git, github.com:org/repo.git, github.com/org/repo
+            # git@gitlab:team/app.git (user@ makes any host name unambiguous), gitlab:2222/team/app
+            m = re.match(r"^[\w.-]+@([\w.-]+):(.+)$", url) or re.match(r"^([\w.-]+:\d+)/(.+)$", url)
+            if m:
+                url = f"https://{m.group(1)}/{m.group(2)}"
+        if "://" not in url:
+            # github.com:org/repo.git, github.com/org/repo
             m = re.match(r"^(?:[\w.-]+@)?([\w-]+(?:\.[\w-]+)+)(?::(?!\d+(?:/|$))|/)(.+)$", url)
             if m:
                 url = f"https://{m.group(1)}/{m.group(2)}"
