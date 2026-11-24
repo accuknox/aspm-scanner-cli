@@ -4,6 +4,7 @@ import json
 import re
 import shlex
 import sys
+import time
 import asyncio
 import requests
 from urllib.parse import urlparse
@@ -46,6 +47,7 @@ class SQSASTScanner:
         self.sonar_token = self._extract_arg("-Dsonar.token")
         self.sonar_host_url = self._extract_arg("-Dsonar.host.url")
         self.sonar_org_id = self._extract_arg("-Dsonar.organization")
+        self._analysis_ok = False
 
     def run(self):
         self.repo_url = self._valid_repo_url(self.repo_url)
@@ -53,11 +55,14 @@ class SQSASTScanner:
             returncode = 0
             if not self.skip_sonar_scan:
                 returncode = self._run_sq_scan()
-                if returncode != 0:
-                    # Nothing valid to fetch; surface the scanner error instead of a misleading fetch failure.
+                if returncode != 0 and not self._analysis_ok:
+                    # Analysis never completed; surface the scanner error instead of fetching stale results.
+                    # (A non-zero exit after "ANALYSIS SUCCESSFUL" is a quality-gate failure: still upload.)
                     raise RuntimeError(f"SonarScanner failed with exit code {returncode}; see the error above.")
             else:
                 Logger.get_logger().info("SQ SAST scan skipped.")
+            if not self.skip_sonar_scan:
+                self._wait_for_analysis()
             result_file = self._run_ak_scan()
             self._process_result_file(result_file)
             if self._severity_threshold_met(result_file):
@@ -65,7 +70,7 @@ class SQSASTScanner:
                     f"Vulnerabilities matching severities: {', '.join(self.severity)} found."
                 )
                 return 1, result_file
-            return 0, result_file
+            return returncode, result_file
         except subprocess.CalledProcessError as e:
             Logger.get_logger().error(f"SonarQube-based AccuKnox SAST scan failed: {e}")
             raise
@@ -83,13 +88,18 @@ class SQSASTScanner:
                 cmd.extend(shlex.split(self.command))
             else:
                 cmd = [ToolManager.get_path("sq-sast")] + cmd
-                # macOS: the scanner's JVM fails reading the system keychain (posix_spawn of `security`).
-                # shortcut: skips the OS truststore, so a server with a private CA needs sonar.scanner.truststore*.
-                if sys.platform == "darwin" and not any("skipSystemTruststore" in a for a in cmd):
-                    cmd.append("-Dsonar.scanner.skipSystemTruststore=true")
 
             Logger.get_logger().debug(f"Running scan: {' '.join(cmd)}")
             result = subprocess.run(cmd, capture_output=True, **utf8_text())
+            # macOS: the scanner's JVM can fail reading the keychain (posix_spawn of `security`). Retry without
+            # the OS truststore; defaulting to it would break corporate CAs installed in the keychain.
+            if (result.returncode != 0 and sys.platform == "darwin" and not self.container_mode
+                    and "MacCertificateUtils" in (result.stderr or "")
+                    and not any("skipSystemTruststore" in a for a in cmd)):
+                Logger.get_logger().warning("Scanner could not read the macOS keychain; retrying without the system truststore.")
+                cmd = cmd + ["-Dsonar.scanner.skipSystemTruststore=true"]
+                result = subprocess.run(cmd, capture_output=True, **utf8_text())
+            self._analysis_ok = "ANALYSIS SUCCESSFUL" in (result.stdout or "")
 
             if result.stdout:
                 Logger.get_logger().debug(result.stdout)
@@ -114,7 +124,7 @@ class SQSASTScanner:
             fetcher = SonarQubeFetcher(
                 sq_url=self.sonar_host_url,
                 auth_token=self.sonar_token,
-                sq_projects=f"^{self.sonar_project_key}$",
+                sq_projects=f"^{re.escape(self.sonar_project_key or '')}$",
                 sq_org=self.sonar_org_id,
                 report_path=""
             )
@@ -124,17 +134,47 @@ class SQSASTScanner:
                 raise RuntimeError(f"SonarQube fetch failed: {results or 'no result files produced'}")
             if len(results) == 1:
                 return results[0]
-            # One file per SonarQube branch: upload the --branch one (files are SQ-<key>-<branch>.json), else the first.
-            chosen = next((r for r in results if r.endswith(f"-{self.branch}.json")), results[0])
-            skipped = [r for r in results if r != chosen]
+            # One file per SonarQube branch. File names mangle "/" and can collide, so compare the
+            # exact branch stored inside each file.
+            by_branch = {self._file_branch(r): r for r in results}
+            chosen = by_branch.get(self.branch)
+            if not chosen:
+                raise RuntimeError(
+                    f"Project has {len(results)} SonarQube branches ({', '.join(str(b) for b in by_branch)}) "
+                    f"and none is '{self.branch}'. Pass --branch with one of them."
+                )
             Logger.get_logger().warning(
-                f"Project has {len(results)} SonarQube branches; uploading {chosen}, skipping {skipped}. "
-                "Run once per project key to cover the rest."
+                f"Project has {len(results)} SonarQube branches; uploading '{self.branch}' only. "
+                "Run once per branch to cover the rest."
             )
             return chosen
         except Exception as e:
             Logger.get_logger().error(f"Error during AccuKnox SQ Fetcher: {e}")
             raise
+
+    @staticmethod
+    def _file_branch(path):
+        with open(path, "r") as f:
+            return json.load(f).get("branch")
+
+    def _wait_for_analysis(self, timeout=300):
+        """SonarQube processes the scan in the background; wait for it so the fetch sees this analysis."""
+        task_file = os.path.join(os.getcwd(), ".scannerwork", "report-task.txt")
+        try:
+            with open(task_file) as f:
+                url = dict(l.strip().split("=", 1) for l in f if "=" in l).get("ceTaskUrl")
+            if not url:
+                return
+            deadline = time.time() + timeout
+            while time.time() < deadline:
+                r = requests.get(url, auth=(self.sonar_token, ""), timeout=30)
+                r.raise_for_status()
+                if r.json().get("task", {}).get("status") in ("SUCCESS", "FAILED", "CANCELED"):
+                    return
+                time.sleep(3)
+            Logger.get_logger().warning("Timed out waiting for SonarQube to process the analysis; results may be stale.")
+        except Exception as e:
+            Logger.get_logger().debug(f"Could not wait for the SonarQube analysis: {e}")
 
     def _process_result_file(self, file_path):
         """Append metadata to result JSON."""
@@ -143,10 +183,13 @@ class SQSASTScanner:
                 data = json.load(file)
 
             # CLI/git values win; otherwise take them from SonarQube (result branch, latest analysis revision).
+            file_branch = data.get("branch")
+            # The local commit only describes the analysed code when it is the same branch.
+            same_branch = not file_branch or not self.branch or file_branch == self.branch
             repo_details = {
                 "repository_url": self.repo_url,
-                "commit": self.commit_sha or self._analysis_revision(data.get("branch")),
-                "branch": self.branch or data.get("branch"),
+                "commit": (self.commit_sha if same_branch else None) or self._analysis_revision(file_branch),
+                "branch": file_branch or self.branch,
                 "pipeline_url": self.pipeline_url
             }
 
@@ -164,9 +207,11 @@ class SQSASTScanner:
     def _valid_repo_url(self, url):
         """The backend parser needs a full URL with a host (e.g. https://github.com/org/repo.git)."""
         url = (url or "").strip()
-        scp = re.match(r"^[\w.-]+@([\w.-]+):(.+)$", url)  # git@github.com:org/repo.git
-        if scp:
-            url = f"https://{scp.group(1)}/{scp.group(2)}"
+        if "://" not in url:
+            # git@github.com:org/repo.git, github.com:org/repo.git, github.com/org/repo
+            m = re.match(r"^(?:[\w.-]+@)?([\w-]+(?:\.[\w-]+)+)(?::(?!\d+(?:/|$))|/)(.+)$", url)
+            if m:
+                url = f"https://{m.group(1)}/{m.group(2)}"
         if urlparse(url).hostname:
             return url
         fallback = f"https://localhost/{self.sonar_project_key or os.path.basename(os.getcwd())}"
