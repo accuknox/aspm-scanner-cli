@@ -7,6 +7,7 @@ import sys
 import time
 import asyncio
 import base64
+import urllib.error
 import urllib.request
 from urllib.parse import urlencode, urlparse
 from aspm_cli.tool.manager import ToolManager
@@ -18,6 +19,7 @@ from aspm_cli.utils.tls import download_context
 
 class SQSASTScanner:
     sast_image = os.getenv("SCAN_IMAGE", "public.ecr.aws/k9v9d5v2/sonarsource/sonar-scanner-cli:11.4")
+    _poll_seconds = 3  # between checks of the SonarQube background task
     DEFAULT_SEVERITY = "INFO,MINOR,MAJOR,CRITICAL,BLOCKER,LOW,MEDIUM,HIGH"
 
     def __init__(self, skip_sonar_scan, command, container_mode=False, repo_url=None, branch=None,
@@ -52,18 +54,23 @@ class SQSASTScanner:
         self.sonar_org_id = self._extract_arg("-Dsonar.organization")
         self.sonar_branch = self._extract_arg("-Dsonar.branch.name")
         self._analysis_ok = False
-        self._scan_started = 0
+        # ceTaskId in report-task.txt before this scan ran (a leftover from an earlier run).
+        self._prev_task_id = None
+        # Task id the scanner printed for this run ("More about the report processing at .../api/ce/task?id=").
+        self._stdout_task_id = None
         # Set by _run_ak_scan when SonarQube returns several branches: the branch of the file uploaded,
         # and whether the git commit describes that data.
         self._chosen_branch = None
         self._use_git_commit = True
+        # Branch the SonarQube background task reports for this run's analysis (None on the main branch).
+        self._task_branch = None
 
     def run(self):
         self.repo_url = self._valid_repo_url(self.repo_url)
         try:
             returncode = 0
             if not self.skip_sonar_scan:
-                self._scan_started = time.time()
+                self._prev_task_id = self._task_id()
                 returncode = self._run_sq_scan()
                 # A non-zero exit after a completed analysis is a quality-gate failure: still upload.
                 if returncode != 0 and not (self._analysis_ok or self._fresh_task_file()):
@@ -77,8 +84,9 @@ class SQSASTScanner:
                     return returncode, None
             else:
                 Logger.get_logger().info("SQ SAST scan skipped.")
-            if not self.skip_sonar_scan:
-                self._wait_for_analysis()
+            if not self.skip_sonar_scan and not self._wait_for_analysis():
+                # Fetching now would upload the previous analysis. Return a code (not raise) so --softfail applies.
+                return returncode or 1, None
             result_file = self._run_ak_scan()
             self._process_result_file(result_file)
             if self._severity_threshold_met(result_file):
@@ -110,12 +118,14 @@ class SQSASTScanner:
             # macOS: the scanner's JVM can fail reading the keychain (posix_spawn of `security`). Retry without
             # the OS truststore; defaulting to it would break corporate CAs installed in the keychain.
             if (result.returncode != 0 and sys.platform == "darwin" and not self.container_mode
-                    and "MacCertificateUtils" in (result.stderr or "")
+                    and "MacCertificateUtils" in (result.stdout or "") + (result.stderr or "")
                     and not any("skipSystemTruststore" in a for a in cmd)):
                 Logger.get_logger().warning("Scanner could not read the macOS keychain; retrying without the system truststore.")
                 cmd = cmd + ["-Dsonar.scanner.skipSystemTruststore=true"]
                 result = subprocess.run(cmd, capture_output=True, **utf8_text())
             self._analysis_ok = "ANALYSIS SUCCESSFUL" in (result.stdout or "")
+            task = re.search(r"/api/ce/task\?id=([\w-]+)", result.stdout or "")
+            self._stdout_task_id = task.group(1) if task else None
 
             if result.stdout:
                 Logger.get_logger().debug(result.stdout)
@@ -177,14 +187,17 @@ class SQSASTScanner:
         # One file per SonarQube branch. Match on the exact branch stored inside each file, since
         # file names replace "/" with "_".
         by_branch = {self._file_branch(r): r for r in results}
-        # -Dsonar.branch.name is what Sonar actually analysed; the git branch is only a fallback.
-        wanted = self.sonar_branch or self.branch
-        hint = "-Dsonar.branch.name" if self.sonar_branch else "--branch"
+        ran = not self.skip_sonar_scan
+        # After a scan, the branch is the one SonarQube analysed: -Dsonar.branch.name, else what its
+        # background task reports, else its main branch. The git branch is only used to pick existing
+        # results (--skip-sonar-scan); a same-named SonarQube branch may hold an older analysis.
+        wanted = self.sonar_branch or (self._task_branch if ran else self.branch)
+        hint = "-Dsonar.branch.name" if self.sonar_branch or ran else "--branch"
         if wanted in by_branch:
             self._chosen_branch = wanted
             # This run analysed the local checkout into `wanted`, so its commit describes the data.
             # Without a scan, that only holds when the checkout is on that same branch.
-            self._use_git_commit = not self.skip_sonar_scan or wanted == self.branch
+            self._use_git_commit = ran or wanted == self.branch
             Logger.get_logger().warning(
                 f"Project has {len(results)} SonarQube branches; uploading '{wanted}' only. "
                 f"Re-run with {hint} set to each of the others to cover them."
@@ -198,12 +211,12 @@ class SQSASTScanner:
             )
         self._chosen_branch = main
         if wanted is None:
-            # No branch known (e.g. detached HEAD): Sonar put this run's analysis on its main branch,
-            # so the local commit still describes the data.
-            self._use_git_commit = not self.skip_sonar_scan
+            # A scan without a branch name lands on SonarQube's main branch, so the local commit
+            # describes it. Without a scan (detached HEAD) the commit is unrelated.
+            self._use_git_commit = ran
             Logger.get_logger().warning(
-                f"Could not detect the branch; uploading SonarQube's main branch '{main}'. "
-                "Pass --branch to choose another."
+                f"Project has {len(results)} SonarQube branches; uploading its main branch '{main}'. "
+                f"Set {hint} to choose another."
             )
         else:
             # A different branch's data: the git commit doesn't describe it.
@@ -247,41 +260,77 @@ class SQSASTScanner:
         work = self._extract_arg("-Dsonar.working.directory") or ".scannerwork"
         return os.path.join(base, work, "report-task.txt")
 
+    def _task_id(self):
+        """ceTaskId from report-task.txt, or None when there is no such file."""
+        try:
+            with open(self._task_file()) as f:
+                return dict(l.strip().split("=", 1) for l in f if "=" in l).get("ceTaskId")
+        except OSError:
+            return None
+
+    def _new_task_id(self):
+        """Id of the SonarQube background task this scan submitted, or None if it submitted none."""
+        # The scanner prints it; the container image keeps report-task.txt inside the container, so
+        # the file is only a fallback (quiet scanner logging). Every analysis gets a new id, so the
+        # same id as before the scan is a leftover from an earlier run (self-hosted runner). Not the
+        # file's timestamp: clocks differ between host, container and network drives.
+        if self._stdout_task_id:
+            return self._stdout_task_id
+        task_id = self._task_id()
+        return task_id if task_id != self._prev_task_id else None
+
     def _fresh_task_file(self):
-        """True if this scan wrote report-task.txt, i.e. the analysis reached SonarQube."""
-        task_file = self._task_file()
-        # A task file older than this scan is a leftover (self-hosted runner); its task already finished.
-        # File timestamps can lag the clock slightly, so allow 2s; a leftover file is far older than that.
-        return os.path.exists(task_file) and os.path.getmtime(task_file) >= self._scan_started - 2
+        """True if this scan submitted an analysis to SonarQube."""
+        return bool(self._new_task_id())
 
     def _wait_for_analysis(self, timeout=300):
-        """SonarQube processes the scan in the background; wait for it so the fetch sees this analysis."""
-        task_file = self._task_file()
-        if not self._fresh_task_file():
+        """SonarQube processes the scan in the background; wait for it so the fetch sees this analysis.
+
+        Returns False when that processing failed or did not finish, i.e. there is nothing new to fetch.
+        """
+        task_id = self._new_task_id()
+        if not task_id:
             Logger.get_logger().warning(
-                f"No report-task.txt from this scan at {task_file}; cannot wait for SonarQube to finish "
-                "processing, so results may be from the previous analysis."
+                f"No background task id in the scanner output or in {self._task_file()}; cannot wait for "
+                "SonarQube to finish processing, so results may be from the previous analysis."
             )
-            return
-        try:
-            with open(task_file) as f:
-                url = dict(l.strip().split("=", 1) for l in f if "=" in l).get("ceTaskUrl")
-            if not url:
-                return
-            deadline = time.time() + timeout
-            while time.time() < deadline:
-                status = self._sq_get(url).get("task", {}).get("status")
+            return True
+        # Not the file's ceTaskUrl: that is built from the server's configured base URL, which can be
+        # another host or plain http, and the token must only go to -Dsonar.host.url.
+        url = f"{self.sonar_host_url}/api/ce/task"
+        deadline = time.time() + timeout
+        error = None
+        while time.time() < deadline:
+            try:
+                task = self._sq_get(url, {"id": task_id}).get("task", {})
+            except urllib.error.HTTPError as e:
+                if e.code in (401, 403, 404):
+                    # The token cannot read the task; retrying will not help.
+                    Logger.get_logger().warning(
+                        f"Could not check the SonarQube background task (HTTP {e.code}); results may be stale."
+                    )
+                    return True
+                error = e
+            except Exception as e:
+                error = e  # a timeout or 5xx while the server is busy: keep polling
+            else:
+                status = task.get("status")
                 if status in ("FAILED", "CANCELED"):
-                    # Fetching now would upload the previous analysis as if it were this one.
-                    raise RuntimeError(f"SonarQube background task {status}; not fetching stale results.")
+                    Logger.get_logger().error(
+                        f"SonarQube background task {status}: {task.get('errorMessage') or 'no reason given'}. "
+                        "Not fetching results."
+                    )
+                    return False
                 if status == "SUCCESS":
-                    return
-                time.sleep(3)
-            Logger.get_logger().warning("Timed out waiting for SonarQube to process the analysis; results may be stale.")
-        except RuntimeError:
-            raise
-        except Exception as e:
-            Logger.get_logger().warning(f"Could not wait for the SonarQube analysis; results may be stale: {e}")
+                    self._task_branch = task.get("branch")
+                    return True
+            time.sleep(self._poll_seconds)
+        Logger.get_logger().error(
+            f"SonarQube did not finish processing the analysis within {timeout}s"
+            f"{f' (last error: {error})' if error else ''}; not fetching results. "
+            "Re-run with --skip-sonar-scan once it has finished."
+        )
+        return False
 
     def _process_result_file(self, file_path):
         """Append metadata to result JSON."""
@@ -341,15 +390,15 @@ class SQSASTScanner:
     def _align_upload_identity(self, branch, commit):
         """Make the upload's branch/commit query parameters match repo_details.
 
-        collect_ingest_identity() builds them from git, which differs from the data when another
-        SonarQube branch was uploaded. Its ACCUKNOX_BRANCH / ACCUKNOX_COMMIT_SHA overrides are used for
-        this; values the user set themselves are left alone.
+        collect_ingest_identity() builds them from CI variables or git (it never sees --branch), which
+        differ from the data when another SonarQube branch was uploaded. Its ACCUKNOX_BRANCH /
+        ACCUKNOX_COMMIT_SHA overrides are used for this; values the user set themselves are left alone.
         """
         if self._chosen_branch is None:
             return
-        if branch and branch != self.branch and not os.getenv("ACCUKNOX_BRANCH"):
+        if branch and not os.getenv("ACCUKNOX_BRANCH"):
             os.environ["ACCUKNOX_BRANCH"] = branch
-        if commit and commit != self.commit_sha and not os.getenv("ACCUKNOX_COMMIT_SHA"):
+        if commit and not os.getenv("ACCUKNOX_COMMIT_SHA"):
             os.environ["ACCUKNOX_COMMIT_SHA"] = commit
 
     def _analysis_revision(self, branch):
