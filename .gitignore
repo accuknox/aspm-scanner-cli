@@ -176,6 +176,8 @@ terraform
 results_json.json
 results.json
 .accuknox-syft-sbom.json
+# sq-sast per-branch fetch output
+SQ-*.json
 test.py
 utils/container.tar.gz
 utils/iac
